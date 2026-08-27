@@ -20,7 +20,9 @@ compare_db_301.py —— 对比数据库中产品的 301 加征与官方判定�
   python compare_db_301.py -o 我的差异报告.xlsx
 
 说明：
-  - 数据库连接配置与 web_vba/sync_mongo.py 保持一致
+  - 数据库凭据一律从环境变量 / .env 读取，不写在代码里（参考 .env.example）
+      本地库：MONGO_LOCAL_HOST/PORT/USER/PASS/DB
+      远程库：MONGO_HOST/PORT/USER/PASS/DB
   - 远程库配置从 MONGO_HOST/PORT/USER/PASS/DB 环境变量读取：
       ① 自动加载当前目录的 .env 文件
       ② 或用 --env 指定 .env 文件路径（如 web_vba 目录下的 .env）
@@ -32,6 +34,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from urllib.parse import quote_plus
 
 # 加载 .env（dotenv 可用时；找不到也不影响本地库模式）
 try:
@@ -48,23 +51,18 @@ import core
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(BASE_DIR, "output")
 
-# 本地 MongoDB 连接配置（与 web_vba/sync_mongo.py 一致）
-LOCAL_MONGO_CONFIG = {
-    "host": "192.168.20.111",
-    "port": 27018,
-    "username": "luoyu",
-    "password": "luoyu123456",
-    "database": "qingguan",
-}
-
-# 远程配置从环境变量读取（可用 .env 提供）
-REMOTE_MONGO_CONFIG = {
-    "host": os.getenv("MONGO_HOST"),
-    "port": os.getenv("MONGO_PORT"),
-    "username": os.getenv("MONGO_USER"),
-    "password": os.getenv("MONGO_PASS"),
-    "database": os.getenv("MONGO_DB"),
-}
+def local_mongo_config():
+    """
+    本地 MongoDB 连接配置：全部从环境变量读取（可用 .env 提供），凭据不入库。
+    非敏感项（host/port/database）给出内网默认值，用户名/口令必须由环境提供。
+    """
+    return {
+        "host": os.getenv("MONGO_LOCAL_HOST", "192.168.20.111"),
+        "port": int(os.getenv("MONGO_LOCAL_PORT", "27018")),
+        "username": os.getenv("MONGO_LOCAL_USER"),
+        "password": os.getenv("MONGO_LOCAL_PASS"),
+        "database": os.getenv("MONGO_LOCAL_DB", "qingguan"),
+    }
 
 
 def parse_db_pct(value):
@@ -126,10 +124,17 @@ def connect(database, env_path=""):
                 "  2) 在 hts_agent 目录放一个 .env（含 MONGO_HOST/PORT/USER/PASS/DB）\n"
                 "  3) 或先设置系统环境变量"
             )
-        uri = f"mongodb://{cfg['username']}:{cfg['password']}@{cfg['host']}:{cfg['port']}"
+        uri = f"mongodb://{quote_plus(cfg['username'])}:{quote_plus(cfg['password'])}@{cfg['host']}:{cfg['port']}"
         client = MongoClient(uri, serverSelectionTimeoutMS=8000)
     else:
-        cfg = LOCAL_MONGO_CONFIG
+        cfg = local_mongo_config()
+        missing = [k for k in ("username", "password") if not cfg.get(k)]
+        if missing:
+            sys.exit(
+                "错误：本地库缺少环境变量 " +
+                ", ".join("MONGO_LOCAL_" + k[:4].upper() for k in missing) +
+                "\n请在 hts_agent 目录放一个 .env（参考 .env.example），或设置系统环境变量。"
+            )
         client = MongoClient(
             host=cfg["host"],
             port=cfg["port"],

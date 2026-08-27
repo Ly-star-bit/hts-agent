@@ -19,8 +19,10 @@ htmlcov/
 # ===== Secrets & local config (NEVER commit real keys) =====
 .env
 .env.*
+!.env.example
 ai_config.json
 # copy ai_config.example.json -> ai_config.json and fill in your own keys locally
+# copy .env.example         -> .env             and fill in your own DB credentials
 
 # ===== Local agent / IDE / OS =====
 .claude/

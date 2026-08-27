@@ -17,6 +17,9 @@ update_db_301.py —— 用官方判定校准数据库中产品的 301 加征
   python update_db_301.py --env D:\\RPAProject\\web_vba\\.env --database remote --execute
 
 说明：
+  - 数据库凭据一律从环境变量 / .env 读取，不写在代码里（参考 .env.example）
+      本地库：MONGO_LOCAL_HOST/PORT/USER/PASS/DB
+      远程库：MONGO_HOST/PORT/USER/PASS/DB
   - 判定依据：2026 现行 HTS 官方数据（scripts/core.py）
   - 仅处理「官方有 301 判定、且与库值不一致」的记录（补齐/更正）
   - 对「官方判定无、但库里有记录」的条目不删除（保守处理，仅提示）
@@ -28,6 +31,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from urllib.parse import quote_plus
 
 try:
     from dotenv import load_dotenv
@@ -41,13 +45,18 @@ import core
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKUP_DIR = os.path.join(BASE_DIR, "output", "backup")
 
-LOCAL_MONGO_CONFIG = {
-    "host": "192.168.20.111",
-    "port": 27018,
-    "username": "luoyu",
-    "password": "luoyu123456",
-    "database": "qingguan",
-}
+def local_mongo_config():
+    """
+    本地 MongoDB 连接配置：全部从环境变量读取（可用 .env 提供），凭据不入库。
+    非敏感项（host/port/database）给出内网默认值，用户名/口令必须由环境提供。
+    """
+    return {
+        "host": os.getenv("MONGO_LOCAL_HOST", "192.168.20.111"),
+        "port": int(os.getenv("MONGO_LOCAL_PORT", "27018")),
+        "username": os.getenv("MONGO_LOCAL_USER"),
+        "password": os.getenv("MONGO_LOCAL_PASS"),
+        "database": os.getenv("MONGO_LOCAL_DB", "qingguan"),
+    }
 
 
 def parse_db_pct(value):
@@ -83,10 +92,17 @@ def connect(database, env_path=""):
         missing = [k for k, v in cfg.items() if not v]
         if missing:
             sys.exit("错误：缺少环境变量 " + ", ".join(missing) + "（可用 --env 指定 .env 文件）")
-        uri = f"mongodb://{cfg['username']}:{cfg['password']}@{cfg['host']}:{cfg['port']}"
+        uri = f"mongodb://{quote_plus(cfg['username'])}:{quote_plus(cfg['password'])}@{cfg['host']}:{cfg['port']}"
         client = MongoClient(uri, serverSelectionTimeoutMS=15000)
     else:
-        cfg = LOCAL_MONGO_CONFIG
+        cfg = local_mongo_config()
+        missing = [k for k in ("username", "password") if not cfg.get(k)]
+        if missing:
+            sys.exit(
+                "错误：本地库缺少环境变量 " +
+                ", ".join("MONGO_LOCAL_" + k[:4].upper() for k in missing) +
+                "（可用 .env 提供，参考 .env.example）"
+            )
         client = MongoClient(
             host=cfg["host"], port=cfg["port"],
             username=cfg["username"], password=cfg["password"],
