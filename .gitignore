@@ -36,7 +36,9 @@ desktop.ini
 # ===== Runtime output (generated, not source) =====
 output/
 
-# ===== Data snapshots that are rebuilt (optional: keep in sync with README) =====
-# If you prefer to keep `data/` fully tracked, comment out / remove the lines below.
-# data/.db_fingerprint.json
-# data/.db_changes.json
+# ===== Build artifacts: rebuilt by scripts/build_db.py, NOT source =====
+# 原始数据（htsdata.csv / 两份 PDF）与人工转录数据（data/*.json）仍然跟踪；
+# 下面三个是 build_db.py 的衍生产物，跟踪它们只会带来 4MB 级的不可读 diff。
+data/sec301_db.json
+data/.db_fingerprint.json
+data/.db_changes.json

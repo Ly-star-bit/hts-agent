@@ -1,0 +1,23 @@
+# HTS 301 关税查询工具 —— 运行依赖
+# 安装：uv pip install -r requirements.txt
+#   或：pip install -r requirements.txt
+
+# ---- Web 服务（app.py）----
+fastapi>=0.110
+uvicorn>=0.27
+pydantic>=2.6
+python-multipart>=0.0.9      # UploadFile / Form 表单解析，缺失则 /api/upload 报错
+
+# ---- 数据处理（app.py / query_301.py / compare_db_301.py）----
+pandas>=2.2
+openpyxl>=3.1                # pandas 读写 .xlsx
+
+# ---- 数据构建（scripts/build_db.py、scripts/extract_flip_scopes.py）----
+pdfplumber>=0.11             # 解析 USTR / FRN 官方 PDF
+
+# ---- AI 增强层（scripts/ai.py，可选功能但依赖始终导入）----
+httpx>=0.27
+
+# ---- MongoDB 产品库对账/回写（compare_db_301.py / update_db_301.py，可选）----
+pymongo>=4.6
+python-dotenv>=1.0
