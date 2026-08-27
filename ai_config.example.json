@@ -1,0 +1,8 @@
+{
+  "provider": null,
+  "base_url": "https://api.openai.com/v1",
+  "api_key": "YOUR_API_KEY_HERE",
+  "model": "gpt-4o-mini",
+  "temperature": 0.2,
+  "timeout": 60
+}

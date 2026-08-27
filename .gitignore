@@ -1,0 +1,40 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.log
+
+# ===== Secrets & local config (NEVER commit real keys) =====
+.env
+.env.*
+ai_config.json
+# copy ai_config.example.json -> ai_config.json and fill in your own keys locally
+
+# ===== Local agent / IDE / OS =====
+.claude/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Runtime output (generated, not source) =====
+output/
+
+# ===== Data snapshots that are rebuilt (optional: keep in sync with README) =====
+# If you prefer to keep `data/` fully tracked, comment out / remove the lines below.
+# data/.db_fingerprint.json
+# data/.db_changes.json

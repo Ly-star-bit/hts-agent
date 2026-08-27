@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTS 关税智能查询工具</title>
+<style>
+  :root {
+    --primary: #1a56db;
+    --primary-dark: #1e429f;
+    --bg: #f3f4f6;
+    --card: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --muted: #6b7280;
+    --hit: #dc2626;
+    --hit-bg: #fef2f2;
+    --miss: #059669;
+    --miss-bg: #ecfdf5;
+    --warn: #d97706;
+    --warn-bg: #fffbeb;
+    --gray: #6b7280;
+    --gray-bg: #f9fafb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px 60px; }
+
+  /* 头部 */
+  header { text-align: center; padding: 28px 0 8px; }
+  header h1 { font-size: 26px; font-weight: 700; }
+  header h1 .badge {
+    display: inline-block; font-size: 13px; font-weight: 500;
+    background: var(--hit-bg); color: var(--hit);
+    border: 1px solid #fecaca; border-radius: 20px;
+    padding: 2px 10px; margin-left: 8px; vertical-align: middle;
+  }
+  header p { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  #info { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  /* Tab 导航 */
+  .tabs {
+    display: flex; gap: 6px; margin-top: 22px;
+    border-bottom: 2px solid var(--border); flex-wrap: wrap;
+  }
+  .tab {
+    border: 1px solid var(--border); border-bottom: none;
+    border-radius: 10px 10px 0 0; background: var(--gray-bg);
+    padding: 10px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
+    color: var(--muted); font-family: inherit; transition: all .15s;
+  }
+  .tab:hover { color: var(--primary); }
+  .tab.active { background: var(--card); color: var(--primary); border-color: var(--border); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* 卡片 */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-top: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .card h2 { font-size: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .step {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--primary); color: #fff;
+    font-size: 12px; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .card .hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+  /* 输入 */
+  textarea {
+    width: 100%; min-height: 90px; padding: 12px;
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; font-family: Consolas, monospace;
+    resize: vertical; outline: none;
+  }
+  textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,.12); }
+  .or-divider { text-align: center; color: var(--muted); font-size: 13px; margin: 12px 0; position: relative; }
+  .or-divider::before, .or-divider::after {
+    content: ""; position: absolute; top: 50%; width: 42%; height: 1px; background: var(--border);
+  }
+  .or-divider::before { left: 0; } .or-divider::after { right: 0; }
+
+  .dropzone {
+    border: 2px dashed var(--border); border-radius: 8px;
+    padding: 20px; text-align: center; color: var(--muted);
+    cursor: pointer; transition: all .15s;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--primary); color: var(--primary); background: #f5f8ff; }
+  .dropzone .file-name { color: var(--primary); font-weight: 600; margin-top: 4px; word-break: break-all; }
+  input[type="file"] { display: none; }
+
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
+  button {
+    border: none; border-radius: 8px; padding: 10px 22px;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-ghost { background: var(--gray-bg); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: #f3f4f6; }
+  .btn-export { background: var(--miss); color: #fff; }
+  .btn-export:hover { background: #047857; }
+  .btn-export:disabled { opacity: .4; cursor: not-allowed; }
+  .spinner {
+    display: none; width: 16px; height: 16px; margin-left: 8px;
+    border: 2px solid #fff; border-top-color: transparent; border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading .spinner { display: inline-block; }
+
+  /* 行内表单 */
+  .inline-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .inline-form input[type="text"], .inline-form input[type="number"], .inline-form select {
+    padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; outline: none; font-family: inherit; color: var(--text); background: #fff;
+  }
+  .inline-form input[type="text"]:focus, .inline-form input[type="number"]:focus, .inline-form select:focus {
+    border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,.12);
+  }
+  .inline-form .grow { flex: 1; min-width: 220px; }
+  .inline-form .narrow { width: 160px; }
+  .inline-form .label { font-size: 13px; color: var(--muted); }
+
+  /* 统计条 */
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .stat {
+    background: var(--gray-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 16px; font-size: 13px;
+  }
+  .stat b { font-size: 18px; margin-left: 4px; }
+  .stat.total b { color: var(--primary); }
+  .stat.hit b { color: var(--hit); }
+  .stat.miss b { color: var(--miss); }
+
+  /* 过滤按钮 */
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filter-btn {
+    background: var(--gray-bg); border: 1px solid var(--border);
+    border-radius: 20px; padding: 6px 16px; font-size: 13px;
+    cursor: pointer; color: var(--muted); transition: all .15s;
+    font-family: inherit;
+  }
+  .filter-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .filter-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .filter-btn .cnt { opacity: .8; font-weight: 400; }
+  .sort-select, .search-input {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 20px;
+    font-size: 13px; outline: none; font-family: inherit; color: var(--text); background: var(--gray-bg);
+    transition: all .15s;
+  }
+  .sort-select:focus, .search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,.12); background: #fff; }
+  .sort-select { cursor: pointer; }
+  .search-input { flex: 1; min-width: 180px; max-width: 340px; margin-left: auto; }
+  .result-count { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+  tr.row-hit { background: var(--hit-bg); }
+  tr.row-hit:hover { background: #fde8e8; }
+  tr.row-hit .add-pct { font-size: 16px; font-weight: 800; color: var(--hit); }
+  tr.row-na { background: var(--gray-bg); }
+  tr.row-na:hover { background: #f3f4f6; }
+
+  /* 表格 */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    background: #f9fafb; text-align: left; padding: 10px 12px;
+    border-bottom: 2px solid var(--border); white-space: nowrap; position: sticky; top: 0;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; word-break: break-word; }
+  tbody tr:hover { background: #f9fafb; }
+  .desc { word-break: break-word; }
+  .code { font-family: Consolas, monospace; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .tag {
+    display: inline-block; padding: 2px 10px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .tag.hit { background: var(--hit-bg); color: var(--hit); border: 1px solid #fecaca; }
+  .tag.miss { background: var(--miss-bg); color: var(--miss); border: 1px solid #a7f3d0; }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #fde68a; }
+  .tag.na { background: var(--gray-bg); color: var(--gray); border: 1px solid var(--border); }
+  .add-pct { color: var(--hit); font-weight: 700; white-space: nowrap; }
+  .note { color: var(--muted); font-size: 12px; }
+  .empty { text-align: center; color: var(--muted); padding: 30px; }
+  .info-bar {
+    background: var(--miss-bg); color: var(--miss); border: 1px solid #a7f3d0;
+    border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 13px;
+  }
+  .error-bar {
+    display: none; background: var(--hit-bg); color: var(--hit);
+    border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 13px;
+  }
+  .error-bar.show { display: block; }
+
+  /* AI 聊天 */
+  .chat-box {
+    border: 1px solid var(--border); border-radius: 10px;
+    min-height: 300px; max-height: 460px; overflow-y: auto;
+    padding: 16px; background: var(--gray-bg); display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg { max-width: 86%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.7; }
+  .msg.user { align-self: flex-end; background: var(--primary); color: #fff; }
+  .msg.ai { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--text); }
+  .msg.ai .md-body { white-space: pre-wrap; word-break: break-word; }
+  .msg.ai .md-body h4 { margin: 8px 0 4px; font-size: 14px; }
+  .msg.ai .md-body ul, .msg.ai .md-body ol { padding-left: 20px; }
+  .msg.ai .md-body b { color: var(--primary-dark); }
+  .msg.ai .md-body pre { background: #f6f8fa; border: 1px solid var(--border); border-radius: 6px; padding: 8px; overflow-x: auto; font-size: 12px; }
+  .msg.error { align-self: flex-start; background: var(--hit-bg); color: var(--hit); border: 1px solid #fecaca; }
+  .msg.system { align-self: center; background: transparent; color: var(--muted); font-size: 12px; }
+  .chat-input-row { display: flex; gap: 10px; margin-top: 12px; }
+  .chat-input-row textarea { min-height: 70px; flex: 1; }
+  .chat-input-row .chat-side { display: flex; flex-direction: column; gap: 8px; }
+
+  /* AI 结果卡片（归类推荐） */
+  .ai-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 12px; }
+  .ai-card {
+    border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: #fff;
+  }
+  .ai-card .ai-code { font-family: Consolas, monospace; font-size: 17px; font-weight: 800; color: var(--primary); }
+  .ai-card .ai-desc { font-size: 13px; color: var(--muted); margin: 4px 0 8px; }
+  .ai-card .ai-reason { font-size: 13px; margin-top: 8px; padding: 8px; background: var(--gray-bg); border-radius: 6px; }
+  .ai-card .ai-conf { font-size: 12px; color: var(--muted); }
+  .conf-bar { height: 6px; background: var(--border); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .conf-bar i { display: block; height: 100%; background: var(--primary); }
+
+  /* 变动页 */
+  .change-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-top: 12px; background: #fff; }
+  .change-card .change-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .change-item { font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--border); display: flex; gap: 10px; align-items: baseline; }
+  .change-item:last-child { border-bottom: none; }
+  .change-item .ch-type { flex-shrink: 0; font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 4px; padding: 1px 8px; }
+  .change-item .ch-code { font-family: Consolas, monospace; font-weight: 600; flex-shrink: 0; }
+  .change-item .ch-desc { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .change-item .ch-old { color: var(--hit); text-decoration: line-through; }
+  .change-item .ch-new { color: var(--miss); font-weight: 600; }
+
+  /* 底部 */
+  footer { color: var(--muted); font-size: 12px; margin-top: 24px; text-align: center; line-height: 1.8; }
+
+  /* 悬浮复制提示框 */
+  .tooltip {
+    display: none; position: fixed; z-index: 1000;
+    background: #1f2937; color: #f9fafb; border-radius: 8px;
+    padding: 10px 14px; max-width: 440px; font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.28); word-break: break-word;
+  }
+  .tooltip .tip-text { margin-bottom: 8px; line-height: 1.6; }
+  .tooltip .tip-copy {
+    background: var(--primary); color: #fff; border: none; border-radius: 6px;
+    padding: 5px 16px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .tooltip .tip-copy:hover { background: var(--primary-dark); }
+
+  /* 来源追溯弹窗 */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 1100;
+    background: rgba(0,0,0,.45); align-items: flex-start; justify-content: center;
+    padding: 48px 16px; overflow-y: auto;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; width: 100%; max-width: 720px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3); overflow: hidden;
+  }
+  .modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    font-weight: 600; font-size: 14px; background: var(--gray-bg);
+  }
+  .modal-close {
+    background: none; border: none; font-size: 15px; cursor: pointer;
+    color: var(--muted); padding: 4px 8px; border-radius: 6px;
+  }
+  .modal-close:hover { background: #e5e7eb; color: var(--text); }
+  .modal-body { padding: 16px 18px; max-height: 65vh; overflow-y: auto; font-size: 13px; }
+  .src-group { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
+  .src-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .src-group .src-type {
+    display: inline-block; font-size: 12px; font-weight: 600; color: var(--primary);
+    background: var(--primary-bg, #eff6ff); border-radius: 4px; padding: 1px 8px; margin-bottom: 6px;
+  }
+  .src-group .src-file { font-weight: 600; word-break: break-all; }
+  .src-group .src-line { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .src-group .src-desc { color: var(--text); margin-top: 4px; line-height: 1.6; word-break: break-word; }
+  .src-view {
+    display: inline-block; margin-top: 8px; padding: 4px 12px; font-size: 12px;
+    background: var(--primary); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-family: inherit;
+  }
+  .src-view:hover { background: var(--primary-dark); }
+  .src-view:disabled { opacity: .5; cursor: not-allowed; }
+  .src-csv-pre {
+    background: #f9fafb; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; margin-top: 8px; font-family: Consolas, monospace; font-size: 12px;
+    max-height: 320px; overflow: auto; line-height: 1.7; white-space: pre;
+  }
+  .src-csv-pre .hl { background: #fef3c7; font-weight: 600; }
+  .src-btn {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; font-size: 12px; padding: 2px 7px; color: var(--muted);
+  }
+  .src-btn:hover { background: var(--gray-bg); color: var(--text); border-color: var(--primary); }
+  .src-back {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer; color: var(--text); font-family: inherit; margin-bottom: 10px;
+  }
+  .src-back:hover { background: var(--gray-bg); }
+  .src-file-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px dashed var(--border); font-size: 13px;
+  }
+  .src-file-item:last-child { border-bottom: none; }
+  .src-file-item .f-name { font-weight: 600; word-break: break-all; }
+  .src-file-item .f-desc { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .src-file-item .f-open {
+    flex-shrink: 0; padding: 4px 12px; font-size: 12px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--gray-bg); cursor: pointer; font-family: inherit;
+  }
+  .src-file-item .f-open:hover { border-color: var(--primary); color: var(--primary); }
+
+  @media (max-width: 640px) {
+    header h1 { font-size: 20px; }
+    .actions button { flex: 1; }
+    .msg { max-width: 95%; }
+  }
+  @media (max-width: 900px) {
+    table { min-width: 900px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>HTS 关税智能查询工具 <span class="badge">美国对华 Section 301</span></h1>
+    <p>编码查询 · 税率搜索 · 成本估算 · AI 归类助手</p>
+    <div id="info">数据加载中 ...</div>
+  </header>
+
+  <!-- Tab 导航 -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="query" onclick="switchTab('query')">编码查询</button>
+    <button class="tab" data-tab="search" onclick="switchTab('search')">税率搜索</button>
+    <button class="tab" data-tab="estimate" onclick="switchTab('estimate')">成本估算</button>
+    <button class="tab" data-tab="ai" onclick="switchTab('ai')">AI 助手</button>
+    <button class="tab" data-tab="changes" onclick="switchTab('changes')">数据变动</button>
+  </nav>
+
+  <!-- ============ Tab 1：编码查询 ============ -->
+  <div class="tab-panel active" id="tab-query">
+    <div class="card">
+      <h2><span class="step">1</span> 输入 HTS 编码
+        <button class="btn-ghost" style="margin-left:auto;padding:5px 14px;font-size:12px;" onclick="toggleMeasuresConfig()">⚙ 加征开关</button>
+      </h2>
+      <!-- 加征措施开关面板（保存后立即生效，无需重启） -->
+      <div id="measuresConfigPanel" style="display:none;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;background:var(--gray-bg);">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px;">加征措施开关</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:8px;cursor:pointer;">
+          <input type="checkbox" id="mcCn301" style="width:16px;height:16px;"> 中国 301 加征
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:8px;cursor:pointer;">
+          <input type="checkbox" id="mcFlip301" style="width:16px;height:16px;"> FLIP 301 强迫劳动关税（2026-07-24 生效）
+        </label>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">关闭后查询 / 估算 / 税率搜索不含该项加征、总税负不叠加；301 命中判定与 9903 子目等基本信息仍显示。</div>
+        <button class="btn-primary" onclick="saveMeasuresConfig()">保存</button>
+        <span id="mcMsg" style="font-size:12px;color:var(--muted);margin-left:10px;"></span>
+      </div>
+      <div class="inline-form" style="margin-bottom:12px;">
+        <span class="label">原产地：</span>
+        <select id="queryOrigin" class="narrow" title="原产地决定适用措施（301 / 越南轨道 / MFN 通用轨道）">
+          <option value="CN">🇨🇳 中国（适用 301 加征）</option>
+          <option value="VN">🇻🇳 越南（MFN，不适用 301）</option>
+          <option value="OTHER">🌏 其他国家（MFN，不适用 301）</option>
+        </select>
+        <span style="font-size:12px;color:var(--muted);">中国含 301 flip 历史与 FLIP 301 强迫劳动关税；越南/其他国家走 MFN 一般税率</span>
+      </div>
+      <textarea id="codesInput" placeholder="粘贴 HTS 编码，支持多种格式，如：&#10;6204.69.45&#10;8703.80.00, 8507.60.00&#10;2931.90.9010&#10;&#10;（可含描述文字，自动提取编码）"></textarea>
+      <div class="or-divider">或 上传文件</div>
+      <div class="dropzone" id="dropzone">
+        <div>点击选择 或 拖拽文件到此处</div>
+        <div class="file-name" id="fileName"></div>
+        <div style="font-size:12px; margin-top:4px;">支持 Excel(.xlsx) / CSV / 文本，自动识别 HTS 列</div>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.txt">
+      <div class="actions">
+        <button class="btn-primary" id="btnQuery" onclick="doQuery()">开始查询</button>
+        <button class="btn-ghost" onclick="clearAll()">清空</button>
+        <button class="btn-export" id="btnExport" onclick="doExport('xlsx')" disabled>导出 Excel</button>
+        <button class="btn-export" id="btnExportCsv" onclick="doExport('csv')" disabled>导出 CSV</button>
+      </div>
+      <div class="error-bar" id="errorBar"></div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none;">
+      <h2><span class="step">2</span> 查询结果 <span id="sourceInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <div class="stats" id="statsBar"></div>
+      <div class="filter-bar" id="filterBar">
+        <button class="filter-btn active" data-f="all" onclick="setFilter('all')">全部 <span class="cnt"></span></button>
+        <button class="filter-btn" data-f="hit" onclick="setFilter('hit')">命中 301 <span class="cnt"></span></button>
+        <button class="filter-btn" data-f="miss" onclick="setFilter('miss')">未命中 <span class="cnt"></span></button>
+        <button class="filter-btn" data-f="na" onclick="setFilter('na')">无法判定 <span class="cnt"></span></button>
+        <select id="sortSelect" class="sort-select" onchange="renderTable()" title="排序方式">
+          <option value="default">默认排序（输入顺序）</option>
+          <option value="pct_desc">加征比例 ↓ 从高到低</option>
+          <option value="pct_asc">加征比例 ↑ 从低到高</option>
+          <option value="code_asc">编码 升序</option>
+        </select>
+        <input type="text" id="searchInput" class="search-input" placeholder="🔍 搜索编码 / 描述 / 9903子目 / 备注..." oninput="renderTable()">
+      </div>
+      <div class="result-count" id="resultCount"></div>
+      <div class="table-wrap">
+        <table>
+          <colgroup>
+            <col style="width:7%"><col style="width:7%"><col style="width:16%">
+            <col style="width:7%"><col style="width:9%"><col style="width:7%">
+            <col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:8%"><col style="width:8%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>输入编码</th><th>8位子目</th><th>商品描述</th>
+              <th>一般税率</th><th>特殊税率</th><th>原产地</th>
+              <th>301判定</th><th>9903子目</th><th>301加征</th><th>FLIP301</th><th>备注</th><th>来源</th>
+            </tr>
+          </thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 历史记录 -->
+    <div class="card" id="historyCard" style="display:none;">
+      <h2><span class="step">★</span> 最近查询 <button class="btn-ghost" style="padding:4px 12px;font-size:12px;" onclick="clearHistory()">清空</button></h2>
+      <div id="historyList" style="font-size:13px;"></div>
+    </div>
+  </div>
+
+  <!-- ============ Tab 2：税率搜索 ============ -->
+  <div class="tab-panel" id="tab-search">
+    <div class="card">
+      <h2><span class="step">1</span> 税率搜索（找某个品类税率最低的编码）</h2>
+      <p class="hint">输入英文关键词或编码（如 lithium battery / apparel / 8507），结果按等效从价税率排序 —— 免税与低税率在前。</p>
+      <div class="inline-form">
+        <input type="text" id="searchKeyword" class="grow" placeholder="输入英文关键词或 HTS 编码，支持多个词（AND 匹配）">
+        <select id="searchSort" class="narrow" title="排序方式">
+          <option value="tax_asc">最低税率优先</option>
+          <option value="tax_desc">最高税率优先</option>
+          <option value="relevance">相关度优先</option>
+          <option value="code_asc">编码升序</option>
+        </select>
+        <input type="number" id="searchUnitValue" class="narrow" placeholder="单位货值 USD（可选）" title="折算从量税用，如按公斤计重填每公斤货值">
+        <button class="btn-primary" id="btnSearch" onclick="doSearch()">搜索</button>
+      </div>
+      <div class="error-bar" id="searchError"></div>
+    </div>
+    <div class="card" id="searchResultCard" style="display:none;">
+      <h2><span class="step">2</span> 搜索结果 <span id="searchResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <div class="result-count" id="searchResultCount"></div>
+      <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
+        <table>
+          <colgroup>
+            <col style="width:11%"><col style="width:26%">
+            <col style="width:12%"><col style="width:9%"><col style="width:10%">
+            <col style="width:9%"><col style="width:10%"><col style="width:13%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>编码</th><th>商品描述</th><th>一般税率</th><th>税率类型</th>
+              <th>等效从价</th><th>301判定</th><th>301加征</th><th>总税负估算</th>
+            </tr>
+          </thead>
+          <tbody id="searchBody"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="btn-export" id="btnSearchExport" onclick="exportGeneric('search')">导出 CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Tab 3：成本估算 ============ -->
+  <div class="tab-panel" id="tab-estimate">
+    <div class="card">
+      <h2><span class="step">1</span> 总税负成本估算（基础 + 301 + 附加税）</h2>
+      <p class="hint">从量税（如 1¢/kg）需提供单位货值才能折算成百分比；复合税同时列出。估算仅供参考，正式申报以海关裁定为准。</p>
+      <textarea id="estCodes" placeholder="粘贴 HTS 编码，多个用逗号/换行分隔：&#10;8507.60.00&#10;0101.21.00"></textarea>
+      <div class="inline-form" style="margin-top:12px;">
+        <span class="label">原产地：</span>
+        <select id="estOrigin" class="narrow">
+          <option value="CN">中国（含 301）</option>
+          <option value="VN">越南（MFN，无 301）</option>
+          <option value="OTHER">其他国家（MFN，无 301）</option>
+        </select>
+        <span class="label">单位货值 USD：</span>
+        <input type="number" id="estUnitValue" class="narrow" placeholder="如 5.0（美元/公斤或美元/件）">
+        <button class="btn-primary" id="btnEstimate" onclick="doEstimate()">估算总税负</button>
+      </div>
+      <div class="error-bar" id="estError"></div>
+    </div>
+    <div class="card" id="estResultCard" style="display:none;">
+      <h2><span class="step">2</span> 估算结果 <span id="estResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <div class="table-wrap">
+        <table>
+          <colgroup>
+            <col style="width:10%"><col style="width:7%"><col style="width:14%">
+            <col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:7%"><col style="width:26%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>输入编码</th><th>税率类型</th><th>一般税率</th>
+              <th>基础等效从价</th><th>301加征</th><th>FLIP301</th><th>总税负估算</th><th>原产地</th><th>备注</th>
+            </tr>
+          </thead>
+          <tbody id="estBody"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="btn-export" id="btnEstExport" onclick="exportGeneric('est')">导出 CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Tab 4：AI 助手 ============ -->
+  <div class="tab-panel" id="tab-ai">
+    <div class="card">
+      <h2><span class="step">AI</span> 智能助手
+        <span id="aiStatus" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
+        <button class="btn-ghost" style="margin-left:auto;padding:5px 14px;font-size:12px;" onclick="toggleAiConfig()">⚙ AI 服务配置</button>
+      </h2>
+      <!-- AI 服务配置面板（Web 端手动配置） -->
+      <div id="aiConfigPanel" style="display:none;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;background:var(--gray-bg);">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;">AI 服务配置（保存后立即生效，无需重启）</div>
+        <div class="inline-form">
+          <select id="cfgProvider" class="narrow" title="服务类型">
+            <option value="openai_compat">云端 OpenAI 兼容 API</option>
+            <option value="ollama">本地 Ollama</option>
+            <option value="">不启用 AI</option>
+          </select>
+          <input type="text" id="cfgBaseUrl" class="grow" placeholder="base_url，如 https://api.openai.com/v1">
+          <input type="text" id="cfgModel" class="narrow" placeholder="model，如 gpt-4o-mini">
+        </div>
+        <div class="inline-form" style="margin-top:10px;">
+          <input type="password" id="cfgApiKey" class="grow" placeholder="api_key（留空保持不变）">
+          <button class="btn-primary" onclick="saveAiConfig()">保存</button>
+          <button class="btn-ghost" onclick="testAiConfig()">测试连接</button>
+        </div>
+        <div id="cfgMsg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
+      </div>
+      <p class="hint">支持：①自然语言问税（"锂电池出口美国要交多少税？"）②商品归类（"帮我归类：便携式蓝牙音箱"）
+        ③上传商品清单批量分析（每行一个品名）。AI 结果仅供参考，正式报关请人工复核。</p>
+      <div class="chat-box" id="chatBox">
+        <div class="msg system">你好！我是 HTS 关税助手。可以问我税率、帮我归类商品，或上传清单做批量分析。</div>
+      </div>
+      <div class="chat-input-row">
+        <textarea id="chatInput" placeholder="输入问题，如：帮我查一下锂电池的关税 / 归类：陶瓷马克杯"></textarea>
+        <div class="chat-side">
+          <button class="btn-primary" onclick="doChat()">发送</button>
+          <button class="btn-ghost" onclick="analyzeListMode()">清单分析</button>
+        </div>
+      </div>
+      <div class="error-bar" id="chatError"></div>
+    </div>
+  </div>
+
+  <!-- ============ Tab 5：数据变动 ============ -->
+  <div class="tab-panel" id="tab-changes">
+    <div class="card">
+      <h2><span class="step">↻</span> 数据更新变动提醒</h2>
+      <p class="hint">每次官方数据更新并重建数据库（python scripts/build_db.py）后，此处显示与上一版本相比的变动清单，便于发现"你的商品税率变了"。</p>
+      <div id="changesBody"></div>
+    </div>
+  </div>
+
+  <footer>
+    <b>重要提示</b>：本工具仅供内部效率参考。<br>
+    ① 301 加征仅适用于<b>中国原产</b>商品；② 命中清单的商品可能已有 USTR <b>豁免</b>，申报前请核对豁免清单；
+    ③ 税率 = 基础税率 + 301 加征（从量税需按货值折算）；④ 正式报关以 CBP 裁定与 USTR 官方公告为准。
+  </footer>
+</div>
+
+<!-- 悬浮复制提示框 -->
+<div id="tooltip" class="tooltip">
+  <div id="tipText" class="tip-text"></div>
+  <button id="tipCopy" class="tip-copy" type="button">复制</button>
+</div>
+
+<!-- 来源追溯弹窗 -->
+<div id="srcModal" class="modal-overlay" onclick="if (event.target === this) closeSrcModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <span id="srcModalTitle">来源追溯</span>
+      <button class="modal-close" onclick="closeSrcModal()" title="关闭">✕</button>
+    </div>
+    <div id="srcModalBody" class="modal-body"></div>
+  </div>
+</div>
+
+<script>
+let currentResults = [];
+let currentFile = null;
+let currentFilter = 'all';
+let currentSearchRows = [];
+let currentEstRows = [];
+
+// 数据源信息
+fetch('/api/info')
+  .then(r => r.json())
+  .then(d => {
+    const srcs = [d.hts_csv, d.ustr_pdf, d.flip_frn_pdf].filter(Boolean).join(' + ');
+    document.getElementById('info').innerHTML =
+      `数据源：${srcs} ｜ 301 映射 ${(d.sec301_mapping_count || 0).toLocaleString()} 条 ｜ 8位子目 ${(d.rates_8_count || 0).toLocaleString()} 个` +
+      ` ｜ <a href="javascript:void(0)" onclick="showSourceFiles()" style="color:var(--primary);text-decoration:underline;">📄 查看数据来源</a>` +
+      (d.built_at ? ` ｜ 构建于 ${d.built_at}` : '');
+  })
+  .catch(() => document.getElementById('info').textContent = '数据源加载失败');
+
+// AI 状态（可刷新）
+function refreshAiStatus() {
+  fetch('/api/ai/status')
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById('aiStatus');
+      el.textContent = d.enabled ? `✅ ${d.provider} / ${d.model}` : '⚠ ' + d.message;
+      if (!d.enabled) el.style.color = 'var(--warn)';
+      else el.style.color = 'var(--miss)';
+    })
+    .catch(() => {});
+}
+refreshAiStatus();
+
+/* ---------- 加征措施开关（Web 端配置） ---------- */
+async function toggleMeasuresConfig() {
+  const panel = document.getElementById('measuresConfigPanel');
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    try {
+      const r = await fetch('/api/measures/config');
+      const d = await r.json();
+      document.getElementById('mcCn301').checked = !!d.measures.cn301;
+      document.getElementById('mcFlip301').checked = !!d.measures.flip301;
+    } catch (e) {
+      document.getElementById('mcMsg').textContent = '读取配置失败：' + e.message;
+    }
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+async function saveMeasuresConfig() {
+  const msg = document.getElementById('mcMsg');
+  msg.textContent = '保存中...';
+  msg.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/measures/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ measures: {
+        cn301: document.getElementById('mcCn301').checked,
+        flip301: document.getElementById('mcFlip301').checked
+      }})
+    });
+    const d = await r.json();
+    const on = Object.entries(d.measures || {}).filter(([, v]) => v).map(([k]) => k);
+    msg.textContent = '✅ 已保存（启用：' + (on.join('、') || '无') + '），查询/估算/搜索即时生效';
+    msg.style.color = 'var(--miss)';
+  } catch (e) {
+    msg.textContent = '保存失败：' + e.message;
+    msg.style.color = 'var(--hit)';
+  }
+}
+
+/* ---------- AI 服务配置（Web 端手动配置） ---------- */
+async function toggleAiConfig() {
+  const panel = document.getElementById('aiConfigPanel');
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    try {
+      const r = await fetch('/api/ai/config');
+      const d = await r.json();
+      document.getElementById('cfgProvider').value = d.provider || '';
+      document.getElementById('cfgBaseUrl').value = d.base_url || '';
+      document.getElementById('cfgModel').value = d.model || '';
+      document.getElementById('cfgApiKey').value = '';
+      document.getElementById('cfgApiKey').placeholder =
+        d.api_key_set ? `已配置（${d.api_key_masked}），留空保持不变` : '未配置，输入新 api_key';
+    } catch (e) {
+      document.getElementById('cfgMsg').textContent = '读取配置失败：' + e.message;
+    }
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+async function saveAiConfig() {
+  const msg = document.getElementById('cfgMsg');
+  msg.textContent = '保存中...';
+  const body = {
+    provider: document.getElementById('cfgProvider').value || null,
+    base_url: document.getElementById('cfgBaseUrl').value.trim(),
+    model: document.getElementById('cfgModel').value.trim(),
+    api_key: document.getElementById('cfgApiKey').value.trim() || '__KEEP__',
+  };
+  try {
+    const r = await fetch('/api/ai/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (d.status && d.status.enabled) {
+      msg.textContent = `✅ 已保存并启用：${d.status.provider} / ${d.status.model}`;
+      msg.style.color = 'var(--miss)';
+    } else {
+      msg.textContent = '已保存：' + (d.status ? d.status.message : '（状态未知）');
+      msg.style.color = 'var(--warn)';
+    }
+    document.getElementById('cfgApiKey').value = '';
+    refreshAiStatus();
+  } catch (e) {
+    msg.textContent = '保存失败：' + e.message;
+    msg.style.color = 'var(--hit)';
+  }
+}
+
+async function testAiConfig() {
+  const msg = document.getElementById('cfgMsg');
+  msg.textContent = '测试连接中（发最小请求验证）...';
+  msg.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/ai/test', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      msg.textContent = '✅ ' + d.message;
+      msg.style.color = 'var(--miss)';
+    } else {
+      msg.textContent = '❌ ' + d.message;
+      msg.style.color = 'var(--hit)';
+    }
+  } catch (e) {
+    msg.textContent = '测试失败：' + e.message;
+    msg.style.color = 'var(--hit)';
+  }
+}
+
+// Tab 切换
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'changes') loadChanges();
+  if (name === 'query') renderHistory();
+}
+
+/* ================= 编码查询（原有功能） ================= */
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('fileInput');
+dz.addEventListener('click', () => fi.click());
+fi.addEventListener('change', e => setFile(e.target.files[0]));
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+function setFile(f) {
+  currentFile = f;
+  document.getElementById('fileName').textContent = f ? '已选择：' + f.name : '';
+}
+
+async function doQuery() {
+  const btn = document.getElementById('btnQuery');
+  const text = document.getElementById('codesInput').value.trim();
+  const err = document.getElementById('errorBar');
+  err.classList.remove('show');
+
+  if (!text && !currentFile) {
+    err.textContent = '请先输入 HTS 编码或选择文件';
+    err.classList.add('show');
+    return;
+  }
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  try {
+    const origin = document.getElementById('queryOrigin').value || 'CN';
+    let data, source;
+    if (currentFile) {
+      const fd = new FormData();
+      fd.append('file', currentFile);
+      fd.append('origin', origin);
+      const resp = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (!resp.ok) {
+        const ed = await resp.json().catch(() => ({}));
+        throw new Error(ed.detail || ('HTTP ' + resp.status));
+      }
+      data = await resp.json();
+      source = currentFile.name;
+    } else {
+      data = await apiPost('/api/query', { text, origin });
+      source = '文本输入';
+    }
+    if (!Array.isArray(data.results)) throw new Error('服务端响应缺少 results 字段');
+    render(data, source);
+    saveHistory(data.results);
+  } catch (e) {
+    err.textContent = '查询失败：' + e.message;
+    err.classList.add('show');
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function render(data, source) {
+  currentResults = data.results;
+  document.getElementById('resultCard').style.display = 'block';
+  document.getElementById('sourceInfo').textContent = '（来源：' + source + '）';
+
+  const s = data.stats;
+  const originTxt = (s.origin || (data.origin || '中国'));
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat total">原产地<b>${esc(originTxt)}</b></div>
+    <div class="stat total">总数<b>${s.total}</b></div>
+    <div class="stat hit">命中 301<b>${s.hit}</b></div>
+    <div class="stat miss">未命中<b>${s.miss}</b></div>`;
+
+  const cnt = {
+    all: currentResults.length,
+    hit: currentResults.filter(isHit).length,
+    miss: currentResults.filter(r => r['301判定'] === '否' || String(r['301判定']).includes('不适用')).length,
+    na: currentResults.filter(r => String(r['301判定']).includes('无法判定')).length,
+  };
+  document.querySelectorAll('#filterBar .filter-btn').forEach(b => {
+    b.querySelector('.cnt').textContent = '(' + cnt[b.dataset.f] + ')';
+  });
+
+  document.getElementById('searchInput').value = '';
+  document.getElementById('sortSelect').value = 'default';
+
+  setFilter('all');
+  document.getElementById('btnExport').disabled = false;
+  document.getElementById('btnExportCsv').disabled = false;
+  document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function isHit(r) {
+  return r['301判定'] === '是' || String(r['301判定']).includes('豁免');
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('#filterBar .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.f === f));
+  renderTable();
+}
+
+function filteredResults() {
+  const f = currentFilter;
+  if (f === 'all') return currentResults;
+  if (f === 'hit') return currentResults.filter(isHit);
+  if (f === 'miss') return currentResults.filter(r => r['301判定'] === '否' || String(r['301判定']).includes('不适用'));
+  return currentResults.filter(r => String(r['301判定']).includes('无法判定'));
+}
+
+function pctOf(r) {
+  const m = String(r['301加征']).match(/([\d.]+)\s*%/);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+function sortRows(rows) {
+  const mode = document.getElementById('sortSelect').value;
+  const copy = [...rows];
+  if (mode === 'pct_desc') copy.sort((a, b) => pctOf(b) - pctOf(a));
+  else if (mode === 'pct_asc') copy.sort((a, b) => pctOf(a) - pctOf(b));
+  else if (mode === 'code_asc') copy.sort((a, b) => String(a['8位子目']).localeCompare(String(b['8位子目'])));
+  return copy;
+}
+
+function searchRows(rows) {
+  const kw = document.getElementById('searchInput').value.trim().toLowerCase();
+  if (!kw) return rows;
+  return rows.filter(r =>
+    ['输入编码', '8位子目', '商品描述', '9903子目', '备注'].some(k =>
+      String(r[k] || '').toLowerCase().includes(kw)));
+}
+
+function visibleResults() {
+  return sortRows(searchRows(filteredResults()));
+}
+
+function renderTable() {
+  const rows = visibleResults();
+  currentRows = rows;
+  const body = document.getElementById('resultBody');
+  body.innerHTML = '';
+  const hasSearch = document.getElementById('searchInput').value.trim() !== '';
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="12" class="empty">${hasSearch ? '没有匹配搜索条件的结果' : '该分类下没有结果'}</td></tr>`;
+    document.getElementById('resultCount').textContent = '';
+    return;
+  }
+  document.getElementById('resultCount').textContent =
+    `显示 ${rows.length} / ${currentResults.length} 条`;
+  rows.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    const tag = tagClass(r['301判定']);
+    if (isHit(r)) tr.className = 'row-hit';
+    else if (String(r['301判定']).includes('无法判定')) tr.className = 'row-na';
+    const flipTxt = r['301 flip变化'] ? '；' + r['301 flip变化'] : '';
+    const vnTxt = r['越南措施'] ? '；' + r['越南措施'] : '';
+    const noteFull = String(r['备注'] || '') + flipTxt + vnTxt;
+    tr.innerHTML = `
+      <td class="code" data-full="${esc(r['输入编码'])}">${esc(r['输入编码'])}</td>
+      <td class="code" data-full="${esc(r['8位子目'])}">${esc(r['8位子目'])}</td>
+      <td class="desc" data-full="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
+      <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
+      <td class="ellipsis" data-full="${esc(r['特殊税率'])}">${esc(r['特殊税率'])}</td>
+      <td><span class="tag ${r['原产地'] === '越南' ? 'warn' : 'miss'}">${esc(r['原产地'])}${esc(r['原产地代码'] && r['原产地代码'] !== 'CN' ? '(' + r['原产地代码'] + ')' : '')}</span></td>
+      <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
+      <td class="code" data-full="${esc(r['9903子目'])}">${esc(r['9903子目'])}</td>
+      <td class="add-pct" data-full="${esc(r['301加征'] || '')}">${esc(r['301加征'] || '—')}</td>
+      <td class="add-pct" data-full="${esc(r['FLIP 301加征'])}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
+      <td class="note" data-full="${esc(noteFull)}">${esc(noteFull)}</td>
+      <td><button class="src-btn" title="查看该条税负的官方来源" onclick="showSourceOf(${idx})">📄</button> <button class="src-btn" title="在 USITC 官网查看该编码（https://hts.usitc.gov）" onclick="openHtsSite('${esc(r['输入编码'])}')">🌐</button></td>`;
+    body.appendChild(tr);
+  });
+}
+
+/* ================= 来源追溯（弹窗 + 查看原文） ================= */
+let currentRows = [];
+let currentSrcs = [];
+let currentSrcIdx = -1;
+
+function openHtsSite(code) {
+  // USITC 官方在线 HTS：https://hts.usitc.gov/search?query=<编码>（实测支持带点/不带点）
+  const q = String(code || '').trim();
+  if (!q) return;
+  window.open('https://hts.usitc.gov/search?query=' + encodeURIComponent(q), '_blank');
+}
+
+function openSrcModal(title, html) {
+  document.getElementById('srcModalTitle').textContent = title;
+  document.getElementById('srcModalBody').innerHTML = html;
+  document.getElementById('srcModal').classList.add('show');
+}
+
+function closeSrcModal() {
+  document.getElementById('srcModal').classList.remove('show');
+}
+
+function showSourceOf(idx) {
+  currentSrcIdx = idx;
+  const row = currentRows[idx];
+  if (!row) return;
+  const srcs = Array.isArray(row['来源']) ? row['来源'] : [];
+  currentSrcs = srcs;
+  if (!srcs.length) {
+    openSrcModal('来源追溯', '<div style="color:var(--muted);">该条结果暂无来源信息（数据版本较旧，请运行 python scripts/build_db.py 重建数据库）。</div>');
+    return;
+  }
+  let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">编码 ${esc(row['输入编码'])}（${esc(row['8位子目'])}）各税负判定的官方出处。点击「查看原文」可打开源文件并定位到对应页/行。</div>
+    <div style="margin-bottom:12px;font-size:13px;"><a href="javascript:void(0)" onclick="openHtsSite('${esc(row['输入编码'])}')" style="color:var(--primary);text-decoration:underline;">🌐 在 USITC 官网查看该编码（hts.usitc.gov）</a></div>`;
+  srcs.forEach((s, i) => {
+    const pos = String(s['位置'] || '');
+    const canView = (s['key'] === 'ustr_pdf' || s['key'] === 'flip_frn') && /第\s*\d+\s*页/.test(pos)
+      || (s['key'] === 'htsdata' && /第\s*\d+\s*行/.test(pos));
+    const scopeTxt = s['范围限制'] ? `<div class="src-desc">范围限制：<b>${esc(s['范围限制'])}</b>（仅该范围商品豁免，需按商品描述核对）</div>` : '';
+    html += `
+      <div class="src-group">
+        <div><span class="src-type">${esc(s['类型'] || '')}</span></div>
+        <div class="src-file">${esc(s['文件'] || '')}</div>
+        ${pos ? `<div class="src-line">位置：${esc(pos)}${s['Part'] ? ' ｜ ' + esc(s['Part']) : ''}</div>` : (s['Part'] ? `<div class="src-line">${esc(s['Part'])}</div>` : '')}
+        ${scopeTxt}
+        <div class="src-desc">${esc(s['说明'] || '')}</div>
+        ${canView ? `<button class="src-view" onclick="viewSource(${i})">查看原文</button>` : ''}
+      </div>`;
+  });
+  openSrcModal('来源追溯', html);
+}
+
+function viewSource(i) {
+  const s = currentSrcs[i] || {};
+  const mPos = String(s['位置'] || '').match(/第\s*(\d+)\s*页/);
+  const mLn = String(s['位置'] || '').match(/第\s*(\d+)\s*行/);
+  const pdfKey = { ustr_pdf: 'ustr_pdf', flip_frn: 'flip_frn' }[s['key']];
+  if (pdfKey && mPos) {
+    // 浏览器内嵌 PDF 查看器支持 #page=N 片段定位（物理页号，与数据一致）
+    window.open(`/api/source/pdf/${pdfKey}#page=${mPos[1]}`, '_blank');
+  } else if (s['key'] === 'htsdata' && mLn) {
+    loadCsvContext(mLn[1]);
+  } else {
+    alert('该来源为本地转录数据，无原文可定位');
+  }
+}
+
+async function loadCsvContext(line) {
+  const body = document.getElementById('srcModalBody');
+  body.innerHTML = '<div style="color:var(--muted);">正在加载 CSV 原文 ...</div>';
+  try {
+    const r = await fetch(`/api/source/csv?line=${line}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    let rows = '';
+    (d.context || []).forEach(c => {
+      const hl = c['行号'] === d.target ? ' class="hl"' : '';
+      rows += `<span${hl}>${String(c['行号']).padStart(6)} │ ${esc(c['内容'])}</span>\n`;
+    });
+    body.innerHTML = `
+      <button class="src-back" onclick="showSourceOf(${currentSrcIdx})">← 返回来源列表</button>
+      <div class="src-file">htsdata.csv（USITC 全量税率表）</div>
+      <div class="src-line">目标行：第 ${d.target} 行（共 ${d.total_lines} 行，表头为第 1 行）</div>
+      <div class="src-csv-pre">${rows}</div>`;
+  } catch (e) {
+    body.innerHTML = `<div style="color:var(--hit);">CSV 原文加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+async function showSourceFiles() {
+  try {
+    const r = await fetch('/api/source/list');
+    const d = await r.json();
+    let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">全部税负判定均来自以下官方源文件（本地离线数据，构建于 ${esc(d.meta.built_at || '未知')}）。</div>
+      <div style="margin-bottom:12px;font-size:13px;"><a href="https://hts.usitc.gov/" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:underline;">🌐 USITC 官方在线 HTS 查询（hts.usitc.gov）</a> <span style="color:var(--muted);font-size:12px;">— 可直接按编码搜索最新税率</span></div>`;
+    (d.files || []).forEach(f => {
+      html += `
+        <div class="src-file-item">
+          <div>
+            <div class="f-name">${esc(f.label)}<span style="font-weight:400;color:var(--muted);">（${esc(f.path)}）</span></div>
+            <div class="f-desc">${esc(f.desc)}</div>
+            <div class="f-desc">${f.exists ? (f.size / 1048576).toFixed(1) + ' MB' : '⚠ 文件缺失'}</div>
+          </div>
+          ${f.exists && f.mime === 'application/pdf' ? `<button class="f-open" onclick="window.open('/api/source/pdf/${esc(f.key)}', '_blank')">打开 PDF</button>` : ''}
+        </div>`;
+    });
+    openSrcModal('数据来源', html);
+  } catch (e) {
+    alert('数据来源清单加载失败：' + e.message);
+  }
+}
+
+function tagClass(v) {
+  if (v === '是') return { cls: 'hit' };
+  if (v === '否') return { cls: 'miss' };
+  if (String(v).includes('豁免')) return { cls: 'warn' };
+  return { cls: 'na' };
+}
+
+async function doExport(fmt) {
+  const rows = visibleResults();
+  if (!rows.length) return;
+  const btn = fmt === 'xlsx' ? document.getElementById('btnExport') : document.getElementById('btnExportCsv');
+  btn.disabled = true;
+  // 导出前把「来源」结构化字段转为可读文本摘要，避免 Excel/CSV 出现 Python repr
+  const exportRows = rows.map(r => {
+    const o = { ...r };
+    if (Array.isArray(o['来源'])) {
+      o['来源'] = o['来源'].map(s =>
+        `${s['类型'] || ''}: ${s['文件'] || ''}${s['位置'] ? '（' + s['位置'] + '）' : ''}${s['范围限制'] ? ' 范围:' + s['范围限制'] : ''}`
+      ).join('；');
+    }
+    return o;
+  });
+  try {
+    const resp = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results: exportRows, fmt })
+    });
+    if (!resp.ok) throw new Error('导出失败');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^";]+)"?/);
+    a.href = url;
+    a.download = m ? m[1] : ('hts_301_result.' + fmt);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('导出失败：' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function clearAll() {
+  document.getElementById('codesInput').value = '';
+  currentFile = null;
+  document.getElementById('fileName').textContent = '';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('errorBar').classList.remove('show');
+  document.getElementById('resultCard').style.display = 'none';
+  if (typeof tip !== 'undefined') { tip.style.display = 'none'; tipActive = false; }
+  currentResults = [];
+  currentFilter = 'all';
+  document.querySelectorAll('#filterBar .filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('#filterBar .filter-btn[data-f="all"]').classList.add('active');
+  document.getElementById('searchInput').value = '';
+  document.getElementById('sortSelect').value = 'default';
+  document.getElementById('resultCount').textContent = '';
+  document.getElementById('btnExport').disabled = true;
+  document.getElementById('btnExportCsv').disabled = true;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+/* ================= 历史记录（localStorage） ================= */
+function saveHistory(results) {
+  if (!results || !results.length) return;
+  const ts = new Date().toLocaleString('zh-CN', { hour12: false });
+  const codes = results.map(r => r['输入编码']).join(', ');
+  let hist = JSON.parse(localStorage.getItem('hts_history') || '[]');
+  hist.unshift({ ts, codes: codes.slice(0, 200), hit: results.filter(isHit).length, total: results.length });
+  hist = hist.slice(0, 20);
+  localStorage.setItem('hts_history', JSON.stringify(hist));
+  renderHistory();
+}
+
+function renderHistory() {
+  const hist = JSON.parse(localStorage.getItem('hts_history') || '[]');
+  const card = document.getElementById('historyCard');
+  const list = document.getElementById('historyList');
+  if (!hist.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  list.innerHTML = hist.map((h, i) => `
+    <div style="padding:6px 0;border-bottom:1px dashed var(--border);display:flex;gap:10px;align-items:baseline;font-size:13px;">
+      <span style="color:var(--muted);flex-shrink:0;">${esc(h.ts)}</span>
+      <span class="code" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;"
+            title="点击重新查询" onclick="reQueryHistory(${i})">${esc(h.codes)}</span>
+      <span style="flex-shrink:0;">命中 <b style="color:var(--hit)">${h.hit}</b> / ${h.total}</span>
+    </div>`).join('');
+}
+
+function reQueryHistory(i) {
+  const hist = JSON.parse(localStorage.getItem('hts_history') || '[]');
+  const h = hist[i];
+  if (!h) return;
+  document.getElementById('codesInput').value = h.codes;
+  currentFile = null;
+  document.getElementById('fileName').textContent = '';
+  document.getElementById('fileInput').value = '';
+  switchTab('query');
+  doQuery();
+}
+
+function clearHistory() {
+  localStorage.removeItem('hts_history');
+  renderHistory();
+}
+
+/* ================= 税率搜索 ================= */
+/* ---------- 统一 API 请求工具 ---------- */
+function detailMsg(data) {
+  const d = data && data.detail;
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) return d.map(x => x.msg || JSON.stringify(x)).join('；');
+  if (d) return JSON.stringify(d);
+  return '';
+}
+async function apiPost(path, body) {
+  const resp = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  let data = {};
+  try { data = await resp.json(); } catch (e) { /* 非 JSON 响应 */ }
+  if (!resp.ok) throw new Error(detailMsg(data) || ('HTTP ' + resp.status + ' ' + resp.statusText));
+  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
+  return data;
+}
+
+async function doSearch() {
+  const btn = document.getElementById('btnSearch');
+  const kw = document.getElementById('searchKeyword').value.trim();
+  const err = document.getElementById('searchError');
+  err.classList.remove('show');
+  if (!kw) {
+    err.textContent = '请输入关键词或编码';
+    err.classList.add('show');
+    return;
+  }
+  btn.classList.add('loading');
+  btn.disabled = true;
+  try {
+    const body = {
+      keyword: kw,
+      sort: document.getElementById('searchSort').value,
+      limit: 100
+    };
+    const unitValue = parseFloat(document.getElementById('searchUnitValue').value);
+    if (unitValue) body.unit_value = unitValue;  // 空值省略，避免 null 触发校验错误
+    const data = await apiPost('/api/search', body);
+    if (!Array.isArray(data.results)) throw new Error('服务端响应缺少 results 字段：' + JSON.stringify(data).slice(0, 120));
+    currentSearchRows = data.results;
+    renderSearch(data);
+  } catch (e) {
+    err.textContent = '搜索失败：' + e.message;
+    err.classList.add('show');
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function renderSearch(data) {
+  const card = document.getElementById('searchResultCard');
+  card.style.display = 'block';
+  document.getElementById('searchResultInfo').textContent =
+    `「${data.keyword}」 匹配 ${data.count} 个候选`;
+  const body = document.getElementById('searchBody');
+  body.innerHTML = '';
+  if (!data.results.length) {
+    const hasCJK = /[\u4e00-\u9fff]/.test(data.keyword || '');
+    body.innerHTML = `<tr><td colspan="8" class="empty">${
+      hasCJK
+        ? '税率搜索需要英文关键词或编码。中文商品名请到「AI 助手」用自然语言问（如"帮我归类：锂电池"）'
+        : '没有匹配结果，请尝试更短的英文关键词（如 battery / apparel）'
+    }</td></tr>`;
+    document.getElementById('searchResultCount').textContent = '';
+    return;
+  }
+  document.getElementById('searchResultCount').textContent =
+    `等效从价列：Free/百分比可直接比较；「需折算」为从量税，填写单位货值后可排序折算`;
+  data.results.forEach(r => {
+    const tr = document.createElement('tr');
+    const tag = tagClass(r['301判定']);
+    if (isHit(r)) tr.className = 'row-hit';
+    tr.innerHTML = `
+      <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}</td>
+      <td class="desc" data-full="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
+      <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
+      <td>${esc(r['税率类型'])}</td>
+      <td class="ellipsis" data-full="${esc(r['等效从价'])}">${esc(r['等效从价'])}</td>
+      <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
+      <td class="add-pct" data-full="${esc(r['301加征'])}">${esc(r['301加征'])}</td>
+      <td class="ellipsis" data-full="${esc(r['总税负估算'] || '')}">${esc(r['总税负估算'] || '—')}</td>`;
+    body.appendChild(tr);
+  });
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ================= 成本估算 ================= */
+async function doEstimate() {
+  const btn = document.getElementById('btnEstimate');
+  const text = document.getElementById('estCodes').value.trim();
+  const err = document.getElementById('estError');
+  err.classList.remove('show');
+  if (!text) {
+    err.textContent = '请输入 HTS 编码';
+    err.classList.add('show');
+    return;
+  }
+  btn.classList.add('loading');
+  btn.disabled = true;
+  try {
+    const body = { text, origin: document.getElementById('estOrigin').value || 'CN' };
+    const unitValue = parseFloat(document.getElementById('estUnitValue').value);
+    if (unitValue) body.unit_value = unitValue;  // 空值省略，避免 null 触发校验错误
+    const data = await apiPost('/api/estimate', body);
+    if (!Array.isArray(data.results)) throw new Error('服务端响应缺少 results 字段：' + JSON.stringify(data).slice(0, 120));
+    currentEstRows = data.results;
+    renderEstimate(data);
+  } catch (e) {
+    err.textContent = '估算失败：' + e.message;
+    err.classList.add('show');
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function renderEstimate(data) {
+  const card = document.getElementById('estResultCard');
+  card.style.display = 'block';
+  document.getElementById('estResultInfo').textContent =
+    data.unit_value ? `单位货值 $${data.unit_value}/单位（从量税已按此折算）` : '未提供单位货值（从量税显示"需折算"）';
+  const body = document.getElementById('estBody');
+  body.innerHTML = '';
+  data.results.forEach(r => {
+    const tr = document.createElement('tr');
+    if (isHit(r)) tr.className = 'row-hit';
+    tr.innerHTML = `
+      <td class="code" data-full="${esc(r['输入编码'])}">${esc(r['输入编码'])}</td>
+      <td>${esc(r['税率类型'])}</td>
+      <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
+      <td>${esc(r['基础等效从价'])}</td>
+      <td class="add-pct" data-full="${esc(r['301加征'] || '')}">${esc(r['301加征'] || '—')}</td>
+      <td class="add-pct" data-full="${esc(r['FLIP 301加征'] || '')}">${esc(r['FLIP 301加征'] || '—')}</td>
+      <td><b style="color:var(--primary-dark)">${esc(r['总税负估算'])}</b></td>
+      <td>${esc(r['原产地'] || '')}</td>
+      <td class="note" data-full="${esc(r['备注'])}">${esc(r['备注'])}</td>`;
+    body.appendChild(tr);
+  });
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ================= 通用导出（搜索/估算） ================= */
+async function exportGeneric(kind) {
+  const rows = kind === 'search' ? currentSearchRows : currentEstRows;
+  if (!rows || !rows.length) return;
+  const btn = document.getElementById(kind === 'search' ? 'btnSearchExport' : 'btnEstExport');
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results: rows, fmt: 'csv' })
+    });
+    if (!resp.ok) throw new Error('导出失败');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'hts_' + kind + '_result.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('导出失败：' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ================= AI 助手 ================= */
+function chatMsg(text, cls, md) {
+  const box = document.getElementById('chatBox');
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  if (md) {
+    const inner = document.createElement('div');
+    inner.className = 'md-body';
+    inner.innerHTML = renderMD(text);
+    div.appendChild(inner);
+  } else {
+    div.textContent = text;
+  }
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+async function doChat() {
+  const input = document.getElementById('chatInput');
+  const q = input.value.trim();
+  const err = document.getElementById('chatError');
+  err.classList.remove('show');
+  if (!q) return;
+  input.value = '';
+  chatMsg(q, 'user');
+  const wait = chatMsg('思考中...', 'system');
+  try {
+    const data = await apiPost('/api/ai/ask', { question: q });
+    wait.remove();
+    if (data.error) { chatMsg(data.error, 'error'); return; }
+    if (data.type === 'codes') {
+      chatMsg('已识别编码：' + data.codes.join(', ') + '（本地查询结果）', 'ai', true);
+      renderChatTable(data.results);
+      if (data.interpretation) chatMsg(data.interpretation, 'ai', true);
+      if (data.error && !data.interpretation) chatMsg(data.error, 'error');
+    } else if (data.type === 'classify') {
+      if (data.error) { chatMsg(data.error, 'error'); return; }
+      chatMsg('为你找到以下候选归类（置信度排序）：', 'ai', true);
+      renderClassifyCards(data);
+      chatMsg(data.disclaimer || '', 'system');
+    } else if (data.type === 'faq') {
+      chatMsg(data.answer, 'ai', true);
+    } else {
+      chatMsg(JSON.stringify(data), 'ai');
+    }
+  } catch (e) {
+    wait.remove();
+    chatMsg('调用失败：' + e.message, 'error');
+  }
+}
+
+// AI 查询结果表格（编码查询结果的简化展示）
+function renderChatTable(results) {
+  const box = document.getElementById('chatBox');
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'align-self:flex-start;max-width:96%;width:96%;background:#fff;border:1px solid var(--border);border-radius:10px;overflow-x:auto;';
+  let html = '<table style="min-width:760px;font-size:12px;"><thead><tr>' +
+    '<th>编码</th><th>描述</th><th>一般税率</th><th>301</th><th>301加征</th><th>附加税</th></tr></thead><tbody>';
+  results.forEach(r => {
+    const tag = tagClass(r['301判定']);
+    const codeCell = esc(r['输入编码'] || r['编码'] || r['序号'] || '');
+    html += `<tr class="${isHit(r) ? 'row-hit' : ''}">
+      <td class="code">${codeCell}</td>
+      <td class="desc">${esc(r['商品描述'] || r['品名'] || '')}</td>
+      <td>${esc(r['一般税率'] || '')}</td>
+      <td><span class="tag ${tag.cls}">${esc(r['301判定'] || '')}</span></td>
+      <td class="add-pct">${esc(r['301加征'] || '')}</td>
+      <td>${esc(r['附加税'] || '')}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  box.appendChild(wrap);
+  box.scrollTop = box.scrollHeight;
+}
+
+// AI 归类推荐卡片
+function renderClassifyCards(data) {
+  const box = document.getElementById('chatBox');
+  const grid = document.createElement('div');
+  grid.className = 'ai-cards';
+  grid.style.cssText = 'align-self:flex-start;max-width:100%;width:100%;';
+  grid.innerHTML = (data.candidates || []).map(c => `
+    <div class="ai-card">
+      <div class="ai-code">${esc(c['编码'])}</div>
+      <div class="ai-desc">${esc(c['商品描述'])}</div>
+      <div style="font-size:12px;">
+        一般税率：${esc(c['一般税率'])}（${esc(c['税率类型'])}）<br>
+        301：<span class="tag ${tagClass(c['301判定']).cls}">${esc(c['301判定'])} ${esc(c['301加征'])}</span><br>
+        总税负估算：<b>${esc(c['总税负估算'] || '—')}</b>
+      </div>
+      <div class="ai-reason">💡 ${esc(c['reason'] || '')}</div>
+      <div class="ai-conf">置信度 ${Math.round((c['confidence'] || 0) * 100)}%
+        <div class="conf-bar"><i style="width:${Math.round((c['confidence'] || 0) * 100)}%"></i></div>
+      </div>
+    </div>`).join('');
+  box.appendChild(grid);
+  box.scrollTop = box.scrollHeight;
+}
+
+// 清单分析模式：切换输入框提示并发送批量分析
+let analyzeMode = false;
+function analyzeListMode() {
+  analyzeMode = !analyzeMode;
+  const input = document.getElementById('chatInput');
+  const btn = document.querySelector('#tab-ai .chat-side button:nth-child(2)');
+  if (analyzeMode) {
+    input.placeholder = '清单分析模式：每行一个商品品名（如：\n便携式蓝牙音箱\n陶瓷马克杯\n），点击"发送"';
+    btn.style.borderColor = 'var(--primary)';
+    btn.style.color = 'var(--primary)';
+  } else {
+    input.placeholder = '输入问题，如：帮我查一下锂电池的关税 / 归类：陶瓷马克杯';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+  }
+}
+
+// 覆盖 doChat：清单模式走批量分析接口
+const _doChat = doChat;
+doChat = function() {
+  if (!analyzeMode) return _doChat();
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  const err = document.getElementById('chatError');
+  err.classList.remove('show');
+  if (!text) return;
+  input.value = '';
+  analyzeMode = false;
+  document.querySelector('#tab-ai .chat-side button:nth-child(2)').style.borderColor = '';
+  chatMsg(text, 'user');
+  const wait = chatMsg('批量分析中（每商品需 AI 归类 + 本地查税，请稍候）...', 'system');
+  const items = text.split(/\n+/).map(s => s.trim()).filter(Boolean).map(name => ({ name }));
+  fetch('/api/ai/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items })
+  }).then(r => r.json()).then(data => {
+    wait.remove();
+    if (data.error) { chatMsg(data.error, 'error'); return; }
+    const s = data.stats || {};
+    chatMsg(`分析完成：共 ${s.total} 个商品，命中 301 ${s.hit} 个，失败 ${s.failed || 0} 个。`, 'ai', true);
+    chatMsg(data.report, 'ai', true);
+    if (data.details && data.details.length) renderChatTable(data.details);
+  }).catch(e => { wait.remove(); chatMsg('调用失败：' + e.message, 'error'); });
+};
+
+// 简易 Markdown 渲染（仅支持常用语法，避免引入依赖）
+function renderMD(text) {
+  let s = esc(text);
+  // 代码块
+  s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => `<pre>${code}</pre>`);
+  // 标题
+  s = s.replace(/^### (.*)$/gm, '<h4>$1</h4>');
+  s = s.replace(/^## (.*)$/gm, '<h4>$1</h4>');
+  s = s.replace(/^# (.*)$/gm, '<h4>$1</h4>');
+  // 列表
+  s = s.replace(/^[-*] (.*)$/gm, '• $1');
+  s = s.replace(/^\d+\. (.*)$/gm, '· $1');
+  // 加粗
+  s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  // 行内代码
+  s = s.replace(/`([^`]+)`/g, '<code style="background:#f6f8fa;padding:1px 5px;border-radius:4px;font-size:12px;">$1</code>');
+  return s;
+}
+
+/* ================= 数据变动 ================= */
+function loadChanges() {
+  const body = document.getElementById('changesBody');
+  body.innerHTML = '<div class="empty">加载中...</div>';
+  fetch('/api/changes')
+    .then(r => r.json())
+    .then(d => {
+      if (d.first_build) {
+        body.innerHTML = `<div class="info-bar">${esc(d.message || '暂无变动记录。')}</div>`;
+        return;
+      }
+      const s = d.stats || {};
+      const total = (s.added || 0) + (s.removed || 0) + (s.rate_changed || 0) + (s.sec301_changed || 0);
+      let html = `<div class="stats">
+        <div class="stat total">变动总数<b>${total}</b></div>
+        <div class="stat">新增子目<b>${s.added || 0}</b></div>
+        <div class="stat">删除子目<b>${s.removed || 0}</b></div>
+        <div class="stat">税率变化<b>${s.rate_changed || 0}</b></div>
+        <div class="stat" style="color:var(--hit)">301 变化<b>${s.sec301_changed || 0}</b></div>
+      </div>`;
+      if (d.built_at) html += `<div class="hint">最近更新：${esc(d.built_at)}</div>`;
+      if (!d.changes || !d.changes.length) {
+        html += '<div class="info-bar">本次更新无明细变动。</div>';
+      } else {
+        html += '<div class="change-card"><div class="change-title">变动明细（最多显示 300 条）</div>' +
+          d.changes.map(c => `
+            <div class="change-item">
+              <span class="ch-type">${esc(c['类型'])}</span>
+              <span class="ch-code">${esc(c['编码'])}</span>
+              <span class="ch-desc" title="${esc(c['描述'])}">${esc(c['描述'])}</span>
+              <span class="ch-old">${esc(c['旧'] || '—')}</span> →
+              <span class="ch-new">${esc(c['新'] || '—')}</span>
+            </div>`).join('') + '</div>';
+      }
+      body.innerHTML = html;
+    })
+    .catch(e => { body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; });
+}
+
+/* ================= 悬浮查看全文 + 一键复制 ================= */
+const tip = document.getElementById('tooltip');
+const tipText = document.getElementById('tipText');
+const tipCopy = document.getElementById('tipCopy');
+let tipHideTimer = null;
+let tipShowTimer = null;
+let tipActive = false;
+
+function showTip(x, y, text) {
+  tipActive = true;
+  clearTimeout(tipHideTimer);
+  tipText.textContent = text;
+  tipCopy.textContent = '复制';
+  tip.style.display = 'block';
+  const pad = 12;
+  let left = x + pad;
+  let top = y + pad;
+  const rect = tip.getBoundingClientRect();
+  if (left + rect.width > innerWidth - 8) left = Math.max(8, x - rect.width - pad);
+  if (top + rect.height > innerHeight - 8) top = Math.max(8, y - rect.height - pad);
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+}
+
+function hideTip() {
+  if (!tipActive) return;
+  tipHideTimer = setTimeout(() => {
+    tip.style.display = 'none';
+    tipActive = false;
+  }, 150);
+}
+
+// 悬停单元格 200ms 稳定后才显示，鼠标快速扫过时不弹框
+document.addEventListener('mouseover', e => {
+  if (tip.contains(e.target)) return;  // 鼠标在 tooltip 上：不触发单元格切换
+  const td = e.target.closest('td[data-full]');
+  if (!td) return;
+  clearTimeout(tipShowTimer);
+  tipShowTimer = setTimeout(() => showTip(e.clientX, e.clientY, td.dataset.full), 200);
+});
+
+// 离开单元格时延迟隐藏；tooltip 内部移动（文字 ↔ 复制按钮）不触发隐藏
+document.addEventListener('mouseout', e => {
+  if (tip.contains(e.target) || tip.contains(e.relatedTarget)) return;
+  const td = e.target.closest('td[data-full]');
+  if (td && e.relatedTarget && td.contains(e.relatedTarget)) return;  // 仍在单元格内
+  clearTimeout(tipShowTimer);
+  hideTip();
+});
+
+// 鼠标移出整个页面时立即隐藏
+document.addEventListener('mouseleave', () => { clearTimeout(tipShowTimer); hideTip(); });
+
+// 鼠标进入 tooltip：取消隐藏（方便移过去点复制）
+tip.addEventListener('mouseenter', () => clearTimeout(tipHideTimer));
+tip.addEventListener('mouseleave', hideTip);
+
+tipCopy.addEventListener('click', async () => {
+  const text = tipText.textContent;
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch (err) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  tipCopy.textContent = ok ? '✓ 已复制' : '复制失败';
+  setTimeout(() => { tipCopy.textContent = '复制'; }, 1500);
+});
+
+window.addEventListener('scroll', hideTip, true);
+</script>
+</body>
+</html>

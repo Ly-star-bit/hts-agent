@@ -1,0 +1,35 @@
+{
+  "version": "2026-08 代表性子集",
+  "note": "UFLPA 强迫劳动检查数据。真实机制：①UFLPA 实体清单——列入实体生产/采购的货物推定强迫劳动；②新疆原产地推定——任何在新疆全部或部分生产的商品推定强迫劳动（可反驳）。判定需要进口商提供供应链信息（生产商名称 + 货物产地），而非商品品类关键词。本文件为官方数据的代表性子集，完整清单请按既有更新流程补充官方数据。",
+  "entities": [
+    {
+      "name": "新疆生产建设兵团",
+      "aliases": ["Xinjiang Production and Construction Corps", "XPCC"],
+      "note": "UFLPA 实体清单"
+    },
+    {
+      "name": "和田地区豫缘天梭纺织品有限公司",
+      "aliases": ["Hetian Yuyuan Tiansuo Textile Co., Ltd."],
+      "note": "UFLPA 实体清单（纺织）"
+    },
+    {
+      "name": "新疆大全新能源股份有限公司",
+      "aliases": ["Xinjiang Daqo New Energy Co., Ltd."],
+      "note": "UFLPA 实体清单（多晶硅）"
+    },
+    {
+      "name": "新疆众和股份有限公司",
+      "aliases": ["Xinjiang Joinworld Co., Ltd."],
+      "note": "UFLPA 实体清单（铝/电子材料）"
+    },
+    {
+      "name": "合盛硅业（新疆）",
+      "aliases": ["Hoshine Silicon Industry (Xinjiang) Co., Ltd."],
+      "note": "UFLPA 实体清单（硅材料）"
+    }
+  ],
+  "priority_sectors": {
+    "note": "UFLPA 工作组重点行业（执法优先参考，不构成命中判定——命中由实体清单与新疆产地推定决定）",
+    "keywords": ["cotton", "tomato", "polysilicon", "photovoltaic", "silicon", "solar"]
+  }
+}

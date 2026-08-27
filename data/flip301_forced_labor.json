@@ -1,0 +1,26 @@
+{
+  "version": "2026-08-06 录入",
+  "measure": "FLIP 301 强迫劳动调查关税（Section 301）",
+  "basis": "USTR Final Action FRN（2026-07-23 发布，预发布版：FLIP 301 Investigation Final Action FRN 7-23-26）；总统备忘录 2026-07-23；dockets USTR-2026-0265/0266",
+  "effective": "2026-07-24 12:01 AM ET（已装船在途、2026-07-28 前进口的不适用）",
+  "scope": "60 个被调查经济体的全部产品（Annex I/II 豁免除外）",
+  "rates": {
+    "10": [
+      "AR", "BD", "KH", "CA", "EC", "SV", "GT", "HN", "IN", "ID",
+      "JO", "MY", "MX", "PK", "LK", "GB", "TT"
+    ],
+    "net_mfn_10": ["EU", "TW"],
+    "net_mfn_125": ["JP", "KR", "CH"],
+    "125": [
+      "DZ", "AO", "AU", "BS", "BH", "BR", "CL", "CN", "CO", "CR",
+      "DO", "EG", "GY", "HK", "IQ", "IL", "KZ", "KW", "LY", "MA",
+      "NZ", "NI", "NG", "NO", "OM", "PE", "PH", "QA", "RU", "SA",
+      "SG", "ZA", "TH", "TR", "AE", "UY", "VE", "VN"
+    ]
+  },
+  "exemptions": {
+    "section_232": "已适用 Section 232 关税（钢铝等）的产品豁免本关税（不重复征税）",
+    "annex": "Annex I/II 豁免：①原材料（加征致国内供应不可得）；②经济整体扰动产品；③美国无法足量/合理价格生产或他源获取的产品；④加征无助于消除被认定行为的产品；⑤特定经济体的鼓励性产品（AR/BD/KH/EC/SV/EU/GT/ID/JO/MY/CH/TW/GB）"
+  },
+  "notes": "10% / 12.5% 为在 MFN 一般税率之上加征的从价税；net-of-MFN 仅适用于 EU/TW（合计 10%）与 JP/KR/CH（合计 12.5%），其 MFN 已达标时本税为 0；不在 60 名单的经济体不适用本关税。正式申报以联邦公报最终版与 CBP 裁定为准。"
+}
