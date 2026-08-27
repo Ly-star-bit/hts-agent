@@ -39,8 +39,13 @@ hts_agent/
 ├── app.py                         # ★ Web 网页版（FastAPI），浏览器操作
 ├── templates/
 │   └── index.html                 # 前端页面（Tab 化：查询/搜索/估算/AI/变动）
-├── ai_config.json                 # AI 服务配置（默认不启用，见下文）
+├── requirements.txt               # 运行依赖（见「安装」）
+├── requirements-dev.txt           # 开发/测试依赖（含 pytest）
+├── ai_config.json                 # AI 服务配置（默认不启用，见下文；已 gitignore）
 ├── measures_config.json           # 加征措施开关配置（cn301/flip301，默认全启用，见下文）
+├── .env.example                   # 数据库凭据模板 → 复制为 .env 填写（已 gitignore）
+├── compare_db_301.py              # MongoDB 产品库 301 加征对账（只读，出差异报表）
+├── update_db_301.py               # MongoDB 产品库 301 加征回写（默认计划模式，写前强制备份）
 ├── scripts/
 │   ├── build_db.py                # 解析两份原始数据 → data/sec301_db.json（含版本对比）
 │   ├── core.py                    # 核心查询逻辑（Web 与命令行共用）
@@ -49,28 +54,51 @@ hts_agent/
 │   ├── db_diff.py                 # ★ 数据库版本对比与变动追踪
 │   └── query_301.py               # 命令行版查询工具
 ├── data/
-│   ├── sec301_db.json             # 构建产物：合并查询数据库（含 flip_301/vietnam/flip301 分区）
+│   ├── sec301_db.json             # 构建产物（不入 git，需先跑 build_db.py 生成）：合并查询数据库
 │   ├── flip_301.json              # 数据源③：301 flip 历史（同一编码此前的加征档位）
 │   ├── vietnam_measures.json      # 数据源④：越南适用措施与代表编码说明
 │   ├── flip301_forced_labor.json  # 数据源⑤：FLIP 301 强迫劳动关税（60 经济体税率表 + 豁免，2026-07-24 生效）
 │   ├── flip301_exemptions.json    # 数据源⑥：FLIP 301 ANNEX II 豁免编码清单（通用 2113 + 按经济体）
-│   ├── .db_fingerprint.json       # 上次构建的关键字段快照（供变动对比）
-│   └── .db_changes.json           # 最近一次构建的变动清单
+│   ├── .db_fingerprint.json       # 构建产物（不入 git）：上次构建的关键字段快照
+│   └── .db_changes.json           # 构建产物（不入 git）：最近一次构建的变动清单
 ├── tests/                         # 单元测试与 API 集成测试
 │   ├── test_rate.py               # 税率引擎测试
 │   ├── test_ai.py                 # AI 层测试（假 Provider）
 │   ├── test_app.py                # Web API 集成测试
-│   └── test_measures.py           # 多措施测试：301 flip/越南轨道/FLIP 301/措施开关配置/中国回归（105 例）
-└── output/                        # 命令行查询结果输出目录
+│   └── test_measures.py           # 多措施测试：301 flip/越南轨道/FLIP 301/措施开关配置/中国回归
+└── output/                        # 命令行查询结果输出目录（不入 git）
 ```
+
+---
+
+## 安装
+
+推荐用 [uv](https://docs.astral.sh/uv/)（也可用普通 venv + pip，把 `uv pip` 换成 `pip` 即可）：
+
+```bash
+uv venv --python 3.12          # 创建 .venv
+uv pip install -r requirements.txt
+```
+
+开发/跑测试再装一份：`uv pip install -r requirements-dev.txt`
+
+**首次使用必须先构建数据库**（`data/sec301_db.json` 是构建产物，不随仓库分发）：
+
+```bash
+.venv/bin/python scripts/build_db.py
+```
+
+之后所有命令都用 `.venv/bin/python`（或先 `source .venv/bin/activate`）。
 
 ---
 
 ## Web 网页版（推荐）
 
 ```bash
-python app.py
+.venv/bin/python app.py
 ```
+
+服务只监听 `127.0.0.1:5000`，**不会自动打开浏览器**，需自行访问。
 
 浏览器打开 **http://127.0.0.1:5000** 即可使用：
 
@@ -129,6 +157,24 @@ python scripts/query_301.py --estimate -c "8507.60.00, 0101.21.00" --unit-value 
 
 **搜索匹配**：英文品名精确词 + 前 5 字符词干索引（`battery` 可命中 `batteries`），
 多关键词 AND 匹配；同时支持编码前缀匹配（`8507` → 8507 章）。
+
+---
+
+## 界面主题
+
+页面右上角可切换两套主题，选择记在浏览器 `localStorage`（键 `hts_theme`），下次打开保持：
+
+| 主题 | 观感 |
+|---|---|
+| **现代**（默认） | 浅色、干净，适合演示与打印 |
+| **科幻** | 青蓝 HUD 深色（`#070d1a` 底 + `#22d3ee` 青），霓虹只用在边框/标题/高亮，正文保持高对比度；静态发光，无循环动画 |
+
+也可用 URL 参数直接指定，便于分享指定主题的链接：
+`http://127.0.0.1:5000/?theme=scifi`（`?theme=modern` 同理，优先级高于本地记忆）
+
+**新增主题**只需在 `templates/index.html` 的 `<style>` 顶部加一个
+`[data-theme="你的主题名"] { ... }` 变量块（45 个 token 全覆盖即可），
+下面所有样式规则无需改动 —— 页面规则里不存在硬编码色值。
 
 ---
 
@@ -257,19 +303,56 @@ FLIP 301 豁免的范围限制与页码（`data/flip301_exemptions.json` 的
 4. **总税率估算**：从价税直接相加；从量/复合税需按单位货值折算（Web/命令行均可传单位货值），分部件复杂税无法折算，标"需人工"。估算仅供参考。
 5. **官方口径**：本工具仅供内部效率参考，正式报关以 CBP 裁定和 USTR 官方公告为准。
 
+## MongoDB 产品库对账 / 回写（可选）
+
+若你的产品数据在 MongoDB（`products` 集合，字段 `HS_CODE` 与 `加征.加征_301`），
+可用本项目的官方判定校准库里的 301 加征。**Web 与命令行查询功能不依赖数据库**，
+不用这两个脚本可以完全忽略本节。
+
+**凭据一律从 `.env` / 环境变量读取，不写在代码里**：
+
+```bash
+cp .env.example .env       # 然后填入 MONGO_LOCAL_USER / MONGO_LOCAL_PASS 等
+```
+
+```bash
+# 只读对账：列出库值与官方判定不一致的产品，出 xlsx + csv 报表
+.venv/bin/python compare_db_301.py
+.venv/bin/python compare_db_301.py --database remote --limit 500
+
+# 回写校准：默认计划模式只打印将改什么，不写库
+.venv/bin/python update_db_301.py
+.venv/bin/python update_db_301.py --execute    # 执行前自动备份（库内副本 + 本地 JSON）
+```
+
+回写只改 `加征.加征_301` 与 `豁免代码` 两个字段；对「官方判定无、但库里有记录」的条目
+只提示不删除。改完建议重跑 `compare_db_301.py` 验证。
+
+---
+
 ## 测试
 
 ```bash
-python -m unittest discover -s tests -v
+.venv/bin/python -m pytest tests/ -q
+# 或不装 pytest：.venv/bin/python -m unittest discover -s tests -v
 ```
 
 覆盖：税率解析（Free/从价/从量/复合/引用/复杂）、等效折算、总税负、关键词搜索排序、
-AI 层流程（假 Provider）、Web API 集成、多措施（301 flip 历史 / 越南原产地轨道 /
-FLIP 301 国家查表 / 措施开关配置两档 / 中国回归，105 例）。
+AI 层流程（假 Provider）、Web API 集成、导出防公式注入、批量统计口径、配置缓存失效、
+多措施（301 flip 历史 / 越南原产地轨道 / FLIP 301 国家查表与数据缺失兜底 /
+措施开关配置两档 / 中国回归）。
 
 ## 环境依赖
 
-- Python 3.8+
-- 构建需要：`pdfplumber`
-- 查询输出 Excel 需要：`pandas` + `openpyxl`（可选，无则只输出 CSV）
-- AI 功能需要：`httpx`（已在依赖中），并配置 `ai_config.json`
+- Python 3.10+（开发与 CI 使用 3.12）
+- 完整依赖见 `requirements.txt`；核心为 `fastapi` / `uvicorn` / `python-multipart` /
+  `pandas` + `openpyxl`（Excel 读写）/ `pdfplumber`（构建阶段解析 PDF）/ `httpx`（AI 层）
+- MongoDB 对账脚本另需 `pymongo` + `python-dotenv`（已含在 `requirements.txt`，不用可忽略）
+
+## 安全须知
+
+- `ai_config.json`（含 API Key）与 `.env`（含数据库口令）**已在 `.gitignore` 中，切勿提交**；
+  仓库内只保留 `ai_config.example.json` / `.env.example` 模板。
+- Web 服务仅监听 `127.0.0.1`，配置类接口（AI 配置 / 加征开关）无鉴权，
+  **请勿改为 `0.0.0.0` 暴露到公网**；确需内网共享请自行加反向代理与认证。
+- 导出的 CSV/XLSX 已对 `=` `+` `-` `@` 开头的单元格做公式注入中和。
