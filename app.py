@@ -205,15 +205,42 @@ async def api_upload(file: UploadFile = File(...), origin: Optional[str] = Form(
     return {"results": results, "stats": stats, "source": filename, "origin": origin}
 
 
+# Excel / Sheets 会把以 = + - @ 开头（含前导 TAB/CR）的单元格当公式执行。
+# 导出结果由前端回传、可含任意文本，且报关场景下导出文件常被转发他人打开，
+# 因此写文件前统一加前导单引号中和（仅影响显示，不改变数值判定）。
+_FORMULA_PREFIX = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _defuse(value):
+    """中和单元格公式注入；非字符串原样返回"""
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIX):
+        return "'" + value
+    return value
+
+
+def _defuse_rows(rows):
+    """对导出行的每个值做公式中和；非 dict 行原样保留"""
+    out = []
+    for row in rows:
+        if isinstance(row, dict):
+            out.append({k: _defuse(v) for k, v in row.items()})
+        else:
+            out.append(row)
+    return out
+
+
 @app.post("/api/export")
 def api_export(req: ExportRequest):
     """导出结果：POST JSON {"results": [...], "fmt": "xlsx"|"csv"}，返回文件下载"""
     if not req.results:
         raise HTTPException(status_code=400, detail="无数据可导出")
+    if not isinstance(req.results[0], dict):
+        raise HTTPException(status_code=400, detail="导出数据格式错误：results 应为对象列表")
+    rows = _defuse_rows(req.results)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     if req.fmt == "xlsx":
         buf = io.BytesIO()
-        pd.DataFrame(req.results).to_excel(buf, index=False)
+        pd.DataFrame(rows).to_excel(buf, index=False)
         buf.seek(0)
         fname = f"hts_301_结果_{ts}.xlsx"
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -221,10 +248,10 @@ def api_export(req: ExportRequest):
         sio = io.StringIO()
         import csv as _csv
 
-        fieldnames = list(req.results[0].keys())
-        writer = _csv.DictWriter(sio, fieldnames=fieldnames)
+        fieldnames = list(rows[0].keys())
+        writer = _csv.DictWriter(sio, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(req.results)
+        writer.writerows(rows)
         buf = io.BytesIO(sio.getvalue().encode("utf-8-sig"))
         fname = f"hts_301_结果_{ts}.csv"
         media = "text/csv; charset=utf-8"

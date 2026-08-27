@@ -25,13 +25,34 @@ ORIGIN_CN = "CN"
 ORIGIN_VN = "VN"
 
 
+# 配置缓存：(mtime, size) 作为失效键。批量查询会对每条编码调用 load_measures_config()，
+# 无缓存时 1000 条编码 = 1000 次读盘 + JSON 解析。文件被改写（含 Web 端保存）后
+# mtime/size 变化即自动失效，仍保持"改动配置立即生效、无需重启"。
+_measures_cache = None       # (key, cfg)
+
+
+def _measures_stat_key():
+    """配置文件的失效键；文件不存在时为 None"""
+    try:
+        st = os.stat(MEASURES_CONFIG)
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
 def load_measures_config():
     """
     读取加征措施开关配置（measures_config.json）。缺省或配置缺失某项 → 全部启用。
+    结果按文件 mtime/size 缓存，配置改动后立即失效重读。
     返回 {'cn301': bool, 'flip301': bool}
     """
+    global _measures_cache
+    key = _measures_stat_key()
+    if _measures_cache is not None and _measures_cache[0] == key:
+        return dict(_measures_cache[1])
+
     cfg = dict(DEFAULT_MEASURES)
-    if os.path.exists(MEASURES_CONFIG):
+    if key is not None:
         try:
             with open(MEASURES_CONFIG, encoding="utf-8") as f:
                 data = json.load(f)
@@ -41,7 +62,14 @@ def load_measures_config():
                     cfg[k] = bool(m[k])
         except (json.JSONDecodeError, OSError):
             pass
+    _measures_cache = (key, dict(cfg))
     return cfg
+
+
+def _clear_measures_cache():
+    """测试用：清空配置缓存（避免同一测试内多次改写文件时 mtime 精度不足导致命中旧值）"""
+    global _measures_cache
+    _measures_cache = None
 
 
 def save_measures_config(updates):
@@ -57,6 +85,7 @@ def save_measures_config(updates):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump({"measures": cfg}, f, ensure_ascii=False, indent=2)
     os.replace(tmp, MEASURES_CONFIG)
+    _clear_measures_cache()  # 写入后立即失效，不依赖 mtime 精度
     return cfg
 
 
@@ -185,6 +214,11 @@ def flip301_judge(db, origin_code, code8=""):
             "范围限制": scope or "无",
         }
 
+    # ⓪ 数据源可用性先于任何判定：缺税率表时无法确定该经济体是否在 60 名单内，
+    #    此时若因命中 ANNEX II 而返回"豁免"，等于把"缺数据"说成"不加征"——必须显式标注未覆盖。
+    if not f:
+        return "", "数据未覆盖（缺 FLIP 301 数据源）", _src("", "", "")
+
     # ① ANNEX II 豁免清单判定（逐编码）：通用 Part A / 经济体专属 / CAFTA-DR（仅 JO/SV/GT）
     if code8:
         universal = ex.get("universal") or []
@@ -208,8 +242,6 @@ def flip301_judge(db, origin_code, code8=""):
             page_txt = f"（FRN 物理页 {page}）" if page else ""
             return "豁免", f"ANNEX II Part O（CAFTA-DR 纺织品），不适用 FLIP 301{page_txt}", _src(
                 page, "ANNEX II Part O（CAFTA-DR 免税纺织品）", "")
-    if not f:
-        return "", "数据未覆盖（缺 FLIP 301 数据源）", _src("", "", "")
     if o in rates.get("10", []):
         return "+10%", f"FLIP 301 强迫劳动关税 10%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）", _src(
             "", "FRN 税率表（10% 档）", "")
@@ -370,16 +402,31 @@ def query_one(db, code, origin="CN"):
 
 
 def batch_query(db, codes, origin="CN"):
-    """批量判定，返回 (结果列表, 统计字典)"""
+    """
+    批量判定，返回 (结果列表, 统计字典)。
+
+    统计口径（"命中 301 清单但税率为 0"与"根本不在清单上"是两回事，分开计数）：
+      - hit             命中清单且实际加征（301判定 == '是'）
+      - hit_exempt      命中清单但对应子目为豁免/排除 0%（'是(豁免/0%)'）
+      - miss            未命中 301 清单（'否'）
+      - undetermined    信息不足无法判定（如仅给到 6 位品目）
+      - not_applicable  非中国原产，不适用中国 301
+    hit + hit_exempt + miss + undetermined + not_applicable == total
+    """
     results = [query_one(db, c, origin=origin) for c in codes]
-    hit = sum(1 for r in results if r["301判定"] == "是")
-    vn = sum(1 for r in results if "不适用" in str(r["301判定"]))
+    counts = {"hit": 0, "hit_exempt": 0, "miss": 0, "undetermined": 0, "not_applicable": 0}
+    for r in results:
+        j = str(r["301判定"])
+        if j == "是":
+            counts["hit"] += 1
+        elif j.startswith("是"):          # 是(豁免/0%)
+            counts["hit_exempt"] += 1
+        elif "不适用" in j:
+            counts["not_applicable"] += 1
+        elif "无法判定" in j:
+            counts["undetermined"] += 1
+        else:                             # 否
+            counts["miss"] += 1
     o = (origin or "CN").strip().upper()
     origin_txt = "中国" if o in (ORIGIN_CN, "") else ("越南" if o == ORIGIN_VN else "其他国家")
-    stats = {
-        "total": len(results),
-        "hit": hit,
-        "miss": len(results) - hit - vn,
-        "origin": origin_txt,
-    }
-    return results, stats
+    return results, {"total": len(results), "origin": origin_txt, **counts}

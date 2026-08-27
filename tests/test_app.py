@@ -410,5 +410,46 @@ class TestSourceAPI(unittest.TestCase):
         self.assertIn("FLIP 301", flip["文件"])
 
 
+class TestExportInjection(unittest.TestCase):
+    """导出防公式注入：Excel/Sheets 会执行以 = + - @ 开头的单元格"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(app_mod.app)
+
+    def test_defuse_helper(self):
+        for danger in ("=1+1", "+1", "-1", "@SUM(A1)", "\tcmd", "\rcmd"):
+            self.assertTrue(app_mod._defuse(danger).startswith("'"))
+        # 正常值不受影响（含负数数值、普通文本）
+        self.assertEqual(app_mod._defuse("8507.60.00"), "8507.60.00")
+        self.assertEqual(app_mod._defuse("+25%"), "'+25%")  # 加征文本也会被中和，属预期
+        self.assertEqual(app_mod._defuse(25.0), 25.0)
+        self.assertIsNone(app_mod._defuse(None))
+
+    def test_csv_export_defuses_formula(self):
+        payload = {"results": [{"输入编码": "=cmd|'/c calc'!A1", "备注": "ok"}], "fmt": "csv"}
+        r = self.client.post("/api/export", json=payload)
+        self.assertEqual(r.status_code, 200)
+        body = r.content.decode("utf-8-sig")
+        self.assertIn("'=cmd", body)
+        # 不得存在未被中和的行首公式
+        for line in body.splitlines()[1:]:
+            self.assertFalse(line.startswith("="))
+
+    def test_xlsx_export_defuses_formula(self):
+        payload = {"results": [{"输入编码": "=1+1"}], "fmt": "xlsx"}
+        r = self.client.post("/api/export", json=payload)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(len(r.content) > 0)
+
+    def test_export_rejects_non_dict_rows(self):
+        r = self.client.post("/api/export", json={"results": ["not-a-dict"], "fmt": "csv"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_export_empty_rejected(self):
+        r = self.client.post("/api/export", json={"results": [], "fmt": "csv"})
+        self.assertEqual(r.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

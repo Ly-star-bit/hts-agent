@@ -344,5 +344,95 @@ class TestChinaRegression(unittest.TestCase):
         self.assertEqual(r["9903子目"], "9903.88.15")
 
 
+class TestFlip301DataAvailability(unittest.TestCase):
+    """缺 FLIP 301 数据源时必须显式标注未覆盖，不能因命中 ANNEX II 而误报"豁免" """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_missing_rates_reports_uncovered_not_exempt(self):
+        # 8507.60.00 在 ANNEX II Part A 通用豁免清单内；抽掉税率表后，
+        # 无法确定该经济体是否在 60 名单，应报"数据未覆盖"而非"豁免"
+        db = dict(self.db)
+        db["flip301"] = {}
+        pct, note, _src = core.flip301_judge(db, "CN", code8="85076000")
+        self.assertEqual(pct, "")
+        self.assertIn("数据未覆盖", note)
+        self.assertNotIn("豁免", pct)
+
+    def test_rates_present_still_exempt(self):
+        # 数据齐全时豁免判定不受影响（回归）
+        pct, note, _src = core.flip301_judge(self.db, "CN", code8="85076000")
+        self.assertEqual(pct, "豁免")
+        self.assertIn("ANNEX II", note)
+
+
+class TestBatchStats(unittest.TestCase):
+    """统计口径：命中加征 / 命中但豁免 0% / 未命中 / 无法判定 / 不适用 分开计数"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_categories_sum_to_total(self):
+        codes = ["85076000", "01012100", "85414300", "090111"]
+        _results, stats = core.batch_query(self.db, codes, origin="CN")
+        parts = ("hit", "hit_exempt", "miss", "undetermined", "not_applicable")
+        for k in parts:
+            self.assertIn(k, stats)
+        self.assertEqual(sum(stats[k] for k in parts), stats["total"])
+
+    def test_exempt_not_counted_as_miss(self):
+        # 构造一个"命中清单但 0% 豁免"的结果，确认它既不算 hit 也不算 miss
+        results, stats = core.batch_query(self.db, ["85076000"], origin="CN")
+        judged = results[0]["301判定"]
+        if judged == "是(豁免/0%)":
+            self.assertEqual(stats["hit_exempt"], 1)
+            self.assertEqual(stats["miss"], 0)
+            self.assertEqual(stats["hit"], 0)
+        else:  # 该编码当前为实际加征
+            self.assertEqual(stats["hit"], 1)
+            self.assertEqual(stats["hit_exempt"], 0)
+
+    def test_non_china_counted_as_not_applicable(self):
+        _results, stats = core.batch_query(self.db, ["85076000", "01012100"], origin="VN")
+        self.assertEqual(stats["not_applicable"], 2)
+        self.assertEqual(stats["miss"], 0)
+        self.assertEqual(stats["origin"], "越南")
+
+
+class TestMeasuresConfigCache(unittest.TestCase):
+    """配置缓存：命中缓存不重复读盘，但文件改动后立即失效"""
+
+    def setUp(self):
+        core._clear_measures_cache()
+
+    def tearDown(self):
+        core._clear_measures_cache()
+
+    def test_cache_hit_avoids_reread(self):
+        first = core.load_measures_config()
+        self.assertIsNotNone(core._measures_cache)
+        second = core.load_measures_config()
+        self.assertEqual(first, second)
+
+    def test_returned_dict_is_isolated(self):
+        # 调用方修改返回值不得污染缓存
+        cfg = core.load_measures_config()
+        cfg["cn301"] = not cfg["cn301"]
+        self.assertNotEqual(cfg["cn301"], core.load_measures_config()["cn301"])
+
+    def test_save_invalidates_cache(self):
+        original = core.load_measures_config()
+        try:
+            core.save_measures_config({"cn301": not original["cn301"]})
+            self.assertEqual(
+                core.load_measures_config()["cn301"], not original["cn301"])
+        finally:
+            core.save_measures_config(original)
+        self.assertEqual(core.load_measures_config(), original)
+
+
 if __name__ == "__main__":
     unittest.main()
