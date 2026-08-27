@@ -8,8 +8,8 @@
   // 主题初始化必须在首次绘制前同步执行，否则会先闪一帧默认主题再切过去。
   // 因此这段刻意放在 <head> 里、且不等 DOMContentLoaded。
   (function () {
-    var valid = { modern: 1, scifi: 1 }, t = null;
-    // ?theme=scifi 优先于本地记忆，便于分享指定主题的链接 / 演示
+    var valid = { modern: 1, wukong: 1 }, t = null;
+    // ?theme=wukong 优先于本地记忆，便于分享指定主题的链接 / 演示
     var q = /[?&]theme=([^&]*)/.exec(location.search);
     if (q && valid[q[1]]) { t = q[1]; }
     if (!t) { try { t = localStorage.getItem('hts_theme'); } catch (e) { /* 隐私模式禁用 storage */ } }
@@ -22,7 +22,7 @@
      所有颜色 / 阴影 / 字体一律走 token，页面样式不出现硬编码色值。
      加新主题 = 增加一个 [data-theme="xxx"] 变量块，不需要动下面任何规则。
        modern —— 浅色现代（默认）
-       scifi  —— 青蓝 HUD 深色，霓虹只用于边框/标题/高亮，正文保持高对比度
+       wukong —— 黑神话：墨黑 + 鎏金 + 朱砂，宋体标题，回纹与印章装饰
      ========================================================================== */
   :root, [data-theme="modern"] {
     --primary: #1a56db;
@@ -65,7 +65,7 @@
     --hl-bg: #fef3c7;
     --dropzone-hover-bg: #f5f8ff;
 
-    /* 科幻主题专用效果，在现代主题下全部置空（同一套规则两种表现） */
+    /* 深色主题专用效果，在现代主题下全部置空（同一套规则两种表现） */
     --glow: none;
     --glow-primary: none;
     --glow-text: none;
@@ -73,67 +73,87 @@
     --title-color: var(--text);
     --font-ui: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
     --font-mono: Consolas, "SF Mono", Menlo, monospace;
+    --font-display: var(--font-ui);   /* 标题字，国风主题下换宋体 */
+    --bg-size: auto;
     --tab-active-shadow: none;
+    /* 装饰层：仅国风主题启用，其余主题置空后规则自然失效 */
+    --ornament: none;
+    --ornament-color: transparent;
+    --rule-image: none;
   }
 
-  [data-theme="scifi"] {
-    --primary: #22d3ee;
-    --primary-dark: #67e8f9;
-    --primary-bg: rgba(34,211,238,.12);
-    --on-primary: #04121c;          /* 青色底上用深色字，对比度远高于白字 */
-    --bg: #070d1a;
+
+  /* 黑神话：暗黑国风 —— 墨黑 + 鎏金 + 朱砂，宋体标题，回纹与印章装饰 */
+  [data-theme="wukong"] {
+    --primary: #d8a63f;             /* 鎏金 */
+    --primary-dark: #f0cd7a;
+    --primary-bg: rgba(216,166,63,.12);
+    --on-primary: #120d06;          /* 金底配墨字 */
+    --bg: #0a0806;
+    /* 水墨晕染：几层暖色径向渐变叠出宣纸/墨迹的不匀感 */
     --bg-image:
-      linear-gradient(rgba(34,211,238,.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(34,211,238,.035) 1px, transparent 1px);
-    --card: #0d1628;
-    --surface: #0d1628;
-    --surface-2: #111f38;
-    --border: #1e3a5f;
-    --border-strong: #2b5588;
-    --text: #dbeafe;
-    --muted: #8bacd0;               /* 对 #0d1628 对比度 ≈ 7:1，正文可长时间阅读 */
-    --hover: #172b4a;
+      radial-gradient(ellipse 900px 460px at 18% 6%, rgba(150,110,45,.10), transparent 62%),
+      radial-gradient(ellipse 700px 560px at 88% 66%, rgba(110,70,32,.11), transparent 62%),
+      radial-gradient(ellipse 620px 340px at 46% 104%, rgba(170,120,50,.07), transparent 60%);
+    --bg-size: auto;
+    --card: #15100a;
+    --surface: #15100a;
+    --surface-2: #1e1710;
+    --border: #3d2f1c;              /* 暗青铜 */
+    --border-strong: #7a5f2c;
+    --text: #ece0c6;                /* 陈纸色 */
+    --muted: #a89574;               /* 对 #15100a 对比度 ≈ 7:1 */
+    --hover: #241c12;
 
-    --hit: #ff4d6d;
-    --hit-bg: rgba(255,77,109,.10);
-    --hit-bg-strong: rgba(255,77,109,.18);
-    --hit-border: rgba(255,77,109,.45);
-    --miss: #34f5c5;
-    --miss-dark: #5efad4;
-    --miss-bg: rgba(52,245,197,.10);
-    --miss-border: rgba(52,245,197,.38);
-    --warn: #fbbf24;
-    --warn-bg: rgba(251,191,36,.12);
-    --warn-border: rgba(251,191,36,.40);
-    --gray: #8bacd0;
-    --gray-bg: #111f38;
+    --hit: #e2503f;                 /* 朱砂 */
+    --hit-bg: rgba(226,80,63,.11);
+    --hit-bg-strong: rgba(226,80,63,.19);
+    --hit-border: rgba(226,80,63,.45);
+    --miss: #79b493;                /* 青瓷 */
+    --miss-dark: #93c9a8;
+    --miss-bg: rgba(121,180,147,.10);
+    --miss-border: rgba(121,180,147,.36);
+    --warn: #d9a441;
+    --warn-bg: rgba(217,164,65,.12);
+    --warn-border: rgba(217,164,65,.40);
+    --gray: #a89574;
+    --gray-bg: #1e1710;
 
-    --focus-ring: 0 0 0 3px rgba(34,211,238,.22);
-    --shadow-card: 0 0 0 1px rgba(34,211,238,.07), 0 2px 16px rgba(0,0,0,.55);
-    --shadow-pop: 0 0 0 1px rgba(34,211,238,.25), 0 6px 24px rgba(0,0,0,.7);
-    --shadow-modal: 0 0 0 1px rgba(34,211,238,.22), 0 16px 48px rgba(0,0,0,.8);
-    --overlay: rgba(2,6,16,.78);
-    --tooltip-bg: #0d1628;
-    --tooltip-text: #dbeafe;
-    --code-bg: #0a1424;
-    --hl-bg: rgba(251,191,36,.22);
-    --dropzone-hover-bg: rgba(34,211,238,.07);
+    --focus-ring: 0 0 0 3px rgba(216,166,63,.22);
+    --shadow-card: 0 0 0 1px rgba(216,166,63,.10), 0 3px 20px rgba(0,0,0,.6);
+    --shadow-pop: 0 0 0 1px rgba(216,166,63,.28), 0 6px 26px rgba(0,0,0,.75);
+    --shadow-modal: 0 0 0 1px rgba(216,166,63,.26), 0 18px 52px rgba(0,0,0,.85);
+    --overlay: rgba(8,5,3,.80);
+    --tooltip-bg: #15100a;
+    --tooltip-text: #ece0c6;
+    --code-bg: #0f0b07;
+    --hl-bg: rgba(217,164,65,.20);
+    --dropzone-hover-bg: rgba(216,166,63,.07);
 
-    --glow: 0 0 10px rgba(34,211,238,.22);
-    --glow-primary: 0 0 14px rgba(34,211,238,.45);
-    --glow-text: 0 0 12px rgba(34,211,238,.55);
-    --title-gradient: linear-gradient(92deg, #67e8f9, #22d3ee 45%, #34f5c5);
+    --glow: 0 0 10px rgba(216,166,63,.16);
+    --glow-primary: 0 0 14px rgba(216,166,63,.38);
+    --glow-text: 0 0 14px rgba(216,166,63,.45);
+    --title-gradient: linear-gradient(96deg, #8a6a24, #f3d68a 28%, #d8a63f 52%, #f7e2a6 72%, #9a7529);
     --title-color: transparent;
-    --font-ui: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-ui: "PingFang SC", "Microsoft YaHei", sans-serif;
     --font-mono: "SF Mono", Consolas, Menlo, monospace;
-    --tab-active-shadow: 0 -2px 14px rgba(34,211,238,.28);
+    /* 标题用宋体取笔锋；正文仍用黑体，宋体小字在屏幕上发虚 */
+    --font-display: "Songti SC", "STSong", "SimSun", "Source Han Serif SC", serif;
+    --tab-active-shadow: 0 -2px 16px rgba(216,166,63,.30);
+    --ornament: block;
+    --ornament-color: rgba(216,166,63,.55);
+    /* 回纹：两道金线夹一道断续纹，作标题分隔与卡片顶饰 */
+    --rule-image: repeating-linear-gradient(90deg,
+      rgba(216,166,63,.85) 0 10px, transparent 10px 14px,
+      rgba(216,166,63,.85) 14px 16px, transparent 16px 26px);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: var(--font-ui);
     background-color: var(--bg);
     background-image: var(--bg-image);
-    background-size: 44px 44px;      /* 仅科幻主题可见：淡网格底 */
+    background-size: var(--bg-size);   /* 国风=水墨晕染，现代=无 */
+    background-attachment: fixed;
     color: var(--text);
     line-height: 1.6;
   }
@@ -143,6 +163,7 @@
   header { text-align: center; padding: 28px 0 8px; position: relative; }
   header h1 {
     font-size: 26px; font-weight: 700;
+    font-family: var(--font-display);
     background-image: var(--title-gradient);
     -webkit-background-clip: text; background-clip: text;
     color: var(--title-color);
@@ -490,6 +511,76 @@
   }
   .src-file-item .f-open:hover { border-color: var(--primary); color: var(--primary); }
 
+  /* ==========================================================================
+     黑神话主题的形态装饰
+     只换配色不换形态就只是"深色版"，真正的观感差异来自这里：
+     宋体标题、回纹分隔、卡片金角、印章徽标、青铜表头。
+     全部 scoped 在 [data-theme="wukong"] 下，另两套主题不受影响。
+     ========================================================================== */
+
+  /* 标题下的回纹分隔（--ornament 在其余主题为 none，规则自然失效） */
+  header::after {
+    content: ""; display: var(--ornament);
+    height: 3px; max-width: 420px; margin: 14px auto 2px;
+    background-image: var(--rule-image);
+  }
+
+  /* 卡片对角金角：两个伪元素各画一角，比四角克制 */
+  [data-theme="wukong"] .card { position: relative; }
+  [data-theme="wukong"] .card::before,
+  [data-theme="wukong"] .card::after {
+    content: ""; position: absolute; width: 18px; height: 18px;
+    border-style: solid; border-color: var(--ornament-color);
+    pointer-events: none;
+  }
+  [data-theme="wukong"] .card::before { top: 7px; left: 7px; border-width: 2px 0 0 2px; }
+  [data-theme="wukong"] .card::after { bottom: 7px; right: 7px; border-width: 0 2px 2px 0; }
+
+  /* 徽标做成朱砂印章 */
+  [data-theme="wukong"] header h1 .badge {
+    font-family: var(--font-display); font-weight: 700; letter-spacing: 1px;
+    background: rgba(226,80,63,.16);
+    border: 1px solid rgba(216,166,63,.55);
+    border-radius: 3px;
+    color: #f0a894; -webkit-text-fill-color: #f0a894;
+  }
+
+  /* 宋体：只用在标题与表头这类大字上，正文小字用宋体在屏幕上会发虚 */
+  [data-theme="wukong"] .card h2,
+  [data-theme="wukong"] .tab,
+  [data-theme="wukong"] thead th,
+  [data-theme="wukong"] .modal-head,
+  [data-theme="wukong"] .change-card .change-title {
+    font-family: var(--font-display); letter-spacing: .5px;
+  }
+  [data-theme="wukong"] thead th { font-weight: 700; }
+
+  /* 步骤序号做成描金圆章 */
+  [data-theme="wukong"] .card h2 .step {
+    background: linear-gradient(150deg, #f3d68a, #d8a63f 55%, #9a7529);
+    font-family: var(--font-display); font-weight: 700;
+  }
+
+  /* 表格外框做成"框中框" */
+  [data-theme="wukong"] .table-wrap {
+    border-color: var(--border-strong);
+    box-shadow: inset 0 0 0 1px rgba(216,166,63,.14), var(--glow);
+  }
+
+  /* 选中态的金色描边 */
+  [data-theme="wukong"] .tab.active { border-color: var(--border-strong); }
+  [data-theme="wukong"] .filter-btn.active,
+  [data-theme="wukong"] .theme-switch button.active {
+    background: linear-gradient(150deg, #f3d68a, #d8a63f 55%, #b98a30);
+  }
+  [data-theme="wukong"] .btn-primary {
+    background: linear-gradient(150deg, #f3d68a, #d8a63f 55%, #b98a30);
+    font-family: var(--font-display); font-weight: 700; letter-spacing: 1px;
+  }
+  [data-theme="wukong"] .btn-primary:hover {
+    background: linear-gradient(150deg, #f7e2a6, #e8b64c 55%, #c99a38);
+  }
+
   @media (max-width: 640px) {
     header h1 { font-size: 20px; }
     .actions button { flex: 1; }
@@ -506,7 +597,7 @@
   <header>
     <div class="theme-switch" role="group" aria-label="界面主题">
       <button type="button" data-theme-btn="modern" onclick="setTheme('modern')">现代</button>
-      <button type="button" data-theme-btn="scifi" onclick="setTheme('scifi')">科幻</button>
+      <button type="button" data-theme-btn="wukong" onclick="setTheme('wukong')">黑神话</button>
     </div>
     <h1>HTS 关税智能查询工具 <span class="badge">美国对华 Section 301</span></h1>
     <p>编码查询 · 税率搜索 · 成本估算 · AI 归类助手</p>
@@ -780,8 +871,9 @@ let currentEstRows = [];
 /* ================= 主题切换 =================
    实际生效的是 <html data-theme>，由 <head> 里的内联脚本在首绘前设好；
    这里只负责响应点击、写回 localStorage、同步按钮选中态。 */
+const THEMES = ['modern', 'wukong'];
 function setTheme(name) {
-  if (name !== 'modern' && name !== 'scifi') name = 'modern';
+  if (!THEMES.includes(name)) name = 'modern';
   document.documentElement.dataset.theme = name;
   try { localStorage.setItem('hts_theme', name); } catch (e) { /* 隐私模式下不持久化，不影响本次切换 */ }
   syncThemeButtons();
