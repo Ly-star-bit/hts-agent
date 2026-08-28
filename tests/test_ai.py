@@ -104,12 +104,22 @@ class TestAskQuestion(unittest.TestCase):
         self.assertEqual(r["type"], "codes")
         self.assertEqual(r["results"][0]["8位子目"], "8507.60.00")
 
-    def test_faq(self):
+    def test_faq_refused_not_answered(self):
+        """
+        政策类咨询不再由模型自由作答。
+
+        原实现把问题直接丢给 LLM、不碰任何本地数据，与本项目"税率、判定条件、
+        证据一律来自官方税则原文，AI 只负责在候选中挑选"的原则相悖——报关场景里
+        用户分不出哪句有依据、哪句是模型编的，一段听起来专业的错误答复比一句
+        "答不了"危险得多。
+        """
         _install_fake([json.dumps({"type": "faq", "question": "什么是301关税"}),
                        "301 是美国对华加征关税。"])
         r = ai.ask_tax_question(self.db, "什么是301关税")
-        self.assertEqual(r["type"], "faq")
-        self.assertIn("301", r["answer"])
+        self.assertNotIn("type", r)
+        self.assertNotIn("answer", r, "不得返回模型自由生成的答复")
+        self.assertIn("error", r)
+        self.assertIn("无法为政策解释提供依据", r["error"])
 
     def test_no_provider(self):
         ai.reset_provider_cache()

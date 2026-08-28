@@ -441,25 +441,13 @@
   .ai-pick-sub ul { margin: 4px 0 0; padding-left: 20px; line-height: 1.6; }
   .ai-pick-sub.warn { color: var(--warn); }
 
-  /* AI 聊天 */
-  .chat-box {
-    border: 1px solid var(--border); border-radius: 10px;
-    min-height: 300px; max-height: 460px; overflow-y: auto;
-    padding: 16px; background: var(--gray-bg); display: flex; flex-direction: column; gap: 12px;
-  }
-  .msg { max-width: 86%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.7; }
-  .msg.user { align-self: flex-end; background: var(--primary); color: var(--on-primary); box-shadow: var(--glow-primary); }
-  .msg.ai { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); color: var(--text); }
-  .msg.ai .md-body { white-space: pre-wrap; word-break: break-word; }
-  .msg.ai .md-body h4 { margin: 8px 0 4px; font-size: 14px; }
-  .msg.ai .md-body ul, .msg.ai .md-body ol { padding-left: 20px; }
-  .msg.ai .md-body b { color: var(--primary-dark); }
-  .msg.ai .md-body pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; overflow-x: auto; font-size: 12px; font-family: var(--font-mono); }
-  .msg.error { align-self: flex-start; background: var(--hit-bg); color: var(--hit); border: 1px solid var(--hit-border); }
-  .msg.system { align-self: center; background: transparent; color: var(--muted); font-size: 12px; }
-  .chat-input-row { display: flex; gap: 10px; margin-top: 12px; }
-  .chat-input-row textarea { min-height: 70px; flex: 1; }
-  .chat-input-row .chat-side { display: flex; flex-direction: column; gap: 8px; }
+  /* AI 生成的 Markdown 文本（清单归类的汇总报告）。
+     原先限定在 .msg.ai 下，聊天界面移除后需解除限定。 */
+  .md-body { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.7; }
+  .md-body h4 { margin: 8px 0 4px; font-size: 14px; }
+  .md-body ul, .md-body ol { padding-left: 20px; }
+  .md-body b { color: var(--primary-dark); }
+  .md-body pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; overflow-x: auto; font-size: 12px; font-family: var(--font-mono); }
 
   /* AI 结果卡片（归类推荐） */
   .ai-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 12px; }
@@ -669,7 +657,7 @@
     <button class="tab active" data-tab="query" onclick="switchTab('query')">编码查询</button>
     <button class="tab" data-tab="search" onclick="switchTab('search')">搜索与归类</button>
     <button class="tab" data-tab="estimate" onclick="switchTab('estimate')">成本估算</button>
-    <button class="tab" data-tab="ai" onclick="switchTab('ai')">AI 助手</button>
+    <button class="tab" data-tab="ai" onclick="switchTab('ai')">清单归类</button>
     <button class="tab" data-tab="changes" onclick="switchTab('changes')">数据变动</button>
   </nav>
 
@@ -877,7 +865,7 @@
   <!-- ============ Tab 4：AI 助手 ============ -->
   <div class="tab-panel" id="tab-ai">
     <div class="card">
-      <h2><span class="step">AI</span> 智能助手
+      <h2><span class="step">1</span> 商品清单批量归类
         <span id="aiStatus" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
         <button class="btn-ghost" style="margin-left:auto;padding:5px 14px;font-size:12px;" onclick="toggleAiConfig()">⚙ AI 服务配置</button>
       </h2>
@@ -900,20 +888,51 @@
         </div>
         <div id="cfgMsg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
       </div>
-      <p class="hint">支持：①自然语言问税（"锂电池出口美国要交多少税？"）②商品清单批量分析（每行一个品名）。
-        <b>单个商品定编码请用「税率搜索与归类」页</b> —— 那里能看到完整候选表、并列对比判定条件，
-        比这里的对话形式更适合论证归类。AI 结果仅供参考，正式报关请人工复核。</p>
-      <div class="chat-box" id="chatBox">
-        <div class="msg system">你好！我是 HTS 关税助手。可以问我税率、帮我归类商品，或上传清单做批量分析。</div>
+      <p class="hint">客户发来一张只有中文品名的清单时用这里：每行一个品名，AI 逐行归类，
+        税率与 301 判定仍由本地税则库计算。<b>清单里已经有 HTS 编码的，用「编码查询」页</b>（不需要 AI，
+        还能追溯到官方数据行号）；<b>单个商品要定编码、要论证，用「搜索与归类」页</b>（有完整候选表、
+        分歧点对照、待确认属性）。AI 归类结果仅供参考，正式报关须人工复核。</p>
+      <div id="listAiWarn"></div>
+      <textarea id="listInput" style="min-height:150px;"
+        placeholder="每行一个商品品名，最多 30 行：&#10;便携式蓝牙音箱&#10;陶瓷马克杯&#10;PU 涂层梭织连帽夹克&#10;不锈钢保温杯"></textarea>
+      <div class="inline-form" style="margin-top:12px;">
+        <span class="label">原产地：</span>
+        <select id="listOrigin" class="narrow">
+          <option value="CN">中国（含 301）</option>
+          <option value="VN">越南（MFN，无 301）</option>
+          <option value="OTHER">其他国家（MFN，无 301）</option>
+        </select>
+        <button class="btn-primary" id="btnAnalyzeList" onclick="doAnalyzeList()">开始批量归类</button>
+        <span class="hint" style="margin:0;">每行都要 AI 归类 + 本地查税，30 行约需十几秒</span>
       </div>
-      <div class="chat-input-row">
-        <textarea id="chatInput" placeholder="输入问题，如：帮我查一下锂电池的关税 / 归类：陶瓷马克杯"></textarea>
-        <div class="chat-side">
-          <button class="btn-primary" onclick="doChat()">发送</button>
-          <button class="btn-ghost" onclick="analyzeListMode()">清单分析</button>
-        </div>
+      <div class="error-bar" id="listError"></div>
+    </div>
+
+    <div class="card" id="listResultCard" style="display:none;">
+      <h2><span class="step">2</span> 归类结果
+        <span id="listResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
+      </h2>
+      <div id="listNotes"></div>
+      <div class="table-wrap">
+        <table>
+          <colgroup>
+            <col style="width:4%"><col style="width:16%"><col style="width:11%"><col style="width:19%">
+            <col style="width:9%"><col style="width:7%"><col style="width:8%"><col style="width:9%"><col style="width:17%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th><th>品名</th><th>编码</th><th>商品描述</th>
+              <th>一般税率</th><th>301</th><th>301加征</th><th>总税负</th><th>依据 / 备注</th>
+            </tr>
+          </thead>
+          <tbody id="listBody"></tbody>
+        </table>
       </div>
-      <div class="error-bar" id="chatError"></div>
+      <div class="actions">
+        <button class="btn-export" id="btnListExport" onclick="exportGeneric('list')">导出 CSV</button>
+        <span class="hint" style="margin:0;">置信度低或带「降级」备注的行，务必人工复核</span>
+      </div>
+      <div id="listReport"></div>
     </div>
   </div>
 
@@ -1008,6 +1027,20 @@ refreshAiStatus();
 function syncSearchAiButton() {
   const btn = document.getElementById('btnSearchAi');
   if (btn) btn.style.display = aiEnabled ? 'inline-flex' : 'none';
+  // 「清单归类」整页依赖 AI（品名→编码没有本地兜底），未配置时按钮点了必然报错，
+  // 不如直接禁用并说清楚要去哪配
+  const lb = document.getElementById('btnAnalyzeList');
+  if (lb) {
+    lb.disabled = !aiEnabled;
+    lb.title = aiEnabled ? '' : '需要先配置 AI 服务';
+  }
+  const warn = document.getElementById('listAiWarn');
+  if (warn) {
+    warn.innerHTML = aiEnabled ? '' :
+      `<div class="error-bar show">本页需要 AI 服务才能把中文品名转成 HTS 编码，
+        本地税则库没有中文品名索引，无法兜底。请点右上角「⚙ AI 服务配置」设置后重试。
+        <br>清单里若已有 HTS 编码，改用「编码查询」页——那条路不需要 AI。</div>`;
+  }
 }
 
 /* ---------- 加征措施开关（Web 端配置） ---------- */
@@ -2053,9 +2086,10 @@ function renderEstimate(data) {
 
 /* ================= 通用导出（搜索/估算） ================= */
 async function exportGeneric(kind) {
-  const rows = kind === 'search' ? currentSearchRows : currentEstRows;
+  const rows = { search: currentSearchRows, est: currentEstRows, list: currentListRows }[kind];
   if (!rows || !rows.length) return;
-  const btn = document.getElementById(kind === 'search' ? 'btnSearchExport' : 'btnEstExport');
+  const btn = document.getElementById(
+    { search: 'btnSearchExport', est: 'btnEstExport', list: 'btnListExport' }[kind]);
   btn.disabled = true;
   try {
     const resp = await fetch('/api/export', {
@@ -2080,151 +2114,109 @@ async function exportGeneric(kind) {
   }
 }
 
-/* ================= AI 助手 ================= */
-function chatMsg(text, cls, md) {
-  const box = document.getElementById('chatBox');
-  const div = document.createElement('div');
-  div.className = 'msg ' + cls;
-  if (md) {
-    const inner = document.createElement('div');
-    inner.className = 'md-body';
-    inner.innerHTML = renderMD(text);
-    div.appendChild(inner);
-  } else {
-    div.textContent = text;
-  }
-  box.appendChild(div);
-  box.scrollTop = box.scrollHeight;
-  return div;
-}
+/* ================= 清单批量归类 =================
+   这个页面原本是对话式「AI 助手」，功能与其他页高度重叠：问编码不如「编码查询」
+   （那边有来源追溯、导出、未采用提示），问商品不如「搜索与归类」（那边有候选表、
+   分歧点、待确认属性、税负反转）。还有一条"一般咨询"分支是纯 LLM 自由回答、
+   零本地校验——与本项目"税率与判定条件一律来自官方原文、AI 只负责选"的原则相悖，
+   在报关场景里用户分不出哪句有依据哪句是模型编的，故整条移除。
+   真正独有的只有这一件：客户发来一张只有中文品名的清单，逐行出编码。 */
 
-async function doChat() {
-  const input = document.getElementById('chatInput');
-  const q = input.value.trim();
-  const err = document.getElementById('chatError');
+let currentListRows = [];
+
+async function doAnalyzeList() {
+  const btn = document.getElementById('btnAnalyzeList');
+  const err = document.getElementById('listError');
   err.classList.remove('show');
-  if (!q) return;
-  input.value = '';
-  chatMsg(q, 'user');
-  const wait = chatMsg('思考中...', 'system');
+  const names = (document.getElementById('listInput').value || '')
+    .split(/\n+/).map(s => s.trim()).filter(Boolean);
+  if (!names.length) {
+    err.textContent = '请粘贴商品品名，每行一个';
+    err.classList.add('show');
+    return;
+  }
+  if (names.length > 30) {
+    err.textContent = `单次最多 30 行（当前 ${names.length} 行），请分批`;
+    err.classList.add('show');
+    return;
+  }
+  btn.classList.add('loading');
+  btn.disabled = true;
   try {
-    const data = await apiPost('/api/ai/ask', { question: q });
-    wait.remove();
-    if (data.error) { chatMsg(data.error, 'error'); return; }
-    if (data.type === 'codes') {
-      chatMsg('已识别编码：' + data.codes.join(', ') + '（本地查询结果）', 'ai', true);
-      renderChatTable(data.results);
-      if (data.interpretation) chatMsg(data.interpretation, 'ai', true);
-      if (data.error && !data.interpretation) chatMsg(data.error, 'error');
-    } else if (data.type === 'classify') {
-      if (data.error) { chatMsg(data.error, 'error'); return; }
-      chatMsg('为你找到以下候选归类（置信度排序）：', 'ai', true);
-      renderClassifyCards(data);
-      chatMsg(data.disclaimer || '', 'system');
-    } else if (data.type === 'faq') {
-      chatMsg(data.answer, 'ai', true);
-    } else {
-      chatMsg(JSON.stringify(data), 'ai');
-    }
+    const data = await apiPost('/api/ai/analyze', {
+      items: names.map(name => ({ name })),
+      origin: document.getElementById('listOrigin').value
+    });
+    currentListRows = data.details || [];
+    renderList(data);
   } catch (e) {
-    wait.remove();
-    chatMsg('调用失败：' + e.message, 'error');
+    err.textContent = '批量归类失败：' + e.message;
+    err.classList.add('show');
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
   }
 }
 
-// AI 查询结果表格（编码查询结果的简化展示）
-function renderChatTable(results) {
-  const box = document.getElementById('chatBox');
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'align-self:flex-start;max-width:96%;width:96%;background:#fff;border:1px solid var(--border);border-radius:10px;overflow-x:auto;';
-  let html = '<table style="min-width:760px;font-size:12px;"><thead><tr>' +
-    '<th>编码</th><th>描述</th><th>一般税率</th><th>301</th><th>301加征</th><th>附加税</th></tr></thead><tbody>';
-  results.forEach(r => {
+function renderList(data) {
+  const rows = data.details || [];
+  const s = data.stats || {};
+  document.getElementById('listResultCard').style.display = 'block';
+  document.getElementById('listResultInfo').textContent =
+    `共 ${s.total || rows.length} 行，命中 301 ${s.hit || 0} 行，未归类 ${s.failed || 0} 行`;
+
+  // 未归类与降级行单独提醒：清单几十行时，失败的那几行最容易被滑过去
+  const failed = rows.filter(r => r.error);
+  const degraded = rows.filter(r => !r.error && r['备注']);
+  let notes = '';
+  if (failed.length) {
+    notes += `<div class="error-bar show">⚠ 有 ${failed.length} 行未能归类，需人工处理：` +
+      failed.map(r => `${esc(r['品名'])}`).join('、') + '</div>';
+  }
+  if (degraded.length) {
+    notes += `<div class="info-bar">${degraded.length} 行走了降级检索（AI 给出的检索词在税则库中无匹配），
+      候选质量可能下降，请重点复核。</div>`;
+  }
+  document.getElementById('listNotes').innerHTML = notes;
+
+  const body = document.getElementById('listBody');
+  body.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.error) {
+      tr.innerHTML = `<td>${r['序号']}</td><td>${esc(r['品名'])}</td>
+        <td colspan="7" style="color:var(--hit);">${esc(r.error)}</td>`;
+      body.appendChild(tr);
+      return;
+    }
     const tag = tagClass(r['301判定']);
-    const codeCell = esc(r['输入编码'] || r['编码'] || r['序号'] || '');
-    html += `<tr class="${isHit(r) ? 'row-hit' : ''}">
-      <td class="code">${codeCell}</td>
-      <td class="desc">${esc(r['商品描述'] || r['品名'] || '')}</td>
-      <td>${esc(r['一般税率'] || '')}</td>
-      <td><span class="tag ${tag.cls}">${esc(r['301判定'] || '')}</span></td>
+    if (isHit(r)) tr.className = 'row-hit';
+    const conf = Math.round((r.confidence || 0) * 100);
+    const why = [r.reason ? `${esc(r.reason)}` : '',
+                 r['备注'] ? `<span style="color:var(--warn)">${esc(r['备注'])}</span>` : '']
+                .filter(Boolean).join('<br>');
+    tr.innerHTML = `
+      <td>${r['序号']}</td>
+      <td>${esc(r['品名'])}</td>
+      <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}
+        <div class="hd">置信度 ${conf}%</div></td>
+      <td class="desc" data-full="${esc(r['商品描述'])}" title="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
+      <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
+      <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
       <td class="add-pct">${esc(r['301加征'] || '')}</td>
-      <td>${esc(r['附加税'] || '')}</td></tr>`;
+      <td class="ellipsis" data-full="${esc(r['总税负估算'] || '')}">${esc(r['总税负估算'] || '—')}</td>
+      <td style="font-size:12px;line-height:1.5;">${why}</td>`;
+    body.appendChild(tr);
   });
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
-  box.appendChild(wrap);
-  box.scrollTop = box.scrollHeight;
-}
 
-// AI 归类推荐卡片
-function renderClassifyCards(data) {
-  const box = document.getElementById('chatBox');
-  const grid = document.createElement('div');
-  grid.className = 'ai-cards';
-  grid.style.cssText = 'align-self:flex-start;max-width:100%;width:100%;';
-  grid.innerHTML = (data.candidates || []).map(c => `
-    <div class="ai-card">
-      <div class="ai-code">${esc(c['编码'])}</div>
-      <div class="ai-desc">${esc(c['商品描述'])}</div>
-      <div style="font-size:12px;">
-        一般税率：${esc(c['一般税率'])}（${esc(c['税率类型'])}）<br>
-        301：<span class="tag ${tagClass(c['301判定']).cls}">${esc(c['301判定'])} ${esc(c['301加征'])}</span><br>
-        总税负估算：<b>${esc(c['总税负估算'] || '—')}</b>
-      </div>
-      <div class="ai-reason">💡 ${esc(c['reason'] || '')}</div>
-      <div class="ai-conf">置信度 ${Math.round((c['confidence'] || 0) * 100)}%
-        <div class="conf-bar"><i style="width:${Math.round((c['confidence'] || 0) * 100)}%"></i></div>
-      </div>
-    </div>`).join('');
-  box.appendChild(grid);
-  box.scrollTop = box.scrollHeight;
+  document.getElementById('listReport').innerHTML = data.report
+    ? `<div class="info-bar" style="margin-top:14px;"><b>AI 汇总分析</b>
+        <div class="md-body" style="margin-top:6px;">${renderMD(data.report)}</div>
+        <div class="hd" style="margin-top:8px;">
+          报告由 AI 依据上表生成，表内的税率、301 判定、总税负均来自本地官方税则库。</div></div>`
+    : '';
+  document.getElementById('listResultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-
-// 清单分析模式：切换输入框提示并发送批量分析
-let analyzeMode = false;
-function analyzeListMode() {
-  analyzeMode = !analyzeMode;
-  const input = document.getElementById('chatInput');
-  const btn = document.querySelector('#tab-ai .chat-side button:nth-child(2)');
-  if (analyzeMode) {
-    input.placeholder = '清单分析模式：每行一个商品品名（如：\n便携式蓝牙音箱\n陶瓷马克杯\n），点击"发送"';
-    btn.style.borderColor = 'var(--primary)';
-    btn.style.color = 'var(--primary)';
-  } else {
-    input.placeholder = '输入问题，如：帮我查一下锂电池的关税 / 归类：陶瓷马克杯';
-    btn.style.borderColor = '';
-    btn.style.color = '';
-  }
-}
-
-// 覆盖 doChat：清单模式走批量分析接口
-const _doChat = doChat;
-doChat = function() {
-  if (!analyzeMode) return _doChat();
-  const input = document.getElementById('chatInput');
-  const text = input.value.trim();
-  const err = document.getElementById('chatError');
-  err.classList.remove('show');
-  if (!text) return;
-  input.value = '';
-  analyzeMode = false;
-  document.querySelector('#tab-ai .chat-side button:nth-child(2)').style.borderColor = '';
-  chatMsg(text, 'user');
-  const wait = chatMsg('批量分析中（每商品需 AI 归类 + 本地查税，请稍候）...', 'system');
-  const items = text.split(/\n+/).map(s => s.trim()).filter(Boolean).map(name => ({ name }));
-  fetch('/api/ai/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items })
-  }).then(r => r.json()).then(data => {
-    wait.remove();
-    if (data.error) { chatMsg(data.error, 'error'); return; }
-    const s = data.stats || {};
-    chatMsg(`分析完成：共 ${s.total} 个商品，命中 301 ${s.hit} 个，失败 ${s.failed || 0} 个。`, 'ai', true);
-    chatMsg(data.report, 'ai', true);
-    if (data.details && data.details.length) renderChatTable(data.details);
-  }).catch(e => { wait.remove(); chatMsg('调用失败：' + e.message, 'error'); });
-};
 
 // 简易 Markdown 渲染（仅支持常用语法，避免引入依赖）
 function renderMD(text) {

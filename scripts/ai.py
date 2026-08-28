@@ -693,20 +693,13 @@ def ask_tax_question(db, question, origin="CN"):
         desc = r.get("description") or question
         return {"type": "classify", "description": desc,
                 **classify_product(db, desc, origin=origin)}
-    if isinstance(r, dict) and r.get("type") == "faq":
-        try:
-            answer = provider.chat(
-                [{"role": "system", "content": (
-                    "你是美国关税合规助手，用简体中文回答货代客户的问题。"
-                    "涉及具体税率时，说明需要以 8 位 HTS 编码核实；"
-                    "301 加征仅适用于中国原产商品，且可能存在 USTR 豁免，申报前需核对豁免清单。"
-                    "回答要简洁专业，分点列出。")},
-                 {"role": "user", "content": question}]
-            )
-            return {"type": "faq", "answer": answer}
-        except AIProviderError as e:
-            return {"error": f"AI 调用失败：{e}"}
-    return {"error": "无法理解问题，请补充商品名称或 HTS 编码。"}
+    # 原先这里还有一条 faq 分支：把问题直接丢给模型自由回答，不碰任何本地数据。
+    # 与本项目"税率、判定条件、证据一律来自官方税则原文，AI 只负责在候选中挑选"
+    # 的原则相悖——报关场景里用户分不出哪句有依据、哪句是模型编的，
+    # 一段听起来专业的错误答复比一句"答不了"危险得多。故整条移除。
+    return {"error": "这里只处理「HTS 编码查询」和「商品归类」两类问题。"
+                     "关税政策类咨询本工具不作答——本地数据只涵盖税则表与 301/FLIP 清单，"
+                     "无法为政策解释提供依据。"}
 
 
 def analyze_list(db, items, origin="CN"):
