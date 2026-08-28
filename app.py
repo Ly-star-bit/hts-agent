@@ -387,6 +387,35 @@ def api_search(req: SearchRequest):
         raise HTTPException(status_code=500, detail=f"搜索服务端异常：{e}")
 
 
+class CompareRequest(BaseModel):
+    codes: list = Field(default_factory=list, description="待比较的候选 HTS 编码（2 个以上）")
+
+
+@app.post("/api/compare")
+def api_compare(req: CompareRequest):
+    """
+    候选编码并列比较：完整品名 / 税率 / 判定条件 / 跨章分歧提示。
+    用于"同一商品有多个可能税号"的归类分歧场景。
+    """
+    if len(req.codes or []) < 2:
+        raise HTTPException(status_code=400, detail="请至少提供 2 个候选编码")
+    import criteria
+    import rate
+
+    db = get_db()
+    result = criteria.compare(db, req.codes)
+    # 补上各候选的等效从价与总税负，让税率差额直接可见
+    for it in result["候选"]:
+        t = rate.calc_total(db, it["编码"])
+        it["等效从价"] = t["基础等效从价"]
+        it["总税负估算"] = t["总税负估算"]
+        it["301判定"] = t["301判定"]
+        it["证据清单"] = criteria.evidence_list(it["判定条件"])
+    result["提示"] = ("各候选判定条件不同，需按 GRI 与商品实际特征论证；"
+                     "正式归类以 CBP 裁定为准。")
+    return result
+
+
 @app.post("/api/estimate")
 def api_estimate(req: EstimateRequest):
     """成本估算：按编码批量计算总税负（基础 + 301 + 附加税）"""

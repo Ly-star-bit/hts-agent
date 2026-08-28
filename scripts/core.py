@@ -313,6 +313,15 @@ def flip301_judge(db, origin_code, code8=""):
         "", "FRN 范围（60 经济体名单）", ""), {"mode": "none"}
 
 
+def _criteria_of(db, code8):
+    """抽取归类判定条件；抽取失败不应影响主查询（税率判定与它无关）"""
+    try:
+        import criteria
+        return criteria.extract(db, code8)
+    except Exception:
+        return []
+
+
 # ---------- 主查询 ----------
 
 def query_one(db, code, origin="CN"):
@@ -429,6 +438,8 @@ def query_one(db, code, origin="CN"):
         "8位子目": fmt(code8, 8) if len(code8) == 8 else code8,
         "商品描述": desc or "（无描述，见备注）",
         "归类路径": cls_path,
+        # 判定条件与证据清单：报这个编码需要能证明什么（归类论证与查验备料用）
+        "判定条件": _criteria_of(db, code8),
         "一般税率": general,
         "特殊税率": special,
         "第二栏税率": col2,
