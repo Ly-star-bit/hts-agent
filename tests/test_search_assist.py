@@ -185,6 +185,110 @@ class TestAssistSearchMerge(unittest.TestCase):
         self.assertLessEqual(r["精排"][0]["confidence"], 1.0)
 
 
+class ListProvider:
+    """analyze_list 用：两轮 chat_json（出词 / 精排）+ 一次 chat（汇总报告）"""
+
+    def __init__(self, kw_items, picks):
+        self._kw = {"items": kw_items}
+        self._picks = {"picks": picks}
+        self.calls = 0
+
+    def chat(self, messages):
+        return "汇总报告"
+
+    def chat_json(self, messages, fallback=None):
+        self.calls += 1
+        return self._kw if self.calls == 1 else self._picks
+
+
+class TestAnalyzeListRecall(unittest.TestCase):
+    """
+    清单批量分析的召回降级。
+
+    classify_product 里的"章号硬过滤 + 落空即报错"已修，analyze_list 漏了同一处。
+    清单动辄几十行，某行报"本地库未匹配"时用户会以为库里没有，
+    真实原因却是模型给这一行猜错了章。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def setUp(self):
+        self._orig = ai.get_provider
+
+    def tearDown(self):
+        ai.get_provider = self._orig
+
+    def _run(self, kw_items, picks, items):
+        ai.get_provider = lambda: ListProvider(kw_items, picks)
+        return ai.analyze_list(self.db, items)
+
+    def test_wrong_chapter_still_classifies(self):
+        """关键词对、章号猜错：硬过滤会滤空，加权则不受影响"""
+        r = self._run(
+            [{"index": 1, "keywords": ["battery"], "chapters": ["03"]}],
+            [{"index": 1, "code": "85076000", "confidence": 0.8, "reason": "x"}],
+            [{"name": "lithium battery"}])
+        d = r["details"][0]
+        self.assertNotIn("error", d, f"章号猜错不应判为无解：{d.get('error')}")
+        self.assertEqual(d["编码"], "8507.60.00")
+
+    def test_bad_keywords_degrade_to_name(self):
+        """AI 检索词全落空时按品名原文再检索一次"""
+        r = self._run(
+            [{"index": 1, "keywords": ["zzznonexistent"], "chapters": []}],
+            [{"index": 1, "code": "85076000", "confidence": 0.8, "reason": "x"}],
+            [{"name": "锂电池"}])
+        d = r["details"][0]
+        self.assertNotIn("error", d, f"应降级为原文检索：{d.get('error')}")
+        self.assertEqual(d["编码"], "8507.60.00")
+
+    def test_genuinely_unmatched_reports_keywords(self):
+        """真的搜不到时，错误信息要带上检索词，否则无从判断是谁的问题"""
+        r = self._run(
+            [{"index": 1, "keywords": ["zzznonexistent"], "chapters": []}],
+            [],
+            [{"name": "zzqqxx 不存在的商品"}])
+        d = r["details"][0]
+        self.assertIn("error", d)
+        self.assertIn("zzznonexistent", d["error"],
+                      "错误信息要带上 AI 检索词，否则分不清是模型的问题还是数据的问题")
+
+    def test_degraded_row_is_marked(self):
+        """走了降级检索的行要标注，否则用户无从判断这条为什么质量偏低"""
+        r = self._run(
+            [{"index": 1, "keywords": ["zzznonexistent"], "chapters": []}],
+            [{"index": 1, "code": "85076000", "confidence": 0.8, "reason": "x"}],
+            [{"name": "锂电池"}])
+        self.assertIn("降级", r["details"][0].get("备注", ""))
+
+    def test_row_count_preserved(self):
+        """清单几十行时，结果必须逐行对齐输入，不能少行也不能错位"""
+        items = [{"name": n} for n in ("锂电池", "zzqqxx", "lithium battery")]
+        r = self._run(
+            [{"index": 1, "keywords": ["battery"], "chapters": []},
+             {"index": 2, "keywords": ["zzznonexistent"], "chapters": []},
+             {"index": 3, "keywords": ["battery"], "chapters": []}],
+            [{"index": 1, "code": "85076000", "confidence": 0.8, "reason": "x"},
+             {"index": 3, "code": "85076000", "confidence": 0.8, "reason": "z"}],
+            items)
+        self.assertEqual(len(r["details"]), 3)
+        self.assertEqual([d["序号"] for d in r["details"]], [1, 2, 3])
+        self.assertEqual([d["品名"] for d in r["details"]],
+                         ["锂电池", "zzqqxx", "lithium battery"])
+
+    def test_hallucinated_code_not_accepted(self):
+        """模型返回候选外的编码时不能退回 rows[0] 兜底"""
+        r = self._run(
+            [{"index": 1, "keywords": ["battery"], "chapters": []}],
+            [{"index": 1, "code": "99999999", "confidence": 0.99, "reason": "编的"}],
+            [{"name": "lithium battery"}])
+        d = r["details"][0]
+        self.assertIn("error", d)
+        self.assertNotIn("编码", d)
+
+
 class TestClassifyFallback(unittest.TestCase):
     """AI 关键词全落空时降级为原文检索，而不是报'税则库未找到'"""
 

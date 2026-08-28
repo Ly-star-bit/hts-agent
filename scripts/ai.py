@@ -748,23 +748,38 @@ def analyze_list(db, items, origin="CN"):
         kw_map[idx] = (kws, chs)
 
     # 逐商品本地召回（第一候选）
-    details = []
-    pending = []  # 需要精排的 (序号, 候选行列表)
+    recall_failed = {}  # 序号 → 召回失败的说明
+    pending = []  # 需要精排的 (序号, 候选行列表, 原始条目, 降级说明)
     for i, it in enumerate(items, 1):
+        name = it.get("name", "")
         kws, chs = kw_map.get(i, ([], []))
         rows = _recall_candidates(db, kws, limit=20) if kws else []
-        if chs:
-            rows = [r for r in rows if str(r["编码"]).startswith(tuple(chs))]
+        # 章号只加权不过滤（同 classify_product）。硬过滤时模型猜错章会把正确
+        # 候选整条滤掉，然后这一行报"本地库未匹配"——清单里几十行，用户看到的
+        # 是"库里没有"，真实原因却是模型猜错了章。
+        rows = _rank_by_chapters(rows, chs, limit=20)
+        note = ""
+        if not rows and name:
+            # AI 关键词全落空时退回按原文检索，而不是直接判这行无解
+            rows = _recall_candidates(db, [name], limit=20)
+            if rows:
+                note = f"AI 检索词（{' '.join(kws)}）无匹配，已降级为按品名原文检索"
         if not rows:
-            details.append({"序号": i, "品名": it.get("name", ""), "error": "本地库未匹配"})
+            # 写进 details_map 而不是 details——末尾会按 details_map 重建整个列表，
+            # 早先 append 到 details 的内容会被整个丢掉（原实现里那句 append
+            # 就是死代码，所有召回失败最终都塌成一句笼统的"本地库未匹配"）。
+            recall_failed[i] = {
+                "序号": i, "品名": name,
+                "error": f"本地库未匹配（AI 检索词：{' '.join(kws) or '无'}；已按品名原文重试）",
+            }
             continue
-        pending.append((i, rows[:12], it))
+        pending.append((i, rows[:12], it, note))
 
     # 第二轮：批量精排
     details_map = {}
     if pending:
         batch_lines = []
-        for i, rows, it in pending:
+        for i, rows, it, _note in pending:
             tops = "; ".join(f"{r['编码']}({r['商品描述'][:40]}, {r['一般税率']})" for r in rows[:6])
             batch_lines.append(f"{i}. 商品「{it.get('name', '')}」候选: {tops}")
         sys_prompt2 = (
@@ -783,7 +798,7 @@ def analyze_list(db, items, origin="CN"):
         for pk in (r2.get("picks") if isinstance(r2, dict) else []) or []:
             pick_map[int(pk.get("index", 0))] = pk
 
-        for i, rows, it in pending:
+        for i, rows, it, note in pending:
             pk = pick_map.get(i, {})
             code = re.sub(r"\D", "", str(pk.get("code") or ""))
             # 匹配不上就报错，不能退回 rows[0]。退回等于把 AI 从未选过的编码
@@ -814,9 +829,13 @@ def analyze_list(db, items, origin="CN"):
                 "总税负估算": total["总税负估算"] if total else "",
                 "confidence": pk.get("confidence", 0),
                 "reason": pk.get("reason", ""),
+                # 走了降级检索的行要标出来，否则用户无从判断这条为什么质量偏低
+                "备注": note,
             }
 
-    details = [details_map.get(i, {"序号": i, "品名": it.get("name", ""), "error": "本地库未匹配"})
+    details = [details_map.get(i) or recall_failed.get(i)
+               or {"序号": i, "品名": it.get("name", ""),
+                   "error": "未返回该行结果（AI 精排遗漏），请重试或单独查询"}
                for i, it in enumerate(items, 1)]
 
     # 统计
