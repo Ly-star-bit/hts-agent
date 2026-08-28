@@ -738,6 +738,7 @@
 
     <div class="card" id="searchResultCard" style="display:none;">
       <h2><span class="step">2</span> 搜索结果 <span id="searchResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <div id="searchNotes"></div>
       <div class="result-count" id="searchResultCount"></div>
       <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
         <table>
@@ -1528,11 +1529,29 @@ function renderSearch(data) {
     `「${data.keyword}」 匹配 ${data.count} 个候选`;
   const body = document.getElementById('searchBody');
   body.innerHTML = '';
+
+  // 同义词扩展与未识别提示：未映射的中文片段若不告知，用户会以为已完整检索，
+  // 而实际只按识别出的那部分搜了（"塑料制婴儿餐椅" 只认出"塑料"也会返回结果）
+  const mapped = data['同义词映射'] || [];
+  const left = data['未识别'] || [];
+  let notes = '';
+  if (mapped.length) {
+    notes += '<div class="info-bar">已按官方税则用词检索：' +
+      mapped.map(m => `${esc(m['输入词'])} → <b>${esc((m['检索词'] || []).join(' '))}</b>`).join('；') +
+      '</div>';
+  }
+  if (left.length) {
+    notes += `<div class="error-bar show">⚠ 未能识别：<b>${esc(left.join('、'))}</b>。
+      本次仅按已识别的部分检索，结果可能不完整。多概念组合（如“塑料制婴儿餐椅”）
+      需按基本特征判断，建议到「AI 助手」用自然语言描述。</div>`;
+  }
+  document.getElementById('searchNotes').innerHTML = notes;
+
   if (!data.results.length) {
     const hasCJK = /[\u4e00-\u9fff]/.test(data.keyword || '');
     body.innerHTML = `<tr><td colspan="9" class="empty">${
       hasCJK
-        ? '税率搜索需要英文关键词或编码。中文商品名请到「AI 助手」用自然语言问（如"帮我归类：锂电池"）'
+        ? '未匹配到结果。可换用更常见的商品词（如 锂电池 / 针织手套 / 不锈钢餐具），或到「AI 助手」用自然语言描述商品'
         : '没有匹配结果，请尝试更短的英文关键词（如 battery / apparel）'
     }</td></tr>`;
     document.getElementById('searchResultCount').textContent = '';

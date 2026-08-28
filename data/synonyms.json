@@ -1,0 +1,607 @@
+{
+  "meta": {
+    "说明": "用户词汇 → HTS 官方英文检索词。解决两类问题：①中文商品名无法检索（索引为纯英文）②口语/商用词与税则用词不一致（solar vs photovoltaic）。",
+    "用法": "rate.search 在分词前做扩展；每条映射的目标词均须在 htsdata.csv 品名中实际出现，由 tests/test_synonyms.py 逐条校验。",
+    "维护": "新增条目后跑 python -m pytest tests/test_synonyms.py，未命中语料的条目会被测试拦下。",
+    "边界": "这是检索辅助，不是归类结论。映射到的编码仍需按判定条件与 GRI 核对。",
+    "映射语义": "多个检索词按 AND 组合（须在同一条品名的归类路径内共现），不能填互为替代的写法——tyres/tires 这类只应保留语料中实际存在的那个。",
+    "能力边界": "单概念查询（锂电池 / 不锈钢餐具 / 针织手套）可离线解决；多概念组合（塑料制婴儿餐椅）需要按 GRI 判断基本特征，词表做不到，应走 AI 助手。未映射的中文片段会由 expand_query 回报，调用方须提示用户而非静默丢弃。"
+  },
+  "terms": {
+    "锂电池": [
+      "lithium",
+      "batteries"
+    ],
+    "锂离子电池": [
+      "lithium",
+      "batteries"
+    ],
+    "电池": [
+      "batteries"
+    ],
+    "蓄电池": [
+      "storage",
+      "batteries"
+    ],
+    "太阳能电池": [
+      "photovoltaic",
+      "cells"
+    ],
+    "太阳能电池板": [
+      "photovoltaic",
+      "panels"
+    ],
+    "光伏": [
+      "photovoltaic"
+    ],
+    "太阳能": [
+      "photovoltaic"
+    ],
+    "solar": [
+      "photovoltaic"
+    ],
+    "solar panel": [
+      "photovoltaic",
+      "panels"
+    ],
+    "夹克": [
+      "anoraks",
+      "windbreakers"
+    ],
+    "外套": [
+      "overcoats",
+      "coats"
+    ],
+    "大衣": [
+      "overcoats"
+    ],
+    "防寒服": [
+      "anoraks"
+    ],
+    "羽绒服": [
+      "down",
+      "anoraks"
+    ],
+    "马甲": [
+      "vests"
+    ],
+    "背心": [
+      "vests"
+    ],
+    "衬衫": [
+      "shirts"
+    ],
+    "T恤": [
+      "t-shirts",
+      "singlets"
+    ],
+    "卫衣": [
+      "sweatshirts"
+    ],
+    "毛衣": [
+      "sweaters",
+      "pullovers"
+    ],
+    "裤子": [
+      "trousers"
+    ],
+    "牛仔裤": [
+      "trousers"
+    ],
+    "裙子": [
+      "skirts"
+    ],
+    "连衣裙": [
+      "dresses"
+    ],
+    "西装": [
+      "suits"
+    ],
+    "内衣": [
+      "underpants",
+      "briefs"
+    ],
+    "袜子": [
+      "socks",
+      "hosiery"
+    ],
+    "手套": [
+      "gloves",
+      "mittens"
+    ],
+    "帽子": [
+      "hats",
+      "headgear"
+    ],
+    "围巾": [
+      "scarves",
+      "shawls"
+    ],
+    "领带": [
+      "ties",
+      "cravats"
+    ],
+    "泳衣": [
+      "swimwear"
+    ],
+    "雨衣": [
+      "rainwear"
+    ],
+    "婴儿服": [
+      "babies",
+      "garments"
+    ],
+    "棉": [
+      "cotton"
+    ],
+    "纯棉": [
+      "cotton"
+    ],
+    "羊毛": [
+      "wool"
+    ],
+    "羊绒": [
+      "cashmere"
+    ],
+    "真丝": [
+      "silk"
+    ],
+    "蚕丝": [
+      "silk"
+    ],
+    "化纤": [
+      "man-made",
+      "fibers"
+    ],
+    "涤纶": [
+      "synthetic",
+      "fibers"
+    ],
+    "聚酯": [
+      "polyester"
+    ],
+    "尼龙": [
+      "nylon"
+    ],
+    "锦纶": [
+      "nylon"
+    ],
+    "氨纶": [
+      "elastomeric"
+    ],
+    "亚麻": [
+      "flax",
+      "linen"
+    ],
+    "皮革": [
+      "leather"
+    ],
+    "真皮": [
+      "leather"
+    ],
+    "人造革": [
+      "composition",
+      "leather"
+    ],
+    "针织": [
+      "knitted",
+      "crocheted"
+    ],
+    "梭织": [
+      "woven"
+    ],
+    "机织": [
+      "woven"
+    ],
+    "无纺布": [
+      "nonwovens"
+    ],
+    "涂层": [
+      "coated"
+    ],
+    "浸渍": [
+      "impregnated"
+    ],
+    "层压": [
+      "laminated"
+    ],
+    "防水": [
+      "water",
+      "resistant"
+    ],
+    "塑料": [
+      "plastics"
+    ],
+    "橡胶": [
+      "rubber"
+    ],
+    "不锈钢": [
+      "stainless",
+      "steel"
+    ],
+    "碳钢": [
+      "steel"
+    ],
+    "合金钢": [
+      "alloy",
+      "steel"
+    ],
+    "铝": [
+      "aluminum"
+    ],
+    "铜": [
+      "copper"
+    ],
+    "锌": [
+      "zinc"
+    ],
+    "镍": [
+      "nickel"
+    ],
+    "玻璃": [
+      "glass"
+    ],
+    "陶瓷": [
+      "ceramic"
+    ],
+    "木": [
+      "wood"
+    ],
+    "木制": [
+      "wood"
+    ],
+    "竹": [
+      "bamboo"
+    ],
+    "纸": [
+      "paper"
+    ],
+    "纸板": [
+      "paperboard"
+    ],
+    "鞋": [
+      "footwear"
+    ],
+    "运动鞋": [
+      "footwear",
+      "sports"
+    ],
+    "皮鞋": [
+      "footwear",
+      "leather"
+    ],
+    "拖鞋": [
+      "footwear"
+    ],
+    "靴子": [
+      "boots"
+    ],
+    "箱包": [
+      "trunks",
+      "suitcases"
+    ],
+    "行李箱": [
+      "suitcases"
+    ],
+    "背包": [
+      "backpacks"
+    ],
+    "手提包": [
+      "handbags"
+    ],
+    "钱包": [
+      "wallets",
+      "purses"
+    ],
+    "家具": [
+      "furniture"
+    ],
+    "椅子": [
+      "seats",
+      "chairs"
+    ],
+    "沙发": [
+      "seats",
+      "upholstered"
+    ],
+    "床": [
+      "beds"
+    ],
+    "床垫": [
+      "mattresses"
+    ],
+    "桌子": [
+      "tables"
+    ],
+    "柜子": [
+      "cabinets"
+    ],
+    "灯具": [
+      "lamps",
+      "lighting"
+    ],
+    "玩具": [
+      "toys"
+    ],
+    "餐具": [
+      "tableware"
+    ],
+    "厨具": [
+      "kitchenware"
+    ],
+    "毛巾": [
+      "towels"
+    ],
+    "床单": [
+      "bed",
+      "linen"
+    ],
+    "地毯": [
+      "carpets"
+    ],
+    "窗帘": [
+      "curtains"
+    ],
+    "手机": [
+      "telephones",
+      "cellular"
+    ],
+    "笔记本电脑": [
+      "automatic",
+      "data",
+      "processing"
+    ],
+    "电脑": [
+      "automatic",
+      "data",
+      "processing"
+    ],
+    "显示器": [
+      "monitors"
+    ],
+    "键盘": [
+      "keyboards"
+    ],
+    "耳机": [
+      "headphones",
+      "earphones"
+    ],
+    "音箱": [
+      "loudspeakers"
+    ],
+    "摄像头": [
+      "cameras"
+    ],
+    "相机": [
+      "cameras"
+    ],
+    "路由器": [
+      "apparatus",
+      "reception"
+    ],
+    "充电器": [
+      "converters"
+    ],
+    "变压器": [
+      "transformers"
+    ],
+    "电机": [
+      "motors"
+    ],
+    "电线": [
+      "wire"
+    ],
+    "电缆": [
+      "cable"
+    ],
+    "半导体": [
+      "semiconductor"
+    ],
+    "集成电路": [
+      "integrated",
+      "circuits"
+    ],
+    "二极管": [
+      "diodes"
+    ],
+    "传感器": [
+      "transducers"
+    ],
+    "印刷电路": [
+      "printed",
+      "circuits"
+    ],
+    "汽车": [
+      "motor",
+      "vehicles"
+    ],
+    "电动车": [
+      "electric",
+      "motors",
+      "vehicles"
+    ],
+    "轮胎": [
+      "pneumatic",
+      "tires"
+    ],
+    "自行车": [
+      "bicycles"
+    ],
+    "摩托车": [
+      "motorcycles"
+    ],
+    "轴承": [
+      "bearings"
+    ],
+    "螺丝": [
+      "screws"
+    ],
+    "螺栓": [
+      "bolts"
+    ],
+    "阀门": [
+      "valves"
+    ],
+    "泵": [
+      "pumps"
+    ],
+    "压缩机": [
+      "compressors"
+    ],
+    "风扇": [
+      "fans"
+    ],
+    "空调": [
+      "air",
+      "conditioning"
+    ],
+    "冰箱": [
+      "refrigerators"
+    ],
+    "洗衣机": [
+      "washing",
+      "machines"
+    ],
+    "laptop": [
+      "automatic",
+      "data",
+      "processing"
+    ],
+    "notebook computer": [
+      "automatic",
+      "data",
+      "processing"
+    ],
+    "cellphone": [
+      "telephones",
+      "cellular"
+    ],
+    "mobile phone": [
+      "telephones",
+      "cellular"
+    ],
+    "sneaker": [
+      "footwear"
+    ],
+    "sneakers": [
+      "footwear"
+    ],
+    "tire": [
+      "tires"
+    ],
+    "tires": [
+      "tires"
+    ],
+    "aluminium": [
+      "aluminum"
+    ],
+    "jumper": [
+      "pullovers"
+    ],
+    "hoodie": [
+      "sweatshirts"
+    ],
+    "windbreaker": [
+      "windbreakers",
+      "anoraks"
+    ],
+    "man made fiber": [
+      "man-made",
+      "fibers"
+    ],
+    "manmade fiber": [
+      "man-made",
+      "fibers"
+    ],
+    "polyester fiber": [
+      "synthetic",
+      "fibers"
+    ],
+    "led": [
+      "light-emitting",
+      "diodes"
+    ],
+    "pcb": [
+      "printed",
+      "circuits"
+    ],
+    "ic": [
+      "integrated",
+      "circuits"
+    ],
+    "餐椅": [
+      "seats"
+    ],
+    "婴儿餐椅": [
+      "seats"
+    ],
+    "高脚椅": [
+      "seats"
+    ],
+    "儿童家具": [
+      "furniture"
+    ],
+    "办公椅": [
+      "seats",
+      "swivel"
+    ],
+    "保温杯": [
+      "vacuum",
+      "flasks"
+    ],
+    "水杯": [
+      "glasses"
+    ],
+    "刀具": [
+      "knives"
+    ],
+    "剪刀": [
+      "scissors"
+    ],
+    "牙刷": [
+      "brushes"
+    ],
+    "雨伞": [
+      "umbrellas"
+    ],
+    "眼镜": [
+      "spectacles"
+    ],
+    "手表": [
+      "watches"
+    ],
+    "首饰": [
+      "jewelry"
+    ],
+    "文具": [
+      "stationery"
+    ],
+    "笔": [
+      "pens"
+    ],
+    "书": [
+      "books"
+    ],
+    "包装袋": [
+      "sacks",
+      "bags"
+    ],
+    "纸箱": [
+      "cartons"
+    ],
+    "标签": [
+      "labels"
+    ],
+    "拉链": [
+      "slide",
+      "fasteners"
+    ],
+    "纽扣": [
+      "buttons"
+    ],
+    "缝纫线": [
+      "sewing",
+      "thread"
+    ]
+  }
+}

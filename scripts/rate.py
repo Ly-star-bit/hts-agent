@@ -16,6 +16,8 @@ rate.py —— 税率解析与总税负计算引擎（Web / 命令行共用）
   - 'The duty provided in the applicable subheading'   引用式（税率见被引子目）
   - '$1.61 each + 4.4% on the case...'      复杂分部件税率（无法简单折算）
 """
+import json
+import os
 import re
 
 # ---------- 常量 ----------
@@ -297,6 +299,86 @@ def full_desc(db, code):
     return " > ".join(p for p in parts if p)
 
 
+# ---------- 用户词汇 → 官方检索词 ----------
+
+_SYNONYMS_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "synonyms.json")
+_synonyms_cache = None
+
+
+def load_synonyms():
+    """
+    读取用户词汇 → HTS 官方检索词映射（带缓存）。
+
+    存在的理由：搜索索引是纯英文的（11876 个 token 中文为 0），中文商品名
+    直接搜返回 0 条；英文侧也存在口语与税则用词不一致（solar / photovoltaic、
+    laptop / automatic data processing machine）。AI 层第一轮做的就是这件事，
+    但 AI 默认关闭，不配就整条链路不可用——这张表是离线兜底。
+
+    文件缺失或损坏时返回空表，检索退化为原行为，不影响主链路。
+    """
+    global _synonyms_cache
+    if _synonyms_cache is not None:
+        return _synonyms_cache
+    terms = {}
+    try:
+        with open(_SYNONYMS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        for k, v in ((data or {}).get("terms") or {}).items():
+            key = str(k).strip().lower()
+            vals = [str(x).strip().lower() for x in (v or []) if str(x).strip()]
+            if key and vals:
+                terms[key] = vals
+    except (OSError, json.JSONDecodeError, AttributeError):
+        terms = {}
+    _synonyms_cache = terms
+    return terms
+
+
+def _clear_synonyms_cache():
+    """测试用"""
+    global _synonyms_cache
+    _synonyms_cache = None
+
+
+_CJK_RE = re.compile(r"[一-鿿]+")
+
+
+def expand_query(keyword):
+    """
+    把用户输入扩展为官方英文检索词，返回 (扩展后的检索串, 应用的映射列表, 未识别的中文片段)。
+
+    中文没有词边界，因此按最长键优先做子串匹配（'太阳能电池板' 要先于 '太阳能'
+    命中，否则会退化成只搜 photovoltaic 而丢掉 panels）。英文键按整词匹配，
+    避免 'ic' 命中 'plastic'。命中的键从原串中移除，剩余部分照常参与检索。
+
+    第三个返回值是关键：英文分词器会把没映射上的中文**静默丢弃**，
+    '塑料制婴儿餐椅' 只识别出 '塑料' 就按 plastics 去搜，返回一个看着挺确定的
+    3D 打印机。对报关工具来说，这比返回空更危险——必须把未识别的部分交回给
+    调用方提示用户，而不是假装完整检索过。
+    """
+    terms = load_synonyms()
+    text = (keyword or "").lower()
+    applied, added = [], []
+    for key in sorted(terms, key=len, reverse=True):
+        if not key or key not in text:
+            continue
+        if re.fullmatch(r"[\x00-\x7f]+", key):
+            # 纯 ASCII 键要求整词命中，否则 'ic' 会撞上 'plastic'
+            if not re.search(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", text):
+                continue
+            text = re.sub(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", " ", text)
+        else:
+            text = text.replace(key, " ")
+        applied.append({"输入词": key, "检索词": terms[key]})
+        added.extend(terms[key])
+    # 扩展后仍残留的中文 = 词表没覆盖到的部分（'制'、'的' 这类单字虚词不算）
+    leftover = [s for s in _CJK_RE.findall(text) if len(s) >= 2]
+    if not applied:
+        return keyword, [], leftover
+    return (text + " " + " ".join(added)).strip(), applied, leftover
+
+
 def _stem(w):
     """
     轻量英文复数还原。HTS 品名里的词形变体绝大多数就是单复数：
@@ -403,7 +485,9 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
       [{'编码', '商品描述', '一般税率', '税率类型', '等效从价', '等效从价数值',
         '301判定', '9903子目', '301加征', '附加税', '相关度'}, ...]
     """
-    kw = (keyword or "").strip().lower()
+    raw_kw = (keyword or "").strip()
+    kw, _applied, _leftover = expand_query(raw_kw)
+    kw = kw.strip().lower()
     if not kw:
         return []
     import core as _core

@@ -375,13 +375,17 @@ def api_search(req: SearchRequest):
         db = get_db()
         rows = rate.search(db, req.keyword, limit=req.limit, sort=req.sort,
                            include_special=req.include_special)
+        # 同义词扩展信息：未映射的中文片段必须回报，否则用户会以为已完整检索
+        _expanded, applied, leftover = rate.expand_query(req.keyword)
         # 可选：给定单位货值时计算总税负
         if req.unit_value:
             for r in rows:
                 total = rate.calc_total(db, re.sub(r"\D", "", r["编码"]), unit_value=req.unit_value)
                 r["总税负估算"] = total["总税负估算"]
                 r["301加征数值"] = total["301加征数值"]
-        return {"results": rows, "count": len(rows), "keyword": req.keyword}
+        return {"results": rows, "count": len(rows), "keyword": req.keyword,
+                "检索词": _expanded if applied else "",
+                "同义词映射": applied, "未识别": leftover}
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"搜索服务端异常：{e}")
