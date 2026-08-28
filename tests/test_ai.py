@@ -256,6 +256,91 @@ class TestHallucinationGuard(unittest.TestCase):
         self.assertIn("error", r)
 
 
+class TestRerankContext(unittest.TestCase):
+    """精排候选行必须带归类路径与判定条件，否则 LLM 面对一堆 'Other' 只能盲选"""
+
+    @classmethod
+    def setUpClass(cls):
+        import core
+        cls.db = core.load_db()
+
+    def _rerank_prompt(self, desc="男式梭织羊毛混纺夹克"):
+        _install_fake([
+            '{"keywords": ["wool", "coat", "woven"], "chapters": ["62"]}',
+            '{"picks": []}',
+        ])
+        provider = ai.get_provider()
+        ai.classify_product(self.db, desc)
+        return provider.calls[1][1]["content"]
+
+    def test_candidate_lines_carry_path(self):
+        text = self._rerank_prompt()
+        self.assertIn(" > ", text, "候选行未带归类路径")
+
+    def test_candidate_lines_carry_criteria(self):
+        self.assertIn("判定条件", self._rerank_prompt())
+
+    def test_candidate_line_builder(self):
+        row = {"编码": "6201.40.40", "商品描述": "Containing 36 percent or more by weight of wool",
+               "一般税率": "49.5¢/kg + 19.6%", "301判定": "是", "301加征": "+7.5%", "附加税": ""}
+        line = ai._candidate_line(self.db, 1, row)
+        self.assertIn("6201.40.40", line)
+        self.assertIn(" > ", line)                 # 路径
+        self.assertIn("含量阈值", line)             # 判定条件
+        self.assertIn("man-made fibers", line)     # 祖先里的材质限定
+
+    def test_candidate_line_survives_missing_code(self):
+        row = {"编码": "0000.00.00", "商品描述": "x", "一般税率": "", "301判定": "否",
+               "301加征": "", "附加税": ""}
+        self.assertIn("0000.00.00", ai._candidate_line(self.db, 1, row))
+
+
+class TestClassifyEnrichment(unittest.TestCase):
+    """归类结果要带判定条件 / 证据清单 / 需确认项，且这些不经模型加工"""
+
+    @classmethod
+    def setUpClass(cls):
+        import core
+        cls.db = core.load_db()
+
+    def _classify(self, confidence=0.82):
+        _install_fake([
+            '{"keywords": ["wool", "coat", "woven"], "chapters": ["62"]}',
+            '{"picks": [{"code": "6201.40.15", "confidence": ' + repr(confidence) + ','
+            ' "reason": "依据候选行原文", "need_verify": ["羊毛含量是否达到 36%"]}]}',
+        ])
+        return ai.classify_product(self.db, "男式梭织羊毛混纺夹克")
+
+    def test_candidate_carries_criteria_and_evidence(self):
+        c = self._classify()["candidates"][0]
+        self.assertTrue(c["判定条件"])
+        self.assertTrue(c["证据清单"])
+        kinds = {x["类型"] for x in c["判定条件"]}
+        self.assertIn("含量阈值", kinds)
+        self.assertTrue(any(k.startswith("织法") for k in kinds))
+
+    def test_need_verify_passed_through(self):
+        c = self._classify()["candidates"][0]
+        self.assertEqual(c["需确认"], ["羊毛含量是否达到 36%"])
+
+    def test_confidence_clamped(self):
+        self.assertEqual(ai._clamp_confidence("非常高"), 0.0)
+        self.assertEqual(ai._clamp_confidence(5), 1.0)
+        self.assertEqual(ai._clamp_confidence(-2), 0.0)
+        self.assertEqual(ai._clamp_confidence(None), 0.0)
+        self.assertAlmostEqual(ai._clamp_confidence("0.7"), 0.7)
+
+    def test_criteria_not_model_generated(self):
+        # 判定条件来自本地税则，与模型给的 reason 无关：换个 reason 条件不变
+        a = self._classify()["candidates"][0]["判定条件"]
+        _install_fake([
+            '{"keywords": ["wool", "coat", "woven"], "chapters": ["62"]}',
+            '{"picks": [{"code": "6201.40.15", "confidence": 0.1, "reason": "胡说八道"}]}',
+        ])
+        b = ai.classify_product(self.db, "随便什么")["candidates"][0]["判定条件"]
+        self.assertEqual(a, b)
+
+
 class TestAIOriginPlumbing(unittest.TestCase):
     """origin 必须贯通到 AI 链路，否则界面选了越南仍按中国原产算 301"""
 

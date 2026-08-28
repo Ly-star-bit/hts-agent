@@ -293,6 +293,44 @@ def _recall_candidates(db, keywords, limit=40):
     return rows
 
 
+# 喂给 LLM 的归类路径保留末尾几级：越靠近末级的祖先越有判别力，
+# 顶级品目动辄上百字符（"Men's or boys' overcoats, carcoats, capes..."），
+# 40 个候选全带上会挤占上下文却提供不了区分度。
+_PATH_TAIL = 3
+_PATH_SEG_MAX = 60
+
+
+def _candidate_line(db, i, row):
+    """
+    构造精排用的候选行。
+
+    此前只给 row['商品描述']，而 HTS 末级品名大量是 "Other"、"Of silk"、
+    "Other (229)"——LLM 拿到一串同样的 "Other" 根本无从选择，等于盲选。
+    改为带归类路径与已抽出的判定条件，让模型能依据实际措辞判断。
+    """
+    import criteria
+    import rate
+
+    code8 = re.sub(r"\D", "", str(row.get("编码", "")))[:8]
+    segs = [s for s in (row.get("归类路径") or rate.path_of(db, code8))]
+    segs = [s if len(s) <= _PATH_SEG_MAX else s[:_PATH_SEG_MAX] + "…" for s in segs[-_PATH_TAIL:]]
+    own = (row.get("商品描述") or "").rstrip(":").strip()
+    path_txt = " > ".join([s for s in segs if s] + [own]) if own else " > ".join(segs)
+
+    try:
+        crs = criteria.extract(db, code8)
+    except Exception:
+        crs = []
+    cr_txt = "；".join(f"{c['类型']}:{c['原文'][:48]}" for c in crs[:3])
+
+    add = f"，附加税 {row['附加税']}" if row.get("附加税") else ""
+    line = (f"{i}. {row['编码']} | {path_txt} | 一般税率 {row['一般税率']} | "
+            f"301: {row['301判定']} {row['301加征']}{add}")
+    if cr_txt:
+        line += f" | 判定条件: {cr_txt}"
+    return line
+
+
 # ---------- AI 功能 ----------
 
 def classify_product(db, description, top_n=3, origin="CN"):
@@ -344,18 +382,19 @@ def classify_product(db, description, top_n=3, origin="CN"):
     rows = rows[:40]
 
     # 第二轮：精排
-    cand_lines = []
-    for i, r in enumerate(rows, 1):
-        add = f"，附加税 {r['附加税']}" if r.get("附加税") else ""
-        cand_lines.append(
-            f"{i}. {r['编码']} | {r['商品描述']} | 一般税率 {r['一般税率']} | "
-            f"301: {r['301判定']} {r['301加征']}{add}"
-        )
+    cand_lines = [_candidate_line(db, i, r) for i, r in enumerate(rows, 1)]
     sys_prompt2 = (
-        "你是美国 HTS 归类专家。下面是从税则库检索出的候选子目（含描述与税率）。"
-        f"请为商品「{description}」选择最合适的 {top_n} 个候选，按匹配度排序。"
+        "你是美国 HTS 归类专家。下面是从税则库检索出的候选子目。"
+        "每行格式：序号. 编码 | 归类路径（父级 > 子级，判定条件多在父级上）| 税率 | 301 | 判定条件。"
+        f"请为商品「{description}」选择最合适的 {top_n} 个候选，按匹配度排序。\n"
+        "选择时必须依据归类路径中的实际措辞（材质、织法、含量阈值、涂层、"
+        "重量/尺寸/价值门槛），不要只看末级品名——末级常常只是 'Other'。\n"
+        "reason 必须引用候选行中的原文依据，不要泛泛而谈。\n"
+        "若某候选的成立取决于尚未确认的商品属性（如羊毛含量是否达到 36%、"
+        "面料是针织还是梭织、有无塑料涂层），写进 need_verify。\n"
         "只输出 JSON，格式：{\"picks\": [{\"code\": \"8位编码\", \"confidence\": 0.9, "
-        "\"reason\": \"一句话中文理由\"}]}，code 必须来自候选列表，confidence 为 0-1 数值。"
+        "\"reason\": \"引用原文的中文理由\", \"need_verify\": [\"需确认的商品属性\"]}]}，"
+        "code 必须来自候选列表，confidence 为 0-1 数值。"
     )
     try:
         r2 = provider.chat_json(
@@ -380,10 +419,17 @@ def classify_product(db, description, top_n=3, origin="CN"):
         if not row:
             continue
         # 用候选行自身的编码算税，不用模型给的字符串——匹配放宽后两者可能不再等价
-        total = rate_calc(db, re.sub(r"\D", "", row["编码"]), origin=origin)
+        code8 = re.sub(r"\D", "", row["编码"])[:8]
+        total = rate_calc(db, code8, origin=origin)
+        crs = _criteria_safe(db, code8)
         candidates.append({
             "编码": row["编码"],
             "商品描述": row["商品描述"],
+            # 归类路径与判定条件来自本地税则，不经模型——模型只负责选，不负责论证
+            "完整品名": row.get("完整品名", ""),
+            "归类路径": row.get("归类路径", []),
+            "判定条件": crs,
+            "证据清单": _evidence_safe(crs),
             "一般税率": row["一般税率"],
             "税率类型": row["税率类型"],
             "等效从价": row["等效从价"],
@@ -392,8 +438,9 @@ def classify_product(db, description, top_n=3, origin="CN"):
             "301加征": row["301加征"],
             "附加税": row["附加税"],
             "总税负估算": total["总税负估算"] if total else "",
-            "confidence": pk.get("confidence", 0),
-            "reason": pk.get("reason", ""),
+            "confidence": _clamp_confidence(pk.get("confidence")),
+            "reason": str(pk.get("reason", ""))[:300],
+            "需确认": [str(v)[:80] for v in (pk.get("need_verify") or [])][:5],
         })
     if not candidates:
         return {"error": "AI 返回的编码不在候选列表中，请重试。"}
@@ -401,8 +448,35 @@ def classify_product(db, description, top_n=3, origin="CN"):
         "candidates": candidates,
         "keywords": keywords,
         "chapters": chapters,
-        "disclaimer": "AI 归类结果仅供参考，正式报关归类以 CBP 裁定与海关税则为准，请人工复核。",
+        "跨章": len({c["编码"][:2] for c in candidates}) > 1,
+        "disclaimer": "AI 归类结果仅供参考，正式报关归类以 CBP 裁定与海关税则为准，请人工复核。"
+                      "各候选的「判定条件」与「证据清单」来自官方税则原文，可作为论证依据。",
     }
+
+
+def _criteria_safe(db, code8):
+    """抽判定条件；失败不影响归类结果"""
+    try:
+        import criteria
+        return criteria.extract(db, code8)
+    except Exception:
+        return []
+
+
+def _evidence_safe(crs):
+    try:
+        import criteria
+        return criteria.evidence_list(crs)
+    except Exception:
+        return []
+
+
+def _clamp_confidence(v):
+    """模型可能返回 '非常高' 这类非数值，钳到 [0,1]，避免前端进度条与排序异常"""
+    try:
+        return max(0.0, min(1.0, float(v)))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def rate_calc(db, norm_code, unit_value=None, origin="CN"):

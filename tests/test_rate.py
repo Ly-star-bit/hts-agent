@@ -284,6 +284,13 @@ class TestSearchRecall(unittest.TestCase):
             self.assertFalse([r for r in rows if r["编码"][:2] in ("98", "99")],
                              f"'{kw}' 结果混入 98/99 章")
 
+    def test_and_hits_only_special_still_degrades_to_or(self):
+        # 'wool coat woven' 的 AND 交集只有 1 条 99 章记录。若 98/99 过滤放在
+        # AND/OR 分支判断之后，会走 AND 分支 → 过滤后清空 → 整个查询返回 0 条。
+        rows = rate.search(self.db, "wool coat woven", limit=5)
+        self.assertTrue(rows, "AND 交集只剩 98/99 时应降级到 OR，而不是返回空")
+        self.assertFalse([r for r in rows if r["编码"][:2] in ("98", "99")])
+
     def test_special_chapters_reachable_when_asked(self):
         # 显式按编码查 99 章仍要能查到
         rows = rate.search(self.db, "9903.88", limit=5, sort="code_asc")

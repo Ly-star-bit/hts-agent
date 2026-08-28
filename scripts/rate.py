@@ -424,6 +424,15 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
     # 纯 AND 会因官方品名不含这些词而召回为空，纯 OR 又会被宽泛词淹没精确词。
     tokens = [t for t in re.findall(r"[a-z0-9]+", kw)
               if len(t) >= 2 and not t.isdigit()]  # 纯数字 token（编码片段）无语义，过滤
+    # 98/99 章的排除必须在 AND/OR 分支判断**之前**生效。
+    # 若放在最后过滤：AND 交集恰好只剩 98/99 时 and_hits 非空 → 走 AND 分支 →
+    # 过滤后清空 → 永远不会降级到 OR，整个查询返回 0 条。
+    # （实测 'wool coat woven' 的 AND 交集就只有 1 条 99 章记录。）
+    drop_special = not include_special and not (norm_kw and norm_kw[:2] in ("98", "99"))
+
+    def _filter(s):
+        return {c for c in s if c[:2] not in ("98", "99")} if drop_special else s
+
     def _hits(tok, with_path=True):
         """某个词命中的编码集合：原形 + 词干 + 前缀归并 +（可选）祖先品名"""
         st = _stem(tok)
@@ -433,7 +442,7 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
         if with_path:
             # 让品名为 'Other' 的子目也能被检索到
             hit |= path_index.get(tok, set()) | path_index.get(st, set())
-        return hit
+        return _filter(hit)
 
     if tokens:
         and_hits = None
@@ -449,10 +458,6 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
                 for c in _hits(tok):
                     hit_counts[c] = hit_counts.get(c, 0) + 1
             codes |= {c for c, n in hit_counts.items() if n >= min_hits}
-
-    # 第 98/99 章不是常规归类结果，默认剔除（编码前缀匹配时若用户明确查 98/99 则保留）
-    if not include_special and not (norm_kw and norm_kw[:2] in ("98", "99")):
-        codes = {c for c in codes if c[:2] not in ("98", "99")}
 
     # 打分排序
     import math
