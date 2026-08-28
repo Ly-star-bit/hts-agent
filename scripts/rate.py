@@ -158,13 +158,13 @@ def estimate_ad_valorem(text, unit_value=None):
         return p["ad_valorem"]
     if p["kind"] in ("compound", "specific", "complex"):
         av = p["ad_valorem"] or 0.0
-        if p["specific"] and unit_value:
+        if p["specific"] and unit_value and unit_value > 0:
             total_specific = sum(s["usd"] for s in p["specific"])
             return round(av + total_specific / unit_value * 100.0, 4)
-        if p["kind"] == "compound" and p["ad_valorem"] is not None:
-            return p["ad_valorem"]  # 仅有从价部分可比较
-        if p["kind"] == "complex" and p["ad_valorem"] is not None and not p["specific"]:
-            return p["ad_valorem"]
+        # 复合税只返回从价部分等于凭空抹掉从量部分（'$1.104/kg + 14.9%' 会被当成 14.9%，
+        # 实际按 $4/kg 折算是 42.5%），且调用方无从分辨这个数字是否完整 → 一律返回 None，
+        # 由 calc_total 落到"需人工"。complex 同理，且其多个百分比常作用于不同价值部件，
+        # 相加本身就无意义。
         return None
     return None
 
@@ -203,21 +203,29 @@ def calc_total(db, code, unit_value=None, origin="CN"):
         m = re.search(r"([\d.]+)\s*%", base.get("301加征", ""))
         pct301 = float(m.group(1)) if m else 0.0
 
-    # FLIP 301 强迫劳动关税（2026-07-24 生效，按原产地国家查表；配置禁用 → 0）
-    m2 = re.search(r"([\d.]+)\s*%", base.get("FLIP 301加征", ""))
-    pct_flip = float(m2.group(1)) if m2 else 0.0
+    # FLIP 301 强迫劳动关税（2026-07-24 生效，按原产地查表；配置禁用 → 无档位 → 0）
+    pct_flip, flip_note = _flip_amount(base.get("FLIP 301档位"), base_av)
 
     # 附加税
     add_text = base.get("附加税", "") or ""
     add_av = estimate_ad_valorem(add_text, unit_value) if add_text else 0.0
+    add_unresolved = bool(add_text) and add_av is None
 
-    # 汇总
-    if base_av is not None:
+    # 汇总：任一分项无法折算，就不能给出确定的总额
+    if base_av is None:
+        total = None
+        total_txt = ("需人工（复合/从量税，请提供单位货值）"
+                     if p["kind"] in ("specific", "compound", "complex")
+                     else "需人工（无法解析）")
+    elif add_unresolved:
+        total = None
+        total_txt = "需人工（附加税为从量税，请提供单位货值）"
+    elif flip_note:
+        total = None
+        total_txt = f"需人工（{flip_note}）"
+    else:
         total = round(base_av + pct301 + pct_flip + (add_av or 0.0), 4)
         total_txt = f"{total:g}%（含301/FLIP301/附加税估算）"
-    else:
-        total = None
-        total_txt = "需人工（从量税，需单位货值折算）" if p["kind"] in ("specific", "complex") else "需人工（无法解析）"
 
     kind_names = {
         "free": "免税", "percent": "从价", "specific": "从量",
@@ -233,6 +241,31 @@ def calc_total(db, code, unit_value=None, origin="CN"):
         "总税负估算": total_txt,
     })
     return result
+
+
+def _flip_amount(spec, base_av):
+    """
+    按 FLIP 301 档位算实际加征百分比，返回 (百分比, 无法计算时的原因)。
+
+    档位来自 core.flip301_judge：
+      flat    —— 在 MFN 之上直接加 rate
+      net_mfn —— 与 MFN 合计封顶 cap，实际加征 max(0, cap - MFN)；
+                 EU/TW 合计 10%，JP/KR/CH 合计 12.5%。这一档不能按显示文本
+                 "≤+10%" 直接相加，否则 MFN 已达上限的商品会被凭空多加一遍
+                 （如 EU 产 6109.10.00，MFN 16.5%，正确总额就是 16.5%）。
+      exempt / none —— 0
+    MFN 无法折算时 net_mfn 档也算不出来，返回原因让调用方标"需人工"。
+    """
+    spec = spec or {}
+    mode = spec.get("mode", "none")
+    if mode == "flat":
+        return float(spec.get("rate", 0.0)), ""
+    if mode == "net_mfn":
+        cap = float(spec.get("cap", 0.0))
+        if base_av is None:
+            return 0.0, f"FLIP 301 与 MFN 合计封顶 {cap:g}%，但基础税率无法折算"
+        return max(0.0, round(cap - base_av, 4)), ""
+    return 0.0, ""
 
 
 def _fmt_av(av):

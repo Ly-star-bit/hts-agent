@@ -108,8 +108,15 @@ class TestEstimateAdValorem(unittest.TestCase):
         self.assertAlmostEqual(rate.estimate_ad_valorem("46.3¢/kg + 14.9%", unit_value=2.0), 38.05, places=4)
 
     def test_compound_without_unit_value(self):
-        # 无单位货值时仅返回从价部分
-        self.assertEqual(rate.estimate_ad_valorem("46.3¢/kg + 14.9%"), 14.9)
+        # 无单位货值时无法折算从量部分 → 必须返回 None。
+        # 若只返回从价部分 14.9%，调用方无从分辨这个数字是否完整，
+        # 而 46.3¢/kg 按 $2/kg 折算就有 23.15 个百分点被凭空抹掉（见上一条用例）。
+        self.assertIsNone(rate.estimate_ad_valorem("46.3¢/kg + 14.9%"))
+
+    def test_specific_zero_or_negative_unit_value(self):
+        # 0 是 falsy、负数无意义：都不能当作"已折算"，否则会静默退化成丢弃从量部分
+        self.assertIsNone(rate.estimate_ad_valorem("46.3¢/kg + 14.9%", unit_value=0))
+        self.assertIsNone(rate.estimate_ad_valorem("46.3¢/kg + 14.9%", unit_value=-5))
 
     def test_reference(self):
         self.assertIsNone(rate.estimate_ad_valorem("The duty provided in the applicable subheading"))

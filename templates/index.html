@@ -1107,6 +1107,7 @@ function render(data, source) {
     <div class="stat total">总数<b>${s.total}</b></div>
     <div class="stat hit">命中 301<b>${s.hit}</b></div>`
     + (s.hit_exempt ? `<div class="stat total" title="命中 301 清单，但对应 9903 子目为豁免/排除 0%">命中(豁免 0%)<b>${s.hit_exempt}</b></div>` : '')
+    + (s.hit_unresolved ? `<div class="stat total" title="命中 301 清单，但加征比例无法从税率表解析，需人工核对——不等于豁免">命中(比例待核)<b>${s.hit_unresolved}</b></div>` : '')
     + `<div class="stat miss">未命中<b>${s.miss}</b></div>`
     + (s.undetermined ? `<div class="stat total" title="信息不足无法判定，如仅提供 6 位品目">无法判定<b>${s.undetermined}</b></div>` : '')
     + (s.not_applicable ? `<div class="stat total" title="非中国原产，不适用中国 301">不适用<b>${s.not_applicable}</b></div>` : '');
@@ -1130,8 +1131,10 @@ function render(data, source) {
   document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// 命中 301 清单的所有形态：实际加征「是」、清单内豁免 0%「是(豁免/0%)」、
+// 命中但加征比例无法从税率表解析「是(比例待核)」。三者都算命中清单。
 function isHit(r) {
-  return r['301判定'] === '是' || String(r['301判定']).includes('豁免');
+  return String(r['301判定']).startsWith('是');
 }
 
 function setFilter(f) {
@@ -1327,6 +1330,7 @@ async function showSourceFiles() {
 function tagClass(v) {
   if (v === '是') return { cls: 'hit' };
   if (v === '否') return { cls: 'miss' };
+  if (String(v).includes('比例待核')) return { cls: 'warn' };  // 命中但税率未知，需人工
   if (String(v).includes('豁免')) return { cls: 'warn' };
   return { cls: 'na' };
 }

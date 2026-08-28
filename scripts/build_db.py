@@ -82,14 +82,28 @@ def parse_hts_csv():
 def parse_ustr_pdf():
     """
     解析 USTR China Tariffs PDF，返回 (mapping, pages)：
-      - mapping: {norm8: norm(9903.xx)} 归属映射
-      - pages:   {norm8: 物理页号}      每个 8 位子目在 PDF 中的位置（页号 1 起）
-    PDF 为两列表格：8位HTS子目 → 适用的 Chapter 99 子目。
+      - mapping:  {norm8: norm(9903.xx)}   8 位子目归属映射
+      - mapping10:{norm10: norm(9903.xx)}  10 位统计后缀的精确归属
+      - partial8: {norm8: [norm10, ...]}   仅部分 10 位后缀被列入的 8 位前缀
+      - pages:    {norm(8或10): 物理页号}  在 PDF 中的位置（页号 1 起）
+
+    PDF 为两列表格：HTS 子目 → 适用的 Chapter 99 子目。绝大多数行是 8 位，
+    但有少量行精确到 10 位统计后缀（本版 10460 行中 69 行）。
+
+    这 69 行不能截断成 8 位后合并：
+      ① 同一 8 位前缀下的不同后缀可能归属不同 9903 子目（本版有 4 个前缀如此，
+         例如 6307.90.98 下 …42 是 9903.91.07(+50%)，其余是 9903.88.15(+7.5%)），
+         截断 + setdefault 会让先读到的那个覆盖全部，造成漏征或多征；
+      ② 即使后缀档位一致，清单列出的也只是**特定后缀**，未列出的后缀不在清单内，
+         把归属提升到 8 位会让整个子目被误判为命中。
+    因此这类前缀记入 partial8，查询时要求提供完整 10 位编码，不做 8 位层面的猜测。
     """
     import pdfplumber
 
     mapping = {}
+    mapping10 = {}
     pages = {}
+    prefix_suffixes = {}     # norm8 -> [norm10, ...]，仅由 10 位行填充
     pat = re.compile(r"^(\d{4}\.\d{2}\.\d{2}\.?\d{0,4})\s+(\d{4}\.\d{2}\.\d{2})$")
     with pdfplumber.open(PDF_FILE) as pdf:
         for idx, page in enumerate(pdf.pages):
@@ -99,13 +113,31 @@ def parse_ustr_pdf():
                 m = pat.match(line.strip())
                 if m:
                     hts, c99 = m.groups()
-                    if c99.startswith("9903"):
-                        code = norm(hts)
-                        if len(code) == 10:
-                            code = code[:8]  # 301 判定统一按 8 位子目
-                        mapping.setdefault(code, norm(c99))
+                    if not c99.startswith("9903"):
+                        continue
+                    code, c99n = norm(hts), norm(c99)
+                    if len(code) == 10:
+                        mapping10[code] = c99n
+                        prefix_suffixes.setdefault(code[:8], []).append(code)
                         pages.setdefault(code, page_no)
-    return mapping, pages
+                    else:
+                        if code in mapping and mapping[code] != c99n:
+                            raise ValueError(
+                                f"USTR PDF 中 8 位子目 {hts} 出现互相矛盾的 9903 归属："
+                                f"{mapping[code]} 与 {c99n}（第 {page_no} 页）。"
+                                "请人工核对 PDF 后再构建。")
+                        mapping[code] = c99n
+                        pages.setdefault(code, page_no)
+
+    # 仅以 10 位形式出现的前缀 → partial8；若该前缀同时有 8 位记录则是数据矛盾，直接报错
+    partial8 = {}
+    for pref, suffixes in prefix_suffixes.items():
+        if pref in mapping:
+            raise ValueError(
+                f"USTR PDF 中 8 位子目 {pref} 同时存在 8 位记录（{mapping[pref]}）"
+                f"与 10 位后缀记录（{sorted(suffixes)}），归属语义不明确，请人工核对。")
+        partial8[pref] = sorted(suffixes)
+    return mapping, mapping10, partial8, pages
 
 
 def parse_301_percent(text: str):
@@ -142,6 +174,31 @@ def load_json_data(filename, default):
         return default
 
 
+# 产出下限：低于此值说明源文件换版/换排版导致解析失配，宁可构建失败也不能写库。
+# 依据本版实测值（rates_8 14954 / sec301_map 10391 / c99_percent 463）留约 15% 余量。
+SANITY_MINIMUMS = {
+    "rates_8": 12000,
+    "desc_10": 15000,
+    "sec301_map": 9000,
+    "c99_percent": 350,
+}
+
+
+def sanity_check(counts):
+    """
+    构建产出的下限校验。返回不合格项列表（空列表表示通过）。
+
+    存在的理由：解析"能跑通但抽不出东西"是静默的——若 USTR 换排版导致正则全部失配，
+    sec301_map 会变成 0 条，所有中国原产查询都返回"未命中 301"，业务含义等同于
+    "不加征"，属于全库级漏征，且没有任何报错。
+    """
+    return [
+        f"{name}: {counts.get(name, 0)} 条，低于下限 {low}"
+        for name, low in SANITY_MINIMUMS.items()
+        if counts.get(name, 0) < low
+    ]
+
+
 def build():
     os.makedirs(DATA_DIR, exist_ok=True)
     print("① 解析 htsdata.csv ...")
@@ -149,8 +206,9 @@ def build():
     print(f"   8位子目: {len(rates_8)} | 10位描述: {len(desc_10)} | 附加税行: {len(add_duty)} | 9903子目: {len(c99_rates)}")
 
     print("② 解析 USTR China Tariffs PDF ...")
-    sec301_map, sec301_pages = parse_ustr_pdf()
-    print(f"   301 归属映射: {len(sec301_map)} 条（含页码）")
+    sec301_map, sec301_map_10, sec301_partial_8, sec301_pages = parse_ustr_pdf()
+    print(f"   301 归属映射: 8位 {len(sec301_map)} 条 | 10位精确 {len(sec301_map_10)} 条 "
+          f"| 需10位判定的前缀 {len(sec301_partial_8)} 个")
 
     print("③ 建立 9903.xx → 加征% 映射 ...")
     c99_percent = {}
@@ -183,6 +241,7 @@ def build():
             "ustr_pdf": os.path.basename(PDF_FILE),
             "flip_frn_pdf": "FLIP 301 Investigation Final Action FRN 7-23-26 FINAL.pdf",
             "sec301_mapping_count": len(sec301_map),
+            "sec301_mapping_10_count": len(sec301_map_10),
             "rates_8_count": len(rates_8),
             "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         },
@@ -190,18 +249,36 @@ def build():
         "desc_10": desc_10,          # norm10 -> 具体描述
         "add_duty": add_duty,        # norm(8/10) -> 附加关税
         "sec301_map": sec301_map,    # norm8 -> norm(9903.xx)
-        "sec301_pages": sec301_pages,  # norm8 -> USTR PDF 物理页号（来源追溯用）
+        "sec301_map_10": sec301_map_10,        # norm10 -> norm(9903.xx)，10 位精确归属
+        "sec301_partial_8": sec301_partial_8,  # norm8 -> [norm10]，仅部分后缀入清单，需 10 位判定
+        "sec301_pages": sec301_pages,  # norm(8或10) -> USTR PDF 物理页号（来源追溯用）
         "c99_percent": c99_percent,  # norm(9903.xx) -> 加征百分比
         "flip_301": flip_301,        # 301 flip 历史（此前档位）
         "vietnam": vietnam,          # 越南适用措施与代表编码说明
         "flip301": flip301,          # FLIP 301 强迫劳动调查关税（60 经济体税率表 + 豁免）
         "flip301_exemptions": flip301_exemptions,  # FLIP 301 ANNEX II 豁免编码清单
     }
+    print("④ 产出下限校验 ...")
+    failures = sanity_check({
+        "rates_8": len(rates_8),
+        "desc_10": len(desc_10),
+        "sec301_map": len(sec301_map),
+        "c99_percent": len(c99_percent),
+    })
+    if failures:
+        print("   ✗ 校验未通过，已中止构建，未写入数据库（保留上一版）：")
+        for f_ in failures:
+            print(f"     - {f_}")
+        print("   多半是源文件换版或换排版导致解析失配，请人工核对 htsdata.csv / USTR PDF。")
+        sys.exit(1)
+    print(f"   ✓ 通过（rates_8 {len(rates_8)} | desc_10 {len(desc_10)} | "
+          f"sec301_map {len(sec301_map)} | c99_percent {len(c99_percent)}）")
+
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(db, f, ensure_ascii=False, separators=(",", ":"))
-    print(f"④ 数据库已写入: {OUT_JSON}")
+    print(f"⑤ 数据库已写入: {OUT_JSON}")
 
-    print("⑤ 对比上一版本，生成数据变动清单 ...")
+    print("⑥ 对比上一版本，生成数据变动清单 ...")
     from datetime import datetime
     import db_diff
     built_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

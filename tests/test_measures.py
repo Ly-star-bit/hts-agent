@@ -142,18 +142,30 @@ class TestFlip301ForcedLabor(unittest.TestCase):
 
     def test_eu_net_mfn_10(self):
         r = core.query_one(self.db, "85414300", origin="EU")
-        self.assertEqual(r["FLIP 301加征"], "+10%")
+        self.assertEqual(r["FLIP 301加征"], "≤+10%")  # 名义上限，实际额度取决于 MFN
         self.assertIn("MFN", r["FLIP 301说明"])
+        self.assertEqual(r["FLIP 301档位"], {"mode": "net_mfn", "cap": 10.0})
 
     def test_jp_net_mfn_125(self):
         r = core.query_one(self.db, "85414300", origin="JP")
-        self.assertEqual(r["FLIP 301加征"], "+12.5%")
+        self.assertEqual(r["FLIP 301加征"], "≤+12.5%")
+        self.assertEqual(r["FLIP 301档位"], {"mode": "net_mfn", "cap": 12.5})
 
     def test_not_investigated(self):
-        # 德国（不在 60 名单）：不适用
-        r = core.query_one(self.db, "85414300", origin="DE")
+        # 美国（不在 60 名单）：不适用。
+        # 注意不能拿德国举例——德国属欧盟，而欧盟在 net-of-MFN 10% 档内。
+        r = core.query_one(self.db, "85414300", origin="US")
         self.assertEqual(r["FLIP 301加征"], "")
         self.assertIn("不在 FLIP 301", r["FLIP 301说明"])
+
+    def test_eu_member_normalized_to_eu(self):
+        # 成员国代码必须归一到 EU，否则会落进"不在名单"而静默漏加
+        for member in ("DE", "FR", "IT", "DEU", "FRA"):
+            r = core.query_one(self.db, "85414300", origin=member)
+            self.assertEqual(r["FLIP 301档位"], {"mode": "net_mfn", "cap": 10.0},
+                             f"{member} 未被归一到 EU")
+        self.assertEqual(core.normalize_origin("TWN"), "TW")
+        self.assertEqual(core.normalize_origin("CT"), "TW")
 
     def test_232_exemption_hint(self):
         # 已适用 Section 232 的产品豁免（说明含提示）
@@ -356,14 +368,14 @@ class TestFlip301DataAvailability(unittest.TestCase):
         # 无法确定该经济体是否在 60 名单，应报"数据未覆盖"而非"豁免"
         db = dict(self.db)
         db["flip301"] = {}
-        pct, note, _src = core.flip301_judge(db, "CN", code8="85076000")
+        pct, note, _src, spec = core.flip301_judge(db, "CN", code8="85076000")
         self.assertEqual(pct, "")
         self.assertIn("数据未覆盖", note)
         self.assertNotIn("豁免", pct)
 
     def test_rates_present_still_exempt(self):
         # 数据齐全时豁免判定不受影响（回归）
-        pct, note, _src = core.flip301_judge(self.db, "CN", code8="85076000")
+        pct, note, _src, spec = core.flip301_judge(self.db, "CN", code8="85076000")
         self.assertEqual(pct, "豁免")
         self.assertIn("ANNEX II", note)
 
@@ -376,9 +388,10 @@ class TestBatchStats(unittest.TestCase):
         cls.db = core.load_db()
 
     def test_categories_sum_to_total(self):
-        codes = ["85076000", "01012100", "85414300", "090111"]
+        codes = ["85076000", "01012100", "85414300", "63079098", "6307909899"]
         _results, stats = core.batch_query(self.db, codes, origin="CN")
-        parts = ("hit", "hit_exempt", "miss", "undetermined", "not_applicable")
+        parts = ("hit", "hit_exempt", "hit_unresolved", "miss",
+                 "undetermined", "not_applicable")
         for k in parts:
             self.assertIn(k, stats)
         self.assertEqual(sum(stats[k] for k in parts), stats["total"])
@@ -400,6 +413,129 @@ class TestBatchStats(unittest.TestCase):
         self.assertEqual(stats["not_applicable"], 2)
         self.assertEqual(stats["miss"], 0)
         self.assertEqual(stats["origin"], "越南")
+
+
+class TestFlip301NetOfMfnAmount(unittest.TestCase):
+    """
+    net-of-MFN 档必须按 max(0, cap - MFN) 计算，不能把显示文本里的名义上限直接相加。
+
+    此前的测试只断言 FLIP 301加征 == "+10%" 就算通过，从没断言过最终税额，
+    这批 bug 正是从这个缝里漏过去的——所以这里一律断言数值。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_mfn_above_cap_means_zero_flip(self):
+        # 6109.10.00 MFN 16.5% ≥ 上限 → FLIP 实际加征 0，总额就是 MFN
+        for origin, cap in (("EU", 10.0), ("TW", 10.0), ("JP", 12.5), ("KR", 12.5)):
+            r = rate.calc_total(self.db, "61091000", origin=origin)
+            self.assertEqual(r["基础等效从价"], "16.5%")
+            self.assertEqual(r["FLIP 301加征数值"], 0.0, f"{origin} 不应在 MFN 已达上限时再加")
+            self.assertIn("16.5%", r["总税负估算"])
+
+    def test_mfn_below_cap_tops_up_to_cap(self):
+        # 0101.90.40 MFN 4.5% < 上限 → 补足到上限
+        eu = rate.calc_total(self.db, "01019040", origin="EU")
+        self.assertEqual(eu["FLIP 301加征数值"], 5.5)     # 10 - 4.5
+        self.assertIn("10%", eu["总税负估算"])
+        jp = rate.calc_total(self.db, "01019040", origin="JP")
+        self.assertEqual(jp["FLIP 301加征数值"], 8.0)     # 12.5 - 4.5
+        self.assertIn("12.5%", jp["总税负估算"])
+
+    def test_flat_tier_unaffected(self):
+        # flat 档仍是在 MFN 之上直接加，不封顶
+        r = rate.calc_total(self.db, "61091000", origin="CA")
+        self.assertEqual(r["FLIP 301加征数值"], 10.0)
+        self.assertIn("26.5%", r["总税负估算"])          # 16.5 + 10
+
+    def test_eu_member_gets_same_amount_as_eu(self):
+        de = rate.calc_total(self.db, "01019040", origin="DE")
+        eu = rate.calc_total(self.db, "01019040", origin="EU")
+        self.assertEqual(de["FLIP 301加征数值"], eu["FLIP 301加征数值"])
+        self.assertEqual(de["总税负估算"], eu["总税负估算"])
+
+    def test_net_mfn_unresolvable_mfn_is_not_silently_zero(self):
+        # MFN 是复合税且未给货值 → 封顶算不出来，必须标"需人工"而不是当作 0
+        r = rate.calc_total(self.db, "04022950", origin="EU")
+        self.assertIn("需人工", r["总税负估算"])
+
+
+class TestSec301TenDigit(unittest.TestCase):
+    """USTR 清单中精确到 10 位统计后缀的子目，不能截断成 8 位后合并"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_ten_digit_exact_match(self):
+        # 6307.90.98.42 → 9903.91.07 (+50%)，与同前缀其他后缀的 +7.5% 不同。
+        # 截断成 8 位再 setdefault 会让它拿到 +7.5%，漏征 42.5 个百分点。
+        r = core.query_one(self.db, "6307909842", origin="CN")
+        self.assertEqual(r["301判定"], "是")
+        self.assertEqual(r["9903子目"], "9903.91.07")
+        self.assertEqual(r["301加征"], "+50%")
+        t = rate.calc_total(self.db, "6307909842", origin="CN")
+        self.assertEqual(t["301加征数值"], 50.0)
+
+    def test_sibling_suffix_keeps_own_tier(self):
+        r = core.query_one(self.db, "6307909825", origin="CN")
+        self.assertEqual(r["9903子目"], "9903.88.15")
+        self.assertEqual(r["301加征"], "+7.5%")
+
+    def test_unlisted_suffix_is_miss(self):
+        # 清单只列特定后缀，未列出的后缀不在清单内
+        r = core.query_one(self.db, "6307909899", origin="CN")
+        self.assertEqual(r["301判定"], "否")
+        self.assertEqual(r["301加征"], "")
+
+    def test_eight_digit_alone_is_undetermined(self):
+        # 只给 8 位无法判定档位，必须要求补全而不是猜一个
+        r = core.query_one(self.db, "63079098", origin="CN")
+        self.assertEqual(r["301判定"], "无法判定")
+        self.assertIn("10 位", r["备注"])
+        self.assertEqual(r["301加征"], "")
+
+    def test_ordinary_eight_digit_unaffected(self):
+        for code, c99, pct in (("85076000", "9903.91.06", "+25%"),
+                               ("01012100", "9903.88.15", "+7.5%")):
+            r = core.query_one(self.db, code, origin="CN")
+            self.assertEqual(r["9903子目"], c99)
+            self.assertEqual(r["301加征"], pct)
+
+
+class TestBuildSanityCheck(unittest.TestCase):
+    """构建产出下限校验：解析失配导致产出为空时必须失败，不能照常写库"""
+
+    def test_empty_mapping_fails(self):
+        import build_db
+        failures = build_db.sanity_check(
+            {"rates_8": 0, "desc_10": 0, "sec301_map": 0, "c99_percent": 0})
+        self.assertEqual(len(failures), 4)
+        self.assertTrue(any("sec301_map" in f for f in failures))
+
+    def test_current_build_passes(self):
+        import build_db
+        db = core.load_db()
+        self.assertEqual(build_db.sanity_check({
+            "rates_8": len(db["rates_8"]),
+            "desc_10": len(db["desc_10"]),
+            "sec301_map": len(db["sec301_map"]),
+            "c99_percent": len(db["c99_percent"]),
+        }), [])
+
+    def test_partial_drop_detected(self):
+        # 只掉一半也要被拦下（下限留了约 15% 余量，掉 50% 必然触发）
+        import build_db
+        db = core.load_db()
+        failures = build_db.sanity_check({
+            "rates_8": len(db["rates_8"]) // 2,
+            "desc_10": len(db["desc_10"]),
+            "sec301_map": len(db["sec301_map"]),
+            "c99_percent": len(db["c99_percent"]),
+        })
+        self.assertTrue(any("rates_8" in f for f in failures))
 
 
 class TestMeasuresConfigCache(unittest.TestCase):

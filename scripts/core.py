@@ -127,6 +127,28 @@ def _fmt_c99(c99):
     return c99
 
 
+# ---------- Section 301 归属查找 ----------
+
+def _sec301_lookup(db, code, code8):
+    """
+    查 Section 301 归属，返回 (c99 或 None, 无法判定时的说明文本)。
+
+    USTR 清单绝大多数按 8 位子目列示，但有少量精确到 10 位统计后缀。对这些子目：
+      - 给出 10 位编码 → 精确匹配；不在清单内的后缀就是未命中（清单只列特定后缀）
+      - 只给 8 位编码 → 无法判定。同一前缀下不同后缀可能档位不同（如 6307.90.98 下
+        …42 是 +50%，其余是 +7.5%），任何 8 位层面的归纳都会算错，因此要求补全 10 位。
+    """
+    partial = (db.get("sec301_partial_8") or {}).get(code8)
+    if partial:
+        if len(code) == 10:
+            return (db.get("sec301_map_10") or {}).get(code), ""
+        listed = "、".join(fmt(s, 10) for s in partial[:4])
+        more = f" 等 {len(partial)} 个" if len(partial) > 4 else ""
+        return None, (f"⚠ 该 8 位子目下仅特定 10 位后缀列入 301 清单（{listed}{more}），"
+                      f"且不同后缀加征档位可能不同，请提供完整 10 位编码后重查")
+    return (db.get("sec301_map") or {}).get(code8), ""
+
+
 # ---------- 301 flip 历史 ----------
 
 def flip_info(db, code8, c99, pct):
@@ -184,23 +206,56 @@ def vietnam_info(db, code8, origin="VN"):
 
 # ---------- FLIP 301 强迫劳动关税（2026-07-24 生效） ----------
 
+# FLIP 301 税率表以经济体为单位列示（EU / TW 等），但用户可能填成员国或三字母代码。
+# 未做归一化时 'DE' 会落到"不在 60 名单" → 静默漏加 10%，因此显式建别名表。
+_EU_MEMBERS = (
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU",
+    "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE",
+    "AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA", "DEU", "GRC",
+    "HUN", "IRL", "ITA", "LVA", "LTU", "LUX", "MLT", "NLD", "POL", "PRT", "ROU", "SVK",
+    "SVN", "ESP", "SWE",
+)
+ORIGIN_ALIASES = {m: "EU" for m in _EU_MEMBERS}
+ORIGIN_ALIASES.update({
+    "EUR": "EU", "EU27": "EU",
+    "TWN": "TW", "CT": "TW",          # CT 为 HTS 中台湾的传统代码
+    "CHN": "CN", "HKG": "HK", "VNM": "VN", "JPN": "JP", "KOR": "KR",
+    "CHE": "CH", "GBR": "GB", "CAN": "CA", "MEX": "MX", "IND": "IN", "BRA": "BR",
+})
+
+
+def normalize_origin(origin_code):
+    """把成员国 / 三字母代码归一到 FLIP 301 税率表使用的经济体代码"""
+    o = (origin_code or "").strip().upper()
+    return ORIGIN_ALIASES.get(o, o)
+
+
 def flip301_judge(db, origin_code, code8=""):
     """
     FLIP 301 强迫劳动调查关税（Section 301，2026-07-24 生效）按原产地国家查表。
 
-    返回 (加征文本, 说明, 来源dict)：
-      - "豁免"：编码命中 ANNEX II 豁免清单（通用 Part A / 经济体专属 / CAFTA-DR 纺织品），不加征
+    返回 (加征文本, 说明, 来源dict, 档位spec)：
+      - "豁免"：编码命中 ANNEX II 豁免清单（通用 Part A / 经济体专属 / Part O 纺织品），不加征
       - "+12.5%"：12.5% 档（all other investigated）：中国、香港、越南、新加坡、巴西等
       - "+10%"：10% 档：加拿大、墨西哥、印度、英国等 17 个
       - net-of-MFN：欧盟/台湾（合计 10%）、日本/韩国/瑞士（合计 12.5%）
       - 不在 60 名单：不适用
+
+    档位spec 供 rate.calc_total 做数值计算，形如：
+      {"mode": "flat",    "rate": 12.5}   在 MFN 之上直接加 12.5%
+      {"mode": "net_mfn", "cap": 10.0}    与 MFN 合计封顶 10% → 实际加征 max(0, 10 - MFN)
+      {"mode": "exempt"}                  豁免，加征 0
+      {"mode": "none"}                    不适用 / 数据未覆盖
+    加征文本只适合展示；net-of-MFN 档的 "+10%" 是名义上限而非实际加征额，
+    数值计算必须走 spec，否则 MFN 已达上限的商品会被多加一遍。
+
     豁免：已适用 Section 232 关税的产品、ANNEX II 清单。
     来源dict：{"文件", "位置", "Part", "范围限制"}，供 Web 端来源追溯弹窗使用。
     """
     f = db.get("flip301") or {}
     rates = f.get("rates") or {}
     ex = db.get("flip301_exemptions") or {}
-    o = (origin_code or "").strip().upper()
+    o = normalize_origin(origin_code)
     frn_file = (db.get("meta") or {}).get(
         "flip_frn_pdf", "FLIP 301 Investigation Final Action FRN 7-23-26 FINAL.pdf")
 
@@ -217,7 +272,7 @@ def flip301_judge(db, origin_code, code8=""):
     # ⓪ 数据源可用性先于任何判定：缺税率表时无法确定该经济体是否在 60 名单内，
     #    此时若因命中 ANNEX II 而返回"豁免"，等于把"缺数据"说成"不加征"——必须显式标注未覆盖。
     if not f:
-        return "", "数据未覆盖（缺 FLIP 301 数据源）", _src("", "", "")
+        return "", "数据未覆盖（缺 FLIP 301 数据源）", _src("", "", ""), {"mode": "none"}
 
     # ① ANNEX II 豁免清单判定（逐编码）：通用 Part A / 经济体专属 / CAFTA-DR（仅 JO/SV/GT）
     if code8:
@@ -229,33 +284,33 @@ def flip301_judge(db, origin_code, code8=""):
             scope_txt = f"，范围限制：{scope}（仅该范围商品豁免）" if scope else ""
             page_txt = f"（FRN 物理页 {page}）" if page else ""
             return "豁免", f"ANNEX II 通用豁免（Part A{scope_txt}），不适用 FLIP 301{page_txt}", _src(
-                page, "ANNEX II Part A（通用豁免，所有被调查经济体）", scope)
+                page, "ANNEX II Part A（通用豁免，所有被调查经济体）", scope), {"mode": "exempt"}
         if code8 in by_econ.get(o, []):
             scope = ((ex.get("by_economy_scopes") or {}).get(o) or {}).get(code8, "")
             page = ((ex.get("by_economy_pages") or {}).get(o) or {}).get(code8, "")
             scope_txt = f"，范围限制：{scope}（仅该范围商品豁免）" if scope else ""
             page_txt = f"（FRN 物理页 {page}）" if page else ""
             return "豁免", f"ANNEX II 豁免（该经济体专属 Part{scope_txt}），不适用 FLIP 301{page_txt}", _src(
-                page, f"ANNEX II 该经济体专属（{o}）", scope)
+                page, f"ANNEX II 该经济体专属（{o}）", scope), {"mode": "exempt"}
         if o in ("JO", "SV", "GT") and code8 in by_econ.get("CAFTA_DR", []):
             page = ((ex.get("by_economy_pages") or {}).get("CAFTA_DR") or {}).get(code8, "")
             page_txt = f"（FRN 物理页 {page}）" if page else ""
-            return "豁免", f"ANNEX II Part O（CAFTA-DR 纺织品），不适用 FLIP 301{page_txt}", _src(
-                page, "ANNEX II Part O（CAFTA-DR 免税纺织品）", "")
+            return "豁免", f"ANNEX II Part O（约旦 / 萨尔瓦多 / 危地马拉纺织品），不适用 FLIP 301{page_txt}", _src(
+                page, "ANNEX II Part O（约旦 / 萨尔瓦多 / 危地马拉 免税纺织品）", ""), {"mode": "exempt"}
     if o in rates.get("10", []):
-        return "+10%", f"FLIP 301 强迫劳动关税 10%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）", _src(
-            "", "FRN 税率表（10% 档）", "")
+        return "+10%", "FLIP 301 强迫劳动关税 10%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）", _src(
+            "", "FRN 税率表（10% 档）", ""), {"mode": "flat", "rate": 10.0}
     if o in rates.get("net_mfn_10", []):
-        return "+10%", "FLIP 301 合计 MFN+10%（MFN≥10% 则本税 0；已适用 Section 232 或 Annex 豁免产品除外）", _src(
-            "", "FRN 税率表（net-of-MFN 10%）", "")
+        return "≤+10%", "FLIP 301 与 MFN 合计封顶 10%（MFN≥10% 则本税 0；已适用 Section 232 或 Annex 豁免产品除外）", _src(
+            "", "FRN 税率表（net-of-MFN 10%）", ""), {"mode": "net_mfn", "cap": 10.0}
     if o in rates.get("net_mfn_125", []):
-        return "+12.5%", "FLIP 301 合计 MFN+12.5%（MFN≥12.5% 则本税 0；已适用 Section 232 或 Annex 豁免产品除外）", _src(
-            "", "FRN 税率表（net-of-MFN 12.5%）", "")
+        return "≤+12.5%", "FLIP 301 与 MFN 合计封顶 12.5%（MFN≥12.5% 则本税 0；已适用 Section 232 或 Annex 豁免产品除外）", _src(
+            "", "FRN 税率表（net-of-MFN 12.5%）", ""), {"mode": "net_mfn", "cap": 12.5}
     if o in rates.get("125", []):
         return "+12.5%", "FLIP 301 强迫劳动关税 12.5%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）", _src(
-            "", "FRN 税率表（12.5% 档）", "")
+            "", "FRN 税率表（12.5% 档）", ""), {"mode": "flat", "rate": 12.5}
     return "", f"{o} 不在 FLIP 301 被调查经济体名单（60 个），不适用", _src(
-        "", "FRN 范围（60 经济体名单）", "")
+        "", "FRN 范围（60 经济体名单）", ""), {"mode": "none"}
 
 
 # ---------- 主查询 ----------
@@ -286,9 +341,11 @@ def query_one(db, code, origin="CN"):
 
     # FLIP 301 强迫劳动关税判定（所有原产地按国家查表；配置禁用则不判定）
     if flip301_on:
-        flip301_pct, flip301_note, flip301_src = flip301_judge(db, origin_code, code8=code8)
+        flip301_pct, flip301_note, flip301_src, flip301_spec = flip301_judge(
+            db, origin_code, code8=code8)
     else:
         flip301_pct, flip301_note, flip301_src = "", "FLIP 301 已禁用（配置）", {}
+        flip301_spec = {"mode": "none"}
 
     # 基础信息（两种原产地共用）
     base = rates_8.get(code8, {})
@@ -300,13 +357,30 @@ def query_one(db, code, origin="CN"):
 
     # 中国：301 判定（既有逻辑）；非中国：MFN 通用轨道（不叠加中国 301）
     if is_china:
-        c99 = sec301_map.get(code8)
-        if c99:
+        c99, undetermined_note = _sec301_lookup(db, code, code8)
+        if undetermined_note:
+            # 该 8 位子目下只有特定 10 位后缀入清单，且档位可能不同 → 不做 8 位层面的猜测
+            pct = None
+            is301 = "无法判定"
+            c99_fmt = ""
+            pct_txt = ""
+            note = undetermined_note
+        elif c99:
             pct = c99_percent.get(c99)
-            is301 = "是" if pct else "是(豁免/0%)"
             c99_fmt = _fmt_c99(c99)
-            pct_txt = f"+{pct:g}%" if pct else "0%(豁免)"
-            note = "命中301清单，具体以 USTR 豁免状态为准" if pct else "命中301但对应子目为豁免/排除(0%)"
+            if c99 not in c99_percent:
+                # 数据缺失（9903 税率文本解析失败）≠ 确认豁免，不能折叠成 0%
+                is301 = "是(比例待核)"
+                pct_txt = "需人工核对"
+                note = f"命中301清单，但 {c99_fmt} 的加征比例无法从税率表解析，请人工核对"
+            elif pct:
+                is301 = "是"
+                pct_txt = f"+{pct:g}%"
+                note = "命中301清单，具体以 USTR 豁免状态为准"
+            else:
+                is301 = "是(豁免/0%)"
+                pct_txt = "0%(豁免)"
+                note = "命中301但对应子目为豁免/排除(0%)"
         else:
             pct = None
             is301 = "否"
@@ -370,6 +444,8 @@ def query_one(db, code, origin="CN"):
     if flip301_on:
         result["FLIP 301加征"] = flip301_pct
         result["FLIP 301说明"] = flip301_note
+        # 供 rate.calc_total 做数值计算；net-of-MFN 档不能按显示文本直接相加
+        result["FLIP 301档位"] = flip301_spec
 
     # 来源追溯：每条税负判定的官方出处（文件 + 位置 + 说明），供 Web 端弹窗展示
     sources = []
@@ -383,13 +459,17 @@ def query_one(db, code, origin="CN"):
         "说明": f"一般税率 {general or '—'}" + (f"；特殊 {special}" if special else "") + (f"；第二栏 {col2}" if col2 else ""),
     })
     if is_china and c99:
-        upage = (db.get("sec301_pages") or {}).get(code8, "")
+        # 10 位精确命中时定位到该 10 位行的页码，否则用 8 位子目的页码
+        pages = db.get("sec301_pages") or {}
+        matched = code if code in (db.get("sec301_map_10") or {}) else code8
+        upage = pages.get(matched, "")
         sources.append({
             "key": "ustr_pdf",
             "类型": "301 加征",
             "文件": f"{meta.get('ustr_pdf', 'China Tariffs_2026HTSRev15.pdf')}（USTR 301 中国清单）",
             "位置": f"第 {upage} 页" if upage else "",
-            "说明": f"8 位子目 {fmt(code8, 8)} → Chapter 99 子目 {c99_fmt}，加征 {pct_txt or '—'}",
+            "说明": f"{'10 位子目' if len(matched) == 10 else '8 位子目'} {fmt(matched, len(matched))}"
+                    f" → Chapter 99 子目 {c99_fmt}，加征 {pct_txt or '—'}",
         })
     if flip301_on and flip301_src:
         sources.append({"key": flip301_src.get("key", "flip_frn"), "类型": "FLIP 301", **flip301_src, "说明": flip301_note})
@@ -408,17 +488,21 @@ def batch_query(db, codes, origin="CN"):
     统计口径（"命中 301 清单但税率为 0"与"根本不在清单上"是两回事，分开计数）：
       - hit             命中清单且实际加征（301判定 == '是'）
       - hit_exempt      命中清单但对应子目为豁免/排除 0%（'是(豁免/0%)'）
+      - hit_unresolved  命中清单但加征比例无法解析（'是(比例待核)'）——不是豁免，需人工
       - miss            未命中 301 清单（'否'）
-      - undetermined    信息不足无法判定（如仅给到 6 位品目）
+      - undetermined    信息不足无法判定（6 位品目、或需补全 10 位后缀）
       - not_applicable  非中国原产，不适用中国 301
-    hit + hit_exempt + miss + undetermined + not_applicable == total
+    六项之和 == total
     """
     results = [query_one(db, c, origin=origin) for c in codes]
-    counts = {"hit": 0, "hit_exempt": 0, "miss": 0, "undetermined": 0, "not_applicable": 0}
+    counts = {"hit": 0, "hit_exempt": 0, "hit_unresolved": 0,
+              "miss": 0, "undetermined": 0, "not_applicable": 0}
     for r in results:
         j = str(r["301判定"])
         if j == "是":
             counts["hit"] += 1
+        elif "比例待核" in j:             # 是(比例待核)：数据缺失，不能算作豁免
+            counts["hit_unresolved"] += 1
         elif j.startswith("是"):          # 是(豁免/0%)
             counts["hit_exempt"] += 1
         elif "不适用" in j:
