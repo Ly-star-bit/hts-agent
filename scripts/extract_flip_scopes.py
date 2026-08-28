@@ -89,6 +89,29 @@ def extract():
     return universal_scopes, universal_pages, by_economy_scopes, by_economy_pages
 
 
+def _report_delta(old_u, old_e, new_u, new_e):
+    """
+    重建前后的差异必须打出来。
+
+    这是影响税额的数据：多一个编码 = 少收一笔 FLIP 301，少一个 = 多收。
+    静默覆盖等于把税率变更藏进一次例行重跑里。
+    """
+    du = set(new_u) - set(old_u), set(old_u) - set(new_u)
+    print(f"  Part A 通用豁免：{len(old_u)} → {len(new_u)}"
+          f"（新增 {len(du[0])}，移除 {len(du[1])}）")
+    add_t = rm_t = 0
+    for eco in sorted(set(old_e) | set(new_e)):
+        a, b = set(old_e.get(eco) or []), set(new_e.get(eco) or [])
+        add, rm = b - a, a - b
+        add_t += len(add)
+        rm_t += len(rm)
+        if add or rm:
+            print(f"  {eco:9} {len(a):5} → {len(b):5}  新增 {len(add):3} 移除 {len(rm):3}"
+                  + (f"  移除例 {sorted(rm)[:3]}" if rm else ""))
+    print(f"  Parts B-O 合计：新增豁免 {add_t} 个（这些此前被多收 FLIP 301），"
+          f"移除豁免 {rm_t} 个（这些此前被少收）")
+
+
 def merge_and_save(us, up, es, ep):
     with open(EXEMPTIONS_JSON, encoding="utf-8-sig") as f:
         data = json.load(f)
@@ -99,13 +122,34 @@ def merge_and_save(us, up, es, ep):
     data["by_economy_pages"] = ep
     data["scoped_count"] = sum(1 for s in us.values() if s)
 
+    # 权威豁免列表也由本次提取重建。
+    #
+    # 此前这里写的是"原 universal/by_economy 列表保持不变"，于是同一份事实存了两套：
+    # by_economy（判豁免、影响税额）来自更早的按页归属，by_economy_pages（仅作出处
+    # 展示）来自这里的行/表级 Part 状态机。ANNEX II 里 Part 常常从页面中部开始
+    # （物理页 245 上半是 Part B、下半是 Part C），按页归属就会整段错位。
+    # 实测两者相差 189 个编码：83 个被错判为豁免（少收 10~12.5% FLIP 301），
+    # 106 个漏判（多收）。例：3823.11.00（硬脂酸）在 FRN 页 245 属 Part C（EU），
+    # 却被记进 GB，英国产该货会被告知"豁免"，实际 GB 在 10% 档。
+    #
+    # 两份数据能各自演化而无人比对，本身就是缺陷。现在统一由这里生成，
+    # 并有 tests/test_flip_exemptions.py 锁住一致性。
+    prev_u, prev_e = data.get("universal") or [], data.get("by_economy") or {}
+    data["universal"] = sorted(up)
+    data["by_economy"] = {k: sorted(v) for k, v in sorted(ep.items())}
+    _report_delta(prev_u, prev_e, data["universal"], data["by_economy"])
+
     meta = dict(data.get("meta", {}))
     meta["scope_extraction"] = (
-        "2026-08-14 从 FRN 重新提取：补充各编码 Scope Limitations（Aircraft/Pharma）"
-        "与物理页码；universal_scopes/universal_pages/by_economy_scopes/by_economy_pages"
-        "为新增键，原 universal/by_economy 列表保持不变。"
+        "2026-08-14 从 FRN 提取 Scope Limitations 与物理页码；"
+        "2026-08-28 起 universal / by_economy 亦由同一次提取重建（此前按页归属，"
+        "Part 从页面中部开始时会整段错位，两套数据相差 189 个编码）。"
     )
-    meta["parts_page_physical"] = "物理页号 1 起，与浏览器 #page=N 一致（Part A 起始于 PDF 物理页 139 附近）"
+    meta["parts_page_physical"] = (
+        "物理页号 1 起，与浏览器 #page=N 一致。注意 meta.parts 的页范围是人工粗标，"
+        "一页上可能同时结束上一 Part、开始下一 Part（如页 245 上半 Part B、下半 Part C），"
+        "因此编码的实际页号可能落在标注范围之外——以 *_pages 为准，勿用 parts 反推归属。"
+    )
     data["meta"] = meta
 
     tmp = EXEMPTIONS_JSON + ".tmp"

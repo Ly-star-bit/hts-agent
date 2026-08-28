@@ -323,11 +323,20 @@ def build():
         print("   首次构建，无历史版本可对比（已保存基准快照）。")
     else:
         s = result["stats"]
-        print(f"   变动统计：新增 {s.get('added', 0)} | 删除 {s.get('removed', 0)} | "
-              f"税率变化 {s.get('rate_changed', 0)} | 301变化 {s.get('sec301_changed', 0)}")
+        # 这里必须把 stats 的全部键打出来，不能写死几个。此前只印前四项，
+        # 结果一次改动了 189 个 FLIP 301 豁免编码的重建在控制台上显示"全 0"，
+        # 运维看到的是"没变"。构建日志是这份数据唯一的人工核对点。
+        print(f"   变动统计（共 {result.get('total_changes', 0)} 条）："
+              + " | ".join(f"{k} {v}" for k, v in s.items() if v) or "   无变动")
+        if result.get("new_categories"):
+            print("   ⚠ 以下类别本次首次纳入监控，无历史快照可比对，本次不代表"
+                  "『无变化』，下次构建起生效：")
+            print("     " + "、".join(result["new_categories"]))
         for ch in result["changes"][:10]:
             print(f"     [{ch['类型']}] {ch['编码']} {ch['描述'][:30]} | {ch['旧']} → {ch['新']}")
-        if len(result["changes"]) > 10:
+        if result.get("truncated"):
+            print(f"     ...（明细另有 {result['omitted']} 条未展示，见 data/.db_changes.json）")
+        elif len(result["changes"]) > 10:
             print(f"     ...（其余 {len(result['changes']) - 10} 条见 Web 端『数据变动』）")
     db_diff.save_changes(result)
     db_diff.save_fingerprint(db)
