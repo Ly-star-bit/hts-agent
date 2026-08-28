@@ -760,10 +760,16 @@
       <div class="inline-form">
         <input type="text" id="searchKeyword" class="grow" placeholder="输入英文关键词或 HTS 编码，支持多个词（AND 匹配）">
         <select id="searchSort" class="narrow" title="排序方式">
-          <option value="tax_asc">最低税率优先</option>
-          <option value="tax_desc">最高税率优先</option>
           <option value="relevance">相关度优先</option>
+          <option value="total_asc">总税负最低优先</option>
+          <option value="tax_asc">基础税率最低（不含 301）</option>
+          <option value="tax_desc">基础税率最高</option>
           <option value="code_asc">编码升序</option>
+        </select>
+        <select id="searchOrigin" class="narrow" title="原产地（按总税负排序时用于计算 301/FLIP）">
+          <option value="CN">中国（含 301）</option>
+          <option value="VN">越南</option>
+          <option value="OTHER">其他国家</option>
         </select>
         <input type="number" id="searchUnitValue" class="narrow" placeholder="单位货值 USD（可选）" title="折算从量税用，如按公斤计重填每公斤货值">
         <button class="btn-primary" id="btnSearch" onclick="doSearch()">搜索</button>
@@ -1628,6 +1634,7 @@ async function doSearch() {
     const body = {
       keyword: kw,
       sort: document.getElementById('searchSort').value,
+      origin: document.getElementById('searchOrigin').value,
       limit: 100
     };
     const unitValue = parseFloat(document.getElementById('searchUnitValue').value);
@@ -2249,19 +2256,36 @@ function loadChanges() {
         return;
       }
       const s = d.stats || {};
-      const total = (s.added || 0) + (s.removed || 0) + (s.rate_changed || 0) + (s.sec301_changed || 0);
+      // total_changes 由后端给出，与明细上限无关。旧版前端自行累加四类计数，
+      // 而那四个数本身就被 300 条上限腰斩过，两处都不完整。
+      const total = d.total_changes != null ? d.total_changes
+        : Object.values(s).reduce((a, b) => a + (b || 0), 0);
       let html = `<div class="stats">
         <div class="stat total">变动总数<b>${total}</b></div>
         <div class="stat">新增子目<b>${s.added || 0}</b></div>
         <div class="stat">删除子目<b>${s.removed || 0}</b></div>
         <div class="stat">税率变化<b>${s.rate_changed || 0}</b></div>
         <div class="stat" style="color:var(--hit)">301 变化<b>${s.sec301_changed || 0}</b></div>
+        <div class="stat">附加税<b>${s.add_duty_changed || 0}</b></div>
+        <div class="stat" style="color:var(--warn)">措施数据<b>${s.measure_changed || 0}</b></div>
       </div>`;
       if (d.built_at) html += `<div class="hint">最近更新：${esc(d.built_at)}</div>`;
+      // 新纳入对比的类别：无历史快照可比，这次一定显示"无变动"，
+      // 必须说明是"比不了"而不是"没变"
+      if (d.new_categories && d.new_categories.length) {
+        html += `<div class="info-bar">以下类别本次首次纳入变动监控，无历史快照可比对，
+          下次更新起生效：<b>${esc(d.new_categories.join('、'))}</b></div>`;
+      }
+      if (d.truncated) {
+        html += `<div class="error-bar show">⚠ 明细仅显示前 ${(d.changes || []).length} 条，
+          另有 <b>${d.omitted}</b> 条未展示。上方计数为完整数字。
+          需要全量清单请查看 <code>data/.db_changes.json</code> 或重建时的构建日志。</div>`;
+      }
       if (!d.changes || !d.changes.length) {
         html += '<div class="info-bar">本次更新无明细变动。</div>';
       } else {
-        html += '<div class="change-card"><div class="change-title">变动明细（最多显示 300 条）</div>' +
+        html += `<div class="change-card"><div class="change-title">变动明细（共 ${total} 条${
+          d.truncated ? `，显示前 ${d.changes.length} 条` : ''}）</div>` +
           d.changes.map(c => `
             <div class="change-item">
               <span class="ch-type">${esc(c['类型'])}</span>

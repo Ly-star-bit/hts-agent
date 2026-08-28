@@ -308,6 +308,81 @@ class TestSearchRecall(unittest.TestCase):
                         f"首位应是服装章，实际 {rows[0]['编码']}")
 
 
+class TestTotalCostSort(unittest.TestCase):
+    """
+    按总税负排序。
+
+    默认排序此前是 tax_asc（基础等效从价），配的文案是"找税率最低的编码"，
+    但基础税率最低 ≠ 总税负最低：8215.99.30 基础 14% 却不在 301 清单，
+    总税负 26.5%；8215.99.35 基础 6.8% 但 +7.5% 301 +12.5% FLIP，总 26.8%。
+    按基础税率挑"最便宜"会挑错，且用户看不出来。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def _codes(self, sort, q="不锈钢餐具", **kw):
+        return [r["编码"] for r in rate.search(self.db, q, limit=20, sort=sort, **kw)]
+
+    def test_default_is_relevance(self):
+        """默认不再按基础税率排——那个顺序会误导人"""
+        self.assertEqual(rate.search(self.db, "battery", limit=5),
+                         rate.search(self.db, "battery", limit=5, sort="relevance"))
+
+    def test_reversal_case(self):
+        """本工具最容易误导人的一组：基础税率顺序与总税负顺序相反"""
+        base = self._codes("tax_asc")
+        total = self._codes("total_asc")
+        self.assertLess(base.index("8215.99.35"), base.index("8215.99.30"),
+                        "前置条件：基础税率下 .35 应排在 .30 前")
+        self.assertLess(total.index("8215.99.30"), total.index("8215.99.35"),
+                        "总税负下 .30（26.5%）应排在 .35（26.8%）前")
+
+    def test_total_ascending(self):
+        rows = rate.search(self.db, "不锈钢餐具", limit=20, sort="total_asc")
+        vals = [r["总税负数值"] for r in rows if r["总税负数值"] is not None]
+        self.assertEqual(vals, sorted(vals))
+
+    def test_uncomputable_last(self):
+        """从量税折算不出百分比的排最后，与 tax_asc 处理一致"""
+        rows = rate.search(self.db, "不锈钢餐具", limit=20, sort="total_asc")
+        seen_none = False
+        for r in rows:
+            if r["总税负数值"] is None:
+                seen_none = True
+            else:
+                self.assertFalse(seen_none, "可折算的行出现在不可折算的行之后")
+
+    def test_unit_value_makes_specific_comparable(self):
+        """给了单位货值，复合税就能折算，不该再垫底"""
+        rows = rate.search(self.db, "不锈钢餐具", limit=20,
+                           sort="total_asc", unit_value=2.0)
+        self.assertTrue(any(r["编码"] == "8215.99.01" and r["总税负数值"] is not None
+                            for r in rows), "给了单位货值后复合税仍未折算")
+
+    def test_origin_affects_order(self):
+        """越南原产不加 301，顺序应与中国不同"""
+        cn = [r["总税负数值"] for r in rate.search(
+            self.db, "不锈钢餐具", limit=20, sort="total_asc", origin="CN")
+            if r["总税负数值"] is not None]
+        vn = [r["总税负数值"] for r in rate.search(
+            self.db, "不锈钢餐具", limit=20, sort="total_asc", origin="VN")
+            if r["总税负数值"] is not None]
+        self.assertTrue(vn and cn)
+        self.assertLess(sum(vn), sum(cn), "越南总税负应低于中国（无 301）")
+
+    def test_total_num_parsing(self):
+        self.assertEqual(rate._total_num("26.5%（含301/FLIP301/附加税估算）"), 26.5)
+        self.assertEqual(rate._total_num("0%"), 0.0)
+        self.assertIsNone(rate._total_num("需人工（无法解析）"))
+        self.assertIsNone(rate._total_num(""))
+        self.assertIsNone(rate._total_num(None))
+
+    def test_deterministic(self):
+        self.assertEqual(self._codes("total_asc"), self._codes("total_asc"))
+
+
 class TestWeaveChapterBias(unittest.TestCase):
     """
     织法 → 章的偏置。

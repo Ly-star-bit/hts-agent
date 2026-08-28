@@ -275,7 +275,12 @@ def api_export(req: ExportRequest):
 
 class SearchRequest(BaseModel):
     keyword: str = Field(default="", description="关键词（英文品名 / 编码）")
-    sort: str = Field(default="tax_asc", description="排序：tax_asc / tax_desc / relevance / code_asc")
+    # 默认从 tax_asc 改为 relevance：基础税率最低 ≠ 总税负最低
+    # （8215.99.30 基础 14% 总 26.5% 比 8215.99.35 基础 6.8% 总 26.8% 更便宜）。
+    # 按成本挑用 total_asc。
+    sort: str = Field(default="relevance",
+                      description="排序：relevance / total_asc / tax_asc / tax_desc / code_asc")
+    origin: str = Field(default="CN", description="原产地，total_asc 排序时用于算 301/FLIP")
     limit: int = Field(default=100, ge=1, le=500)
     unit_value: Optional[float] = Field(default=None, description="单位货值 USD，用于折算从量税（可选）")
     include_special: bool = Field(default=False, description="是否包含第 98/99 章（特殊/临时条款，默认排除）")
@@ -383,15 +388,11 @@ def api_search(req: SearchRequest):
 
         db = get_db()
         rows = rate.search(db, req.keyword, limit=req.limit, sort=req.sort,
-                           include_special=req.include_special)
+                           include_special=req.include_special,
+                           unit_value=req.unit_value, origin=req.origin)
         # 同义词扩展信息：未映射的中文片段必须回报，否则用户会以为已完整检索
         _expanded, applied, leftover = rate.expand_query(req.keyword)
-        # 可选：给定单位货值时计算总税负
-        if req.unit_value:
-            for r in rows:
-                total = rate.calc_total(db, re.sub(r"\D", "", r["编码"]), unit_value=req.unit_value)
-                r["总税负估算"] = total["总税负估算"]
-                r["301加征数值"] = total["301加征数值"]
+        # 总税负列由 rate.search 统一补齐（含 unit_value / origin），此处不再重复计算
         # 一物多号自动识别：分歧应该由结果自己报出来，而不是等用户先意识到
         # "我这可能有多个码"再去手动勾选对比
         import criteria

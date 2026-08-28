@@ -462,6 +462,15 @@ _WEAVE_CHAPTER_BIAS = {
 }
 
 
+_TOTAL_NUM_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*%")
+
+
+def _total_num(text):
+    """'26.5%（含301…）' → 26.5；'需人工（无法解析）' → None（排序时置末）"""
+    m = _TOTAL_NUM_RE.match(str(text or ""))
+    return float(m.group(1)) if m else None
+
+
 def _weave_bias(tokens):
     """
     查询词 → {章: 偏置}。
@@ -507,15 +516,26 @@ def _stem_match(a, b):
     return n >= 5
 
 
-def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
+def search(db, keyword, limit=100, sort="relevance", include_special=False,
+           unit_value=None, origin="CN"):
     """
     关键词搜索 8 位子目：匹配英文品名 + 编码。
 
     sort:
-      - tax_asc   按等效从价税率升序（默认，配合"最低税率"场景）
-      - tax_desc  按等效从价税率降序
-      - relevance 按匹配相关度
-      - code_asc  按编码升序
+      - relevance  按匹配相关度（默认）
+      - total_asc  按**总税负**升序（基础 + 301 + FLIP + 附加税）
+      - tax_asc    按基础等效从价升序
+      - tax_desc   按基础等效从价降序
+      - code_asc   按编码升序
+
+    默认从 tax_asc 改为 relevance：基础税率最低 ≠ 总税负最低。
+    实测 8215.99.30 基础 14%、不在 301 清单，总税负 26.5%；
+    8215.99.35 基础 6.8%、+7.5% 301 + 12.5% FLIP，总税负 26.8%——
+    按基础税率排序会把更贵的那个排在前面，而这页原本的说法是"找税率最低的编码"。
+    要按成本挑请用 total_asc。
+
+    unit_value / origin 仅 total_asc 用到：从量税要有单位货值才能折算成
+    百分比，301/FLIP 要有原产地才知道加不加。
 
     include_special：是否包含第 98/99 章，默认否。
       98 章是特殊归类条款（复进口、随身物品免税等），99 章是临时立法条款
@@ -665,7 +685,26 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
     # 同一个查询两次会返回不同的候选（"梭织涂层夹克"相关度 6.45 那一档，五次跑出
     # 五组不同编码），limit 截断更把这种抖动放大成"结果里有没有这条"。
     # 报关工具的结果必须可复现，也才对得起页面上"确定性结果"的说法。
-    if sort == "tax_asc":
+    # 总税负列对每一行都补。此前只在调用方给了单位货值时才有值，其余情况表格里
+    # 是"—"——而基础税率单独看会误导人（8215.99.30 基础 14% 比 8215.99.35 的
+    # 6.8% 贵，总税负却更便宜），这恰恰是这张表最该给出的信息。
+    # calc_total 单次约 0.04ms，但 rows 在截断前可能有几千行，所以只有 total_asc
+    # 需要全量算（要拿它排序），其余排序等排完序截断后再补。
+    def _fill_total(items):
+        for r in items:
+            t = calc_total(db, r["编码"], unit_value=unit_value, origin=origin)
+            r["总税负估算"] = t["总税负估算"]
+            r["总税负数值"] = _total_num(t["总税负估算"])
+            r["301加征数值"] = t["301加征数值"]
+        return items
+
+    if sort == "total_asc":
+        _fill_total(rows)
+        # 折算不出的（从量/复合税未给单位货值）排最后，与 tax_asc 的处理一致
+        rows.sort(key=lambda r: (r["总税负数值"] is None,
+                                 r["总税负数值"] if r["总税负数值"] is not None else 0,
+                                 r["编码"]))
+    elif sort == "tax_asc":
         rows.sort(key=lambda r: (r["等效从价数值"] is None,
                                  r["等效从价数值"] if r["等效从价数值"] is not None else 0,
                                  r["编码"]))
@@ -678,7 +717,10 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
     else:
         rows.sort(key=lambda r: (-r["相关度"], r["编码"]))
 
-    return rows[:limit]
+    out = rows[:limit]
+    if sort != "total_asc":
+        _fill_total(out)
+    return out
 
 
 def core_fmt(code):
