@@ -392,9 +392,14 @@ def api_search(req: SearchRequest):
                 total = rate.calc_total(db, re.sub(r"\D", "", r["编码"]), unit_value=req.unit_value)
                 r["总税负估算"] = total["总税负估算"]
                 r["301加征数值"] = total["301加征数值"]
+        # 一物多号自动识别：分歧应该由结果自己报出来，而不是等用户先意识到
+        # "我这可能有多个码"再去手动勾选对比
+        import criteria
+        dispute = criteria.detect_dispute(db, rows)
         return {"results": rows, "count": len(rows), "keyword": req.keyword,
                 "检索词": _expanded if applied else "",
-                "同义词映射": applied, "未识别": leftover}
+                "同义词映射": applied, "未识别": leftover,
+                "归类分歧": dispute}
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"搜索服务端异常：{e}")

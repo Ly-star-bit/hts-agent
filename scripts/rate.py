@@ -613,15 +613,23 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
             "相关度": round(score, 2),
         })
 
-    # 排序
+    # 排序。每种排序都以编码作次级键打破平局——rows 的初始顺序来自 set 迭代，
+    # 受 Python 字符串哈希随机化影响，同分项在不同进程里顺序不同。没有次级键时
+    # 同一个查询两次会返回不同的候选（"梭织涂层夹克"相关度 6.45 那一档，五次跑出
+    # 五组不同编码），limit 截断更把这种抖动放大成"结果里有没有这条"。
+    # 报关工具的结果必须可复现，也才对得起页面上"确定性结果"的说法。
     if sort == "tax_asc":
-        rows.sort(key=lambda r: (r["等效从价数值"] is None, r["等效从价数值"] if r["等效从价数值"] is not None else 0))
+        rows.sort(key=lambda r: (r["等效从价数值"] is None,
+                                 r["等效从价数值"] if r["等效从价数值"] is not None else 0,
+                                 r["编码"]))
     elif sort == "tax_desc":
-        rows.sort(key=lambda r: (r["等效从价数值"] is None, -(r["等效从价数值"] if r["等效从价数值"] is not None else 0)))
+        rows.sort(key=lambda r: (r["等效从价数值"] is None,
+                                 -(r["等效从价数值"] if r["等效从价数值"] is not None else 0),
+                                 r["编码"]))
     elif sort == "code_asc":
         rows.sort(key=lambda r: r["编码"])
     else:
-        rows.sort(key=lambda r: -r["相关度"])
+        rows.sort(key=lambda r: (-r["相关度"], r["编码"]))
 
     return rows[:limit]
 

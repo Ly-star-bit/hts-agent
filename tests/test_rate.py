@@ -10,6 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
+import core
 import rate
 
 
@@ -305,6 +306,74 @@ class TestSearchRecall(unittest.TestCase):
         self.assertTrue(rows)
         self.assertTrue(rows[0]["编码"].startswith(("61", "62")),
                         f"首位应是服装章，实际 {rows[0]['编码']}")
+
+
+class TestSearchDeterminism(unittest.TestCase):
+    """
+    同一查询必须每次返回同一批结果。
+
+    候选集合来自 set，迭代顺序受 Python 字符串哈希随机化影响；排序原先只按
+    相关度/税率，同分项因此保留了随机的输入顺序。实测 '梭织涂层夹克' 相关度
+    6.45 那一档，五个进程跑出五组不同编码，limit 截断又把顺序抖动放大成
+    "结果里到底有没有这条"。报关工具的结果不可复现是硬伤，故每种排序都以
+    编码作次级键。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    QUERIES = ["梭织涂层夹克", "jacket", "battery", "cotton shirt"]
+    SORTS = ["relevance", "tax_asc", "tax_desc", "code_asc"]
+
+    def test_repeated_calls_identical(self):
+        for q in self.QUERIES:
+            for s in self.SORTS:
+                a = [r["编码"] for r in rate.search(self.db, q, limit=60, sort=s)]
+                b = [r["编码"] for r in rate.search(self.db, q, limit=60, sort=s)]
+                self.assertEqual(a, b, f"{q}/{s} 两次调用结果不一致")
+
+    def test_ties_broken_by_code(self):
+        """同分项必须按编码升序，这样才与进程无关"""
+        rows = rate.search(self.db, "梭织涂层夹克", limit=100, sort="relevance")
+        self.assertGreater(len(rows), 10)
+        for prev, cur in zip(rows, rows[1:]):
+            if prev["相关度"] == cur["相关度"]:
+                self.assertLess(prev["编码"], cur["编码"],
+                                f"同分未按编码排序：{prev['编码']} 在 {cur['编码']} 之前")
+
+    def test_tax_sort_ties_broken_by_code(self):
+        rows = rate.search(self.db, "jacket", limit=100, sort="tax_asc")
+        for prev, cur in zip(rows, rows[1:]):
+            if prev["等效从价数值"] == cur["等效从价数值"] is not None:
+                self.assertLess(prev["编码"], cur["编码"])
+
+    def test_subprocess_matches(self):
+        """
+        跨进程验证：哈希种子不同的独立解释器必须给出同一结果。
+        同进程内重复调用发现不了这个问题——种子在进程内是固定的。
+        """
+        import json
+        import subprocess
+
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        code = (
+            "import sys; sys.path.insert(0, r'%s')\n"
+            "import core, rate, json\n"
+            "db = core.load_db()\n"
+            "print(json.dumps([r['编码'] for r in "
+            "rate.search(db, '梭织涂层夹克', limit=60, sort='relevance')]))\n"
+        ) % os.path.join(root, "scripts")
+
+        outs = []
+        for seed in ("0", "1", "12345"):
+            env = dict(os.environ, PYTHONHASHSEED=seed)
+            p = subprocess.run([sys.executable, "-c", code], capture_output=True,
+                               text=True, env=env, cwd=root)
+            self.assertEqual(p.returncode, 0, p.stderr[-500:])
+            outs.append(json.loads(p.stdout.strip().splitlines()[-1]))
+        self.assertEqual(outs[0], outs[1], "不同哈希种子下结果不一致")
+        self.assertEqual(outs[1], outs[2], "不同哈希种子下结果不一致")
 
 
 if __name__ == "__main__":

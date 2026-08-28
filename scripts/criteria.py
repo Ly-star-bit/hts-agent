@@ -177,3 +177,145 @@ def compare(db, codes):
                 "不同章的判定依据完全不同，需按 GRI 从『构成基本特征的部件』或"
                 "『最终用途』论证。税率差额显著时建议申请海关预裁定。")
     return {"候选": items, "跨章": cross, "章列表": chapters, "分歧提示": hint}
+
+
+# ---------- 一物多号的自动识别 ----------
+
+DISPUTE_TOP_K = 8       # 只看最相关的前若干条：更靠后的多是同词碰巧命中，不是候选
+DISPUTE_MAX_GROUPS = 5  # 展示上限，超出部分计数告知，不静默截断
+
+_PCT_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _fmt8(code):
+    """'62014035' → '6201.40.35'（core.fmt 的 8 位特化，避免为一个格式化反向依赖 core）"""
+    c = re.sub(r"\D", "", str(code))[:8]
+    return ".".join([c[:4], c[4:6], c[6:8]]) if len(c) == 8 else c
+
+
+def _pct_num(text):
+    """'34.9%（含301…）' → 34.9；'Free' → 0.0；'需折算'/空 → None"""
+    s = str(text or "").strip()
+    if not s:
+        return None
+    if s.lower() in ("free", "免税"):
+        return 0.0
+    m = _PCT_RE.search(s)
+    return float(m.group()) if m else None
+
+
+def detect_dispute(db, rows, top_k=DISPUTE_TOP_K):
+    """
+    从搜索结果里自动识别"一物多号"，不需要用户先勾选。
+
+    分组依据是 4 位品目而不是 8 位子目：同一品目下的相邻子目只是同类商品的
+    参数细分（羊毛含量 36% 上下、尺寸档次），要的是继续问参数；**跨品目**
+    才是真正的归类分歧（塑料雨衣 3926 vs 梭织夹克 6201），两边的论证方向
+    和所需证据完全不同。
+
+    返回 {有分歧, 跨章, 章列表, 分组, 基础税差, 税负反转, 无法比较, 提示}。
+    无分歧时 有分歧=False，前端不显示——避免每次搜索都弹一条警告。
+    """
+    import rate
+
+    groups, order = {}, []
+    for r in (rows or [])[:top_k]:
+        code = re.sub(r"\D", "", str(r.get("编码", "")))
+        if len(code) < 4:
+            continue
+        h4 = code[:4]
+        if h4 not in groups:
+            groups[h4] = {"品目": h4, "章": h4[:2], "代表": r, "命中数": 0}
+            order.append(h4)
+        groups[h4]["命中数"] += 1
+
+    shown, hidden = order[:DISPUTE_MAX_GROUPS], order[DISPUTE_MAX_GROUPS:]
+
+    # 各候选的归类路径，用来算"分歧点"。判定条件常常是一样的
+    # （6201 男式大衣与 6202 女式大衣都是 Of wool + 梭织），列出共同点
+    # 说明不了任何问题——用户要看的是这几个码彼此差在哪一句上。
+    paths = {}
+    for h4 in shown:
+        c8 = re.sub(r"\D", "", str(groups[h4]["代表"].get("编码", "")))[:8]
+        segs = groups[h4]["代表"].get("归类路径") or rate.path_of(db, c8)
+        paths[h4] = [re.sub(r"\s+", " ", s).strip().rstrip(":") for s in segs if s]
+
+    items, uncomparable = [], []
+    for h4 in shown:
+        g = groups[h4]
+        r = g["代表"]
+        code8 = re.sub(r"\D", "", str(r.get("编码", "")))[:8]
+        total = rate.calc_total(db, code8) or {}
+        base_n = r.get("等效从价数值")
+        total_n = _pct_num(total.get("总税负估算"))
+        if total_n is None:
+            # 从量税/复合税没有单位货值折算不出百分比。这类候选不能参与税差
+            # 比较，但必须说出来——否则用户会以为"税差 0"是它们真的一样。
+            uncomparable.append(_fmt8(code8))
+        others = {s for k, v in paths.items() if k != h4 for s in v}
+        distinct = [s for s in paths[h4] if s not in others]
+        items.append({
+            "品目": h4,
+            # 只此候选独有的路径措辞——这几句就是选它 or 不选它的分界
+            "分歧点": distinct[:2],
+            "章": g["章"],
+            "编码": _fmt8(code8),
+            "商品描述": r.get("商品描述", ""),
+            "完整品名": r.get("完整品名", "") or rate.full_desc(db, code8),
+            "一般税率": r.get("一般税率", ""),
+            "等效从价": r.get("等效从价", ""),
+            "等效从价数值": base_n,
+            "总税负估算": total.get("总税负估算", ""),
+            "总税负数值": total_n,
+            "301判定": r.get("301判定", ""),
+            "判定条件": extract(db, code8),
+            "同品目候选数": g["命中数"],
+        })
+
+    chapters = sorted({i["章"] for i in items})
+    cross = len(chapters) > 1
+
+    # 基础税率最低 ≠ 总税负最低。301/FLIP 常把顺序整个翻过来
+    # （Free 但 +25%，输给 0.7% 但 +7.5% 的那个），这是本工具最容易误导人的地方。
+    base_ok = [i for i in items if i["等效从价数值"] is not None]
+    spread = None
+    if len(base_ok) >= 2:
+        spread = round(max(i["等效从价数值"] for i in base_ok)
+                       - min(i["等效从价数值"] for i in base_ok), 2)
+    # 反转只在两个值都有的候选里判断：拿 A 集合的基础最小值去比 B 集合的
+    # 总税负最小值，两边成员不同，结论没有意义
+    both = [i for i in items
+            if i["等效从价数值"] is not None and i["总税负数值"] is not None]
+    reversal = ""
+    if len(both) >= 2:
+        cheap_base = min(both, key=lambda i: i["等效从价数值"])
+        cheap_total = min(both, key=lambda i: i["总税负数值"])
+        if cheap_base["编码"] != cheap_total["编码"]:
+            reversal = (f"基础税率最低的是 {cheap_base['编码']}（{cheap_base['等效从价']}），"
+                        f"但计入 301/FLIP 后总税负最低的反而是 {cheap_total['编码']}"
+                        f"（{cheap_total['总税负数值']:g}% vs {cheap_base['总税负数值']:g}%）"
+                        f"——别只按基础税率挑便宜的。")
+
+    tips = []
+    if cross:
+        tips.append(f"候选跨 {len(chapters)} 个章（{'、'.join(chapters)}），"
+                    "不同章的判定依据完全不同，需按 GRI 从『构成基本特征的部件』或『最终用途』论证。")
+    else:
+        tips.append("候选同属一章、不同品目，分歧点通常在材质/织法/用途的具体措辞上。")
+    if hidden:
+        tips.append(f"另有 {len(hidden)} 个品目未展示（{'、'.join(hidden)}），可在下方结果表中勾选比较。")
+    if uncomparable:
+        tips.append(f"{'、'.join(uncomparable)} 为从量税或复合税，未填单位货值时无法折算成百分比，"
+                    "未计入税差比较。")
+
+    return {
+        "有分歧": len(items) >= 2,
+        "跨章": cross,
+        "章列表": chapters,
+        "分组": items,
+        "基础税差": spread,
+        "税负反转": reversal,
+        "无法比较": uncomparable,
+        "未展示品目": hidden,
+        "提示": " ".join(tips),
+    }

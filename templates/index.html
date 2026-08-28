@@ -384,6 +384,33 @@
   }
   .error-bar.show { display: block; }
 
+  /* 一物多号：结果表上方自动摊开的候选对照 */
+  .dispute-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px; margin-top: 12px;
+  }
+  .dispute-card {
+    border: 1px solid var(--border); border-top: 3px solid var(--warn);
+    border-radius: 10px; padding: 12px 14px; background: var(--gray-bg);
+  }
+  .dispute-head { display: flex; align-items: baseline; gap: 8px; }
+  .dispute-head .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 15px; }
+  .hd { font-size: 11px; color: var(--muted); }
+  .dispute-desc {
+    font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .dispute-rate { font-size: 13px; margin-top: 8px; }
+  .dispute-rate .total { color: var(--hit); }
+  .dispute-sub { font-size: 12px; font-weight: 600; margin-top: 10px; }
+  .dispute-crs { font-size: 12px; margin: 4px 0 0; padding-left: 18px; line-height: 1.6; }
+  /* 分歧点是这张卡的重点：判定条件几个候选常常一模一样，差别全在这几句上 */
+  .dispute-diff {
+    font-size: 12px; margin: 4px 0 0; padding-left: 18px; line-height: 1.6;
+    color: var(--warn); font-weight: 600;
+  }
+  .dispute-none { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.6; }
+
   /* 搜索页内的 AI 补充分析结果 */
   .tag-ai {
     background: var(--primary); color: #fff; border: none;
@@ -748,19 +775,17 @@
         <button class="btn-primary" id="btnSearch" onclick="doSearch()">搜索</button>
       </div>
       <div class="error-bar" id="searchError"></div>
-    </div>
-    <!-- 归类对比：候选常跨章，单个关键词搜不到一起（塑料雨衣 39 章 vs 梭织夹克 62 章
-         用词完全不同），而实际工作中手上往往已经有几个备选税号，因此直接输入是主路径 -->
-    <div class="card">
-      <h2><span class="step">◇</span> 归类对比（一物多号时用）</h2>
-      <p class="hint">同一商品有多个可能税号时，并列对比各自的判定条件与所需证据。
-        可直接输入备选编码，也可在下方搜索结果里勾选。</p>
-      <div class="inline-form">
-        <input type="text" id="cmpCodes" class="grow"
-               placeholder="输入 2 个以上备选编码，逗号分隔，如：3926.20.60, 6201.40.35">
-        <button class="btn-primary" id="btnCompareManual" onclick="doCompareManual()">对比</button>
-      </div>
-      <div class="error-bar" id="cmpError"></div>
+      <!-- 手上已有备选税号时的直接入口。主路径是搜索后由结果自动报分歧
+           （见 #disputeBox），这里只是次要通道，所以折叠起来不占版面。 -->
+      <details style="margin-top:10px;">
+        <summary class="hint" style="cursor:pointer;margin:0;">已有备选税号？直接输入对比 →</summary>
+        <div class="inline-form" style="margin-top:10px;">
+          <input type="text" id="cmpCodes" class="grow"
+                 placeholder="输入 2 个以上备选编码，逗号分隔，如：3926.20.60, 6201.40.35">
+          <button class="btn-primary" id="btnCompareManual" onclick="doCompareManual()">对比</button>
+        </div>
+        <div class="error-bar" id="cmpError"></div>
+      </details>
     </div>
 
     <div class="card" id="searchResultCard" style="display:none;">
@@ -771,6 +796,7 @@
         </button>
       </h2>
       <div id="searchNotes"></div>
+      <div id="disputeBox"></div>
       <div id="aiAssistBox"></div>
       <div class="result-count" id="searchResultCount"></div>
       <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
@@ -1607,6 +1633,7 @@ function renderSearch(data) {
         : '可在「AI 助手」配置 AI 服务后使用补充分析。'}</div>`;
   }
   document.getElementById('searchNotes').innerHTML = notes;
+  document.getElementById('disputeBox').innerHTML = renderDispute(data['归类分歧']);
   syncSearchAiButton();
 
   if (!data.results.length) {
@@ -1625,6 +1652,67 @@ function renderSearch(data) {
   data.results.forEach(r => body.appendChild(searchRow(r)));
   syncCmpButton();
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------- 一物多号：由搜索结果自动报出，不需要用户先勾选 ----------
+   分歧本来就藏在结果里（"锂电池"同时命中 8507 蓄电池与 8506 原电池），
+   等用户自己意识到"我这可能有多个码"再去点对比，等于把最关键的判断
+   甩回给用户。这里在结果表上方直接摊开：各品目的代表编码、税负、
+   分歧点、以及基础税率与总税负是否反转。 */
+function renderDispute(d) {
+  if (!d || !d['有分歧']) return '';
+  const groups = d['分组'] || [];
+  const codes = groups.map(g => g['编码']);
+
+  let h = `<div class="error-bar show" style="margin-top:12px;">
+    ⚠ 这个描述同时命中 <b>${groups.length}</b> 个品目，属于「一物多号」——
+    需要按商品实际特征定夺报哪个。${esc(d['提示'] || '')}</div>`;
+
+  if (d['税负反转']) {
+    h += `<div class="info-bar"><b>注意税负反转：</b>${esc(d['税负反转'])}</div>`;
+  } else if (d['基础税差'] !== null && d['基础税差'] > 0) {
+    h += `<div class="info-bar">候选间基础税率差 <b>${d['基础税差']}</b> 个百分点，
+      归错码的成本直接体现在这里。</div>`;
+  }
+
+  h += `<div class="dispute-grid">`;
+  groups.forEach(g => {
+    // 总税负原串带"（含301/FLIP301/附加税估算）"后缀，卡片里只留百分比
+    const total = String(g['总税负估算'] || '').split('（')[0] || '—';
+    const crs = (g['判定条件'] || []).slice(0, 3).map(c =>
+      `<li><b>${esc(c['类型'])}</b>：${esc(c['原文'])}</li>`).join('');
+    const more = (g['判定条件'] || []).length > 3
+      ? `<li style="color:var(--muted)">…另 ${g['判定条件'].length - 3} 条，见详细对比</li>` : '';
+    h += `<div class="dispute-card">
+      <div class="dispute-head">
+        <b class="code">${esc(g['编码'])}</b>
+        <span class="hd">品目 ${esc(g['品目'])}</span>
+      </div>
+      <div class="dispute-desc" title="${esc(g['完整品名'])}">${esc(g['商品描述'])}</div>
+      <div class="dispute-rate">
+        基础 <b>${esc(g['等效从价'] || '—')}</b>
+        → 总税负 <b class="total">${esc(total)}</b>
+        <span class="hd">301 ${esc(g['301判定'] || '—')}</span>
+      </div>
+      ${(g['分歧点'] || []).length ? `
+        <div class="dispute-sub">与其他候选的分界（税则原文）：</div>
+        <ul class="dispute-diff">${g['分歧点'].map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
+      <div class="dispute-sub">报这个码要能证明：</div>
+      ${crs ? `<ul class="dispute-crs">${crs}${more}</ul>`
+            : `<div class="dispute-none">本地品名未抽出量化条件，
+                 但章注/类注/GRI 不在本地数据内，仍需人工核对官方税则。</div>`}
+      ${g['同品目候选数'] > 1
+        ? `<div class="hd" style="margin-top:6px;">该品目下另有 ${g['同品目候选数'] - 1} 个候选子目</div>` : ''}
+    </div>`;
+  });
+  h += `</div>
+    <div class="actions" style="margin-top:10px;">
+      <button class="btn-primary" onclick='doCompareCodes(${JSON.stringify(codes)})'>
+        详细对比这 ${codes.length} 个（判定条件 + 证据清单）
+      </button>
+      <span class="hint" style="margin:0;">也可在下方结果表勾选任意候选自行组合</span>
+    </div>`;
+  return h;
 }
 
 /* 本地结果与 AI 补召回的行共用同一套单元格，否则两批数据列宽/语义会漂 */
@@ -1768,6 +1856,17 @@ function toggleAllCmp(src) {
   syncCmpButton();
 }
 
+/* 三个入口（自动分歧 / 表格勾选 / 手动输入）走同一条路，
+   免得三处各写一遍 fetch 又各自漂移 */
+async function doCompareCodes(codes) {
+  if (!codes || codes.length < 2) return;
+  try {
+    renderCompare(await apiPost('/api/compare', { codes }));
+  } catch (e) {
+    alert('对比失败：' + e.message);
+  }
+}
+
 async function doCompare() {
   const codes = cmpPicked();
   if (codes.length < 2) return;
@@ -1775,9 +1874,7 @@ async function doCompare() {
   btn.classList.add('loading');
   btn.disabled = true;
   try {
-    renderCompare(await apiPost('/api/compare', { codes }));
-  } catch (e) {
-    alert('对比失败：' + e.message);
+    await doCompareCodes(codes);
   } finally {
     btn.classList.remove('loading');
     syncCmpButton();
