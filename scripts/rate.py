@@ -193,6 +193,13 @@ def calc_total(db, code, unit_value=None, origin="CN"):
     """
     import core  # 延迟导入，避免循环依赖
 
+    # 归一化成纯数字。带点的 '8215.99.30' 是本工具在界面、导出、API 响应里到处
+    # 显示的形式，调用方原样传回来是最自然的用法，但此前会被当成无法解析的编码，
+    # 静默返回"需折算 / 需人工（无法解析）"——不是报错，是一个看起来像合理限制的
+    # 错误答案（8215.99.30 实际是 14% 纯从价）。/api/estimate 的 codes 列表路径
+    # 就踩了这个坑（text 路径经 extract_codes 清洗过，所以 Web 界面看不出来）。
+    code = re.sub(r"\D", "", str(code or ""))
+
     base = core.query_one(db, code, origin=origin)
     gen = base.get("一般税率", "")
     p = parse_rate(gen)

@@ -428,5 +428,52 @@ class TestSearchDeterminism(unittest.TestCase):
         self.assertEqual(outs[1], outs[2], "不同哈希种子下结果不一致")
 
 
+class TestCalcTotalCodeNormalization(unittest.TestCase):
+    """
+    calc_total 接受带点编码。
+
+    '8215.99.30' 是本工具在界面、导出、API 响应里到处显示的形式，调用方原样传
+    回来是最自然的用法。此前会被当成无法解析的编码，静默返回"需折算 /
+    需人工（无法解析）"——不是报错，是一个看起来像合理限制的错误答案
+    （该子目实际是 14% 纯从价）。/api/estimate 的 codes 列表路径就踩了这个坑；
+    text 路径经 extract_codes 清洗过，所以 Web 界面看不出来。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_dotted_equals_plain_8(self):
+        a = rate.calc_total(self.db, "82159930")
+        b = rate.calc_total(self.db, "8215.99.30")
+        self.assertEqual(a["基础等效从价"], b["基础等效从价"])
+        self.assertEqual(a["总税负估算"], b["总税负估算"])
+        self.assertEqual(b["基础等效从价"], "14%")
+
+    def test_dotted_equals_plain_10(self):
+        a = rate.calc_total(self.db, "8507600000")
+        b = rate.calc_total(self.db, "8507.60.00.00")
+        self.assertEqual(a["总税负估算"], b["总税负估算"])
+        self.assertNotIn("无法解析", b["总税负估算"])
+
+    def test_no_double_formatting(self):
+        r = rate.calc_total(self.db, "8215.99.30")
+        self.assertEqual(r["输入编码"], "8215.99.30")
+        self.assertNotIn("..", r["输入编码"])
+
+    def test_search_row_code_roundtrips(self):
+        """搜索结果里的编码直接喂回 calc_total 必须能算出税"""
+        rows = rate.search(self.db, "battery", limit=5, sort="relevance")
+        self.assertTrue(rows)
+        for r in rows:
+            t = rate.calc_total(self.db, r["编码"])
+            self.assertEqual(t["输入编码"], r["编码"])
+
+    def test_empty_and_junk(self):
+        for bad in ("", None, "abc", "INV-2026"):
+            r = rate.calc_total(self.db, bad)
+            self.assertIn("总税负估算", r)
+
+
 if __name__ == "__main__":
     unittest.main()
