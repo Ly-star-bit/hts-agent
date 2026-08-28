@@ -384,6 +384,30 @@
   }
   .error-bar.show { display: block; }
 
+  /* 搜索页内的 AI 补充分析结果 */
+  .tag-ai {
+    background: var(--primary); color: #fff; border: none;
+    padding: 1px 7px; font-size: 10px; margin-left: 6px; vertical-align: middle;
+  }
+  .ai-picks { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+  .ai-pick {
+    border: 1px solid var(--primary); border-left-width: 3px;
+    border-radius: 10px; padding: 12px 14px; background: var(--gray-bg);
+  }
+  .ai-pick-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .ai-pick-head .rank {
+    width: 20px; height: 20px; border-radius: 50%; background: var(--primary); color: #fff;
+    font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .ai-pick-head .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 15px; }
+  .ai-pick-head .conf { font-size: 12px; color: var(--muted); }
+  .ai-pick-desc { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .ai-pick-reason { font-size: 13px; line-height: 1.7; margin-top: 8px; }
+  .ai-pick-sub { font-size: 12px; margin-top: 8px; color: var(--muted); }
+  .ai-pick-sub > span { font-weight: 600; }
+  .ai-pick-sub ul { margin: 4px 0 0; padding-left: 20px; line-height: 1.6; }
+  .ai-pick-sub.warn { color: var(--warn); }
+
   /* AI 聊天 */
   .chat-box {
     border: 1px solid var(--border); border-radius: 10px;
@@ -610,7 +634,7 @@
   <!-- Tab 导航 -->
   <nav class="tabs">
     <button class="tab active" data-tab="query" onclick="switchTab('query')">编码查询</button>
-    <button class="tab" data-tab="search" onclick="switchTab('search')">税率搜索</button>
+    <button class="tab" data-tab="search" onclick="switchTab('search')">搜索与归类</button>
     <button class="tab" data-tab="estimate" onclick="switchTab('estimate')">成本估算</button>
     <button class="tab" data-tab="ai" onclick="switchTab('ai')">AI 助手</button>
     <button class="tab" data-tab="changes" onclick="switchTab('changes')">数据变动</button>
@@ -708,8 +732,10 @@
   <!-- ============ Tab 2：税率搜索 ============ -->
   <div class="tab-panel" id="tab-search">
     <div class="card">
-      <h2><span class="step">1</span> 税率搜索（找某个品类税率最低的编码）</h2>
-      <p class="hint">输入英文关键词或编码（如 lithium battery / apparel / 8507），结果按等效从价税率排序 —— 免税与低税率在前。</p>
+      <h2><span class="step">1</span> 税率搜索与归类</h2>
+      <p class="hint">输入英文关键词、编码或中文商品描述（lithium battery / 8507 / 锂电池）。
+        先出本地税则库的确定性结果；描述较复杂、词表覆盖不到时，可在结果区点「AI 补充分析」
+        —— AI 会把描述翻译成税则原文用词重新召回，并在候选中论证该选哪个。</p>
       <div class="inline-form">
         <input type="text" id="searchKeyword" class="grow" placeholder="输入英文关键词或 HTS 编码，支持多个词（AND 匹配）">
         <select id="searchSort" class="narrow" title="排序方式">
@@ -738,8 +764,14 @@
     </div>
 
     <div class="card" id="searchResultCard" style="display:none;">
-      <h2><span class="step">2</span> 搜索结果 <span id="searchResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <h2><span class="step">2</span> 搜索结果 <span id="searchResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
+        <button class="btn-ghost" id="btnSearchAi" style="margin-left:auto;padding:5px 14px;font-size:12px;display:none;"
+                onclick="doSearchAssist()" title="用 AI 把商品描述翻译成税则原文用词重新召回，并在候选中论证">
+          ✨ AI 补充分析
+        </button>
+      </h2>
       <div id="searchNotes"></div>
+      <div id="aiAssistBox"></div>
       <div class="result-count" id="searchResultCount"></div>
       <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
         <table>
@@ -836,8 +868,9 @@
         </div>
         <div id="cfgMsg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
       </div>
-      <p class="hint">支持：①自然语言问税（"锂电池出口美国要交多少税？"）②商品归类（"帮我归类：便携式蓝牙音箱"）
-        ③上传商品清单批量分析（每行一个品名）。AI 结果仅供参考，正式报关请人工复核。</p>
+      <p class="hint">支持：①自然语言问税（"锂电池出口美国要交多少税？"）②商品清单批量分析（每行一个品名）。
+        <b>单个商品定编码请用「税率搜索与归类」页</b> —— 那里能看到完整候选表、并列对比判定条件，
+        比这里的对话形式更适合论证归类。AI 结果仅供参考，正式报关请人工复核。</p>
       <div class="chat-box" id="chatBox">
         <div class="msg system">你好！我是 HTS 关税助手。可以问我税率、帮我归类商品，或上传清单做批量分析。</div>
       </div>
@@ -922,7 +955,9 @@ fetch('/api/info')
   })
   .catch(() => document.getElementById('info').textContent = '数据源加载失败');
 
-// AI 状态（可刷新）
+// AI 状态（可刷新）。搜索页的「AI 补充分析」按钮按此显隐——
+// AI 未配置时不该出现一个点了必然报错的按钮。
+let aiEnabled = false;
 function refreshAiStatus() {
   fetch('/api/ai/status')
     .then(r => r.json())
@@ -931,10 +966,17 @@ function refreshAiStatus() {
       el.textContent = d.enabled ? `✅ ${d.provider} / ${d.model}` : '⚠ ' + d.message;
       if (!d.enabled) el.style.color = 'var(--warn)';
       else el.style.color = 'var(--miss)';
+      aiEnabled = !!d.enabled;
+      syncSearchAiButton();
     })
     .catch(() => {});
 }
 refreshAiStatus();
+
+function syncSearchAiButton() {
+  const btn = document.getElementById('btnSearchAi');
+  if (btn) btn.style.display = aiEnabled ? 'inline-flex' : 'none';
+}
 
 /* ---------- 加征措施开关（Web 端配置） ---------- */
 async function toggleMeasuresConfig() {
@@ -1528,6 +1570,7 @@ async function doSearch() {
     const data = await apiPost('/api/search', body);
     if (!Array.isArray(data.results)) throw new Error('服务端响应缺少 results 字段：' + JSON.stringify(data).slice(0, 120));
     currentSearchRows = data.results;
+    document.getElementById('aiAssistBox').innerHTML = '';  // 上一次的 AI 结论不能留到新查询
     renderSearch(data);
   } catch (e) {
     err.textContent = '搜索失败：' + e.message;
@@ -1559,9 +1602,12 @@ function renderSearch(data) {
   if (left.length) {
     notes += `<div class="error-bar show">⚠ 未能识别：<b>${esc(left.join('、'))}</b>。
       本次仅按已识别的部分检索，结果可能不完整。多概念组合（如“塑料制婴儿餐椅”）
-      需按基本特征判断，建议到「AI 助手」用自然语言描述。</div>`;
+      需按基本特征判断，${aiEnabled
+        ? '建议点右上角「✨ AI 补充分析」把描述翻译成税则用词重新召回。'
+        : '可在「AI 助手」配置 AI 服务后使用补充分析。'}</div>`;
   }
   document.getElementById('searchNotes').innerHTML = notes;
+  syncSearchAiButton();
 
   if (!data.results.length) {
     const hasCJK = /[\u4e00-\u9fff]/.test(data.keyword || '');
@@ -1576,26 +1622,127 @@ function renderSearch(data) {
   }
   document.getElementById('searchResultCount').textContent =
     `等效从价列：Free/百分比可直接比较；「需折算」为从量税，填写单位货值后可排序折算`;
-  data.results.forEach(r => {
-    const tr = document.createElement('tr');
-    const tag = tagClass(r['301判定']);
-    if (isHit(r)) tr.className = 'row-hit';
-    // 完整品名（含归类路径）放进 title：子目品名多为 Other，单看无从判断
-    const full = r['完整品名'] || r['商品描述'];
-    tr.innerHTML = `
-      <td><input type="checkbox" class="cmp-pick" value="${esc(r['编码'])}" onclick="syncCmpButton()"></td>
-      <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}</td>
-      <td class="desc" data-full="${esc(full)}" title="${esc(full)}">${esc(r['商品描述'])}</td>
-      <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
-      <td>${esc(r['税率类型'])}</td>
-      <td class="ellipsis" data-full="${esc(r['等效从价'])}">${esc(r['等效从价'])}</td>
-      <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
-      <td class="add-pct" data-full="${esc(r['301加征'])}">${esc(r['301加征'])}</td>
-      <td class="ellipsis" data-full="${esc(r['总税负估算'] || '')}">${esc(r['总税负估算'] || '—')}</td>`;
-    body.appendChild(tr);
-  });
+  data.results.forEach(r => body.appendChild(searchRow(r)));
   syncCmpButton();
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* 本地结果与 AI 补召回的行共用同一套单元格，否则两批数据列宽/语义会漂 */
+function searchRow(r) {
+  const tr = document.createElement('tr');
+  const tag = tagClass(r['301判定']);
+  if (isHit(r)) tr.className = 'row-hit';
+  tr.dataset.code = String(r['编码']);
+  // 完整品名（含归类路径）放进 title：子目品名多为 Other，单看无从判断
+  const full = r['完整品名'] || r['商品描述'];
+  const src = r['来源'] === 'AI'
+    ? ` <span class="tag tag-ai" title="本地词表未搜到，由 AI 改写检索词后补充召回">AI</span>`
+    : '';
+  tr.innerHTML = `
+    <td><input type="checkbox" class="cmp-pick" value="${esc(r['编码'])}" onclick="syncCmpButton()"></td>
+    <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}${src}</td>
+    <td class="desc" data-full="${esc(full)}" title="${esc(full)}">${esc(r['商品描述'])}</td>
+    <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
+    <td>${esc(r['税率类型'])}</td>
+    <td class="ellipsis" data-full="${esc(r['等效从价'])}">${esc(r['等效从价'])}</td>
+    <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
+    <td class="add-pct" data-full="${esc(r['301加征'])}">${esc(r['301加征'])}</td>
+    <td class="ellipsis" data-full="${esc(r['总税负估算'] || '')}">${esc(r['总税负估算'] || '—')}</td>`;
+  return tr;
+}
+
+/* ---------- AI 补充分析（搜索页内，不跳 tab） ----------
+   两段式：本地结果已经渲染出来了，这里只做增量——补召回的行追加进同一张表，
+   精排结论单独成块。AI 失败时本地结果原样保留，不清空、不打断。 */
+async function doSearchAssist() {
+  const kw = document.getElementById('searchKeyword').value.trim();
+  if (!kw) return;
+  const btn = document.getElementById('btnSearchAi');
+  const box = document.getElementById('aiAssistBox');
+  btn.classList.add('loading');
+  btn.disabled = true;
+  box.innerHTML = `<div class="info-bar">AI 分析中……正在改写检索词并在候选中论证</div>`;
+  try {
+    const body = { keyword: kw, sort: 'relevance', limit: 40 };
+    const uv = parseFloat(document.getElementById('searchUnitValue').value);
+    if (uv) body.unit_value = uv;
+    // 后端把"AI 未配置/调用失败"作为 {error} 返回而非 5xx，apiPost 会把它转成异常，
+    // 统一落到下面的 catch —— 那里只显示提示、不动已渲染的本地结果
+    const d = await apiPost('/api/search/ai', body);
+    const added = d['新增候选'] || [];
+    const tbody = document.getElementById('searchBody');
+    added.forEach(r => {
+      currentSearchRows.push(r);
+      tbody.appendChild(searchRow(r));
+    });
+    box.innerHTML = renderAssist(d, added.length);
+    syncCmpButton();
+    document.getElementById('searchResultCount').textContent =
+      `本地 ${currentSearchRows.length - added.length} 条 + AI 补充 ${added.length} 条`;
+  } catch (e) {
+    box.innerHTML = `<div class="error-bar show">AI 补充分析失败：${esc(e.message)}
+      。下方为本地税则库检索结果，不受影响。</div>`;
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function renderAssist(d, addedCount) {
+  const kws = (d['关键词'] || []).map(esc).join(' ');
+  let h = `<div class="info-bar">AI 检索词：<b>${kws}</b>`;
+  if ((d['章号建议'] || []).length) h += ` ｜ 建议章：${esc(d['章号建议'].join('、'))}（仅用于排序，未过滤其他章）`;
+  h += ` ｜ 补充候选 ${addedCount} 条</div>`;
+
+  const picks = d['精排'] || [];
+  if (!picks.length) {
+    return h + `<div class="error-bar show">AI 未能在候选中选出推荐项，请人工判断。</div>`;
+  }
+  if (d['跨章']) {
+    h += `<div class="error-bar show">⚠ 推荐候选跨章（${
+      [...new Set(picks.map(p => String(p['编码']).slice(0, 2)))].join(' / ')
+      }章），属于典型归类分歧，务必核对下方判定条件后再定。</div>`;
+  }
+  h += `<div class="ai-picks">`;
+  picks.forEach((p, i) => {
+    const conf = Math.round((p.confidence || 0) * 100);
+    const crs = (p['判定条件'] || []).map(c =>
+      `<li><b>${esc(c['类型'])}</b>：${esc(c['原文'])}</li>`).join('');
+    const ev = (p['证据清单'] || []).map(x => `<li>${esc(x)}</li>`).join('');
+    const nv = (p['需确认'] || []).map(x => `<li>${esc(x)}</li>`).join('');
+    h += `<div class="ai-pick">
+      <div class="ai-pick-head">
+        <span class="rank">${i + 1}</span>
+        <b class="code">${esc(p['编码'])}</b>
+        <span class="conf">置信度 ${conf}%</span>
+        <button class="btn-ghost" style="margin-left:auto;padding:3px 10px;font-size:12px;"
+                onclick="pickForCompare('${esc(p['编码'])}')">加入对比</button>
+      </div>
+      <div class="ai-pick-desc">${esc(p['商品描述'] || '')}</div>
+      <div class="ai-pick-reason">${esc(p.reason || '')}</div>
+      ${nv ? `<div class="ai-pick-sub warn"><span>需向工厂/客户确认：</span><ul>${nv}</ul></div>` : ''}
+      ${crs ? `<div class="ai-pick-sub"><span>税则判定条件（官方原文）：</span><ul>${crs}</ul></div>` : ''}
+      ${ev ? `<div class="ai-pick-sub"><span>建议备齐的证据：</span><ul>${ev}</ul></div>` : ''}
+    </div>`;
+  });
+  h += `</div><div class="hint" style="margin:8px 0 0;">${esc(d.disclaimer || '')}</div>`;
+  return h;
+}
+
+/* AI 推荐的编码勾进对比区——归类分歧多在 2-3 个候选之间，
+   让用户不必回表格里翻找 */
+function pickForCompare(code) {
+  const box = Array.from(document.querySelectorAll('.cmp-pick'))
+    .find(b => b.value === code);
+  if (box) {
+    box.checked = true;
+    syncCmpButton();
+    box.closest('tr').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else {
+    const inp = document.getElementById('cmpCodes');
+    const cur = inp.value.trim();
+    if (!cur.split(/[,，\s]+/).includes(code)) inp.value = cur ? `${cur}, ${code}` : code;
+  }
 }
 
 /* ================= 归类对比 =================

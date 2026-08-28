@@ -293,6 +293,83 @@ def _recall_candidates(db, keywords, limit=40):
     return rows
 
 
+def _rank_by_chapters(rows, chapters, limit=40):
+    """
+    按模型建议的章号重排，而不是过滤。
+
+    此前是硬过滤：rows = [r for r in rows if 编码.startswith(chapters)]。
+    章号是模型的猜测，一旦猜错（塑料雨衣猜成 62 章而实际在 39 章），
+    正确候选会被整条滤掉，然后报"本地税则库未找到"——用户看到的是
+    "库里没有"，真实原因却是"模型猜错了章"。归类分歧场景里跨章恰恰是常态，
+    所以章号只能加权。
+    """
+    if not chapters:
+        return rows[:limit]
+    pref = tuple(chapters)
+    hit = [r for r in rows if str(r["编码"]).startswith(pref)]
+    miss = [r for r in rows if not str(r["编码"]).startswith(pref)]
+    return (hit + miss)[:limit]
+
+
+def _ai_keywords(provider, description):
+    """
+    第一轮：商品描述 → 税则原文里实际出现的英文检索词。
+
+    这一步才是 AI 对"本地搜不准"的真正修复——同义词表是 176 条硬映射，
+    覆盖不到组合描述（"PU 涂层梭织连帽夹克"）。精排在召回之后，
+    召回不到的东西精排看不见，救不回来。
+
+    返回 (keywords, chapters)；失败抛 AIProviderError 或返回 ([], [])。
+    """
+    sys_prompt = (
+        "你是美国海关 HTS（协调关税表）归类助手。根据商品描述，输出用于在 HTS 税则库中检索的"
+        "英文关键词列表和可能的章号（chapter，两位数字）建议。"
+        "关键词必须是税则品名中实际出现的词（如 battery、accumulator、ceramic、tableware），"
+        "不要用宽泛的用途/功能词（如 electric、storage、device、product、item）。"
+        "只输出 JSON，格式：{\"keywords\": [\"英文关键词\"], \"chapters\": [\"85\", \"90\"]}，"
+        "keywords 3-6 个，单数形式，不要输出其他内容。"
+    )
+    r1 = provider.chat_json(
+        [{"role": "system", "content": sys_prompt},
+         {"role": "user", "content": f"商品描述：{description}"}],
+        fallback=None,
+    )
+    if not isinstance(r1, dict):
+        return [], []
+    keywords = [str(k) for k in (r1.get("keywords") or []) if str(k).strip()]
+    chapters = [str(c).zfill(2) for c in (r1.get("chapters") or []) if str(c).strip()]
+    return keywords, chapters
+
+
+def _ai_rerank(provider, db, description, rows, top_n):
+    """
+    第二轮：在已召回的候选里精排。返回 picks（模型原始输出，未校验）。
+
+    候选行带归类路径与判定条件（见 _candidate_line）——末级品名大量是
+    "Other"，只给品名等于让模型盲选。
+    """
+    cand_lines = [_candidate_line(db, i, r) for i, r in enumerate(rows, 1)]
+    sys_prompt2 = (
+        "你是美国 HTS 归类专家。下面是从税则库检索出的候选子目。"
+        "每行格式：序号. 编码 | 归类路径（父级 > 子级，判定条件多在父级上）| 税率 | 301 | 判定条件。"
+        f"请为商品「{description}」选择最合适的 {top_n} 个候选，按匹配度排序。\n"
+        "选择时必须依据归类路径中的实际措辞（材质、织法、含量阈值、涂层、"
+        "重量/尺寸/价值门槛），不要只看末级品名——末级常常只是 'Other'。\n"
+        "reason 必须引用候选行中的原文依据，不要泛泛而谈。\n"
+        "若某候选的成立取决于尚未确认的商品属性（如羊毛含量是否达到 36%、"
+        "面料是针织还是梭织、有无塑料涂层），写进 need_verify。\n"
+        "只输出 JSON，格式：{\"picks\": [{\"code\": \"8位编码\", \"confidence\": 0.9, "
+        "\"reason\": \"引用原文的中文理由\", \"need_verify\": [\"需确认的商品属性\"]}]}，"
+        "code 必须来自候选列表，confidence 为 0-1 数值。"
+    )
+    r2 = provider.chat_json(
+        [{"role": "system", "content": sys_prompt2},
+         {"role": "user", "content": "候选子目：\n" + "\n".join(cand_lines)}],
+        fallback=None,
+    )
+    return (r2.get("picks") if isinstance(r2, dict) else None) or []
+
+
 # 喂给 LLM 的归类路径保留末尾几级：越靠近末级的祖先越有判别力，
 # 顶级品目动辄上百字符（"Men's or boys' overcoats, carcoats, capes..."），
 # 40 个候选全带上会挤占上下文却提供不了区分度。
@@ -350,61 +427,31 @@ def classify_product(db, description, top_n=3, origin="CN"):
         return {"error": "AI 服务未配置，无法进行智能归类。请先在 ai_config.json 配置。"}
 
     # 第一轮：出关键词
-    sys_prompt = (
-        "你是美国海关 HTS（协调关税表）归类助手。根据商品描述，输出用于在 HTS 税则库中检索的"
-        "英文关键词列表和可能的章号（chapter，两位数字）建议。"
-        "关键词必须是税则品名中实际出现的词（如 battery、accumulator、ceramic、tableware），"
-        "不要用宽泛的用途/功能词（如 electric、storage、device、product、item）。"
-        "只输出 JSON，格式：{\"keywords\": [\"英文关键词\"], \"chapters\": [\"85\", \"90\"]}，"
-        "keywords 3-6 个，单数形式，不要输出其他内容。"
-    )
     try:
-        r1 = provider.chat_json(
-            [{"role": "system", "content": sys_prompt},
-             {"role": "user", "content": f"商品描述：{description}"}],
-            fallback=None,
-        )
+        keywords, chapters = _ai_keywords(provider, description)
     except AIProviderError as e:
         return {"error": f"AI 归类失败：{e}"}
-    if not isinstance(r1, dict):
-        return {"error": "AI 归类失败：未返回有效关键词。"}
-    keywords = [str(k) for k in (r1.get("keywords") or []) if str(k).strip()]
-    chapters = [str(c).zfill(2) for c in (r1.get("chapters") or [])]
     if not keywords:
         return {"error": "AI 未能提取商品关键词，请尝试更详细的商品描述。"}
 
-    # 本地召回
+    # 本地召回。AI 关键词全落空时降级为原文检索（走同义词表），
+    # 而不是直接报"库里没有"——那会把模型的失误说成数据的缺失。
     rows = _recall_candidates(db, keywords)
-    if chapters and rows:
-        rows = [r for r in rows if str(r["编码"]).startswith(tuple(chapters))]
+    degraded = ""
+    if not rows:
+        rows = _recall_candidates(db, [description])
+        if rows:
+            degraded = (f"AI 给出的检索词（{' '.join(keywords)}）在税则库中无匹配，"
+                        f"已降级为按原文检索，候选质量可能下降")
     if not rows:
         return {"error": f"本地税则库未找到与「{description}」匹配的商品（关键词：{' '.join(keywords)}），请尝试调整描述。"}
-    rows = rows[:40]
+    rows = _rank_by_chapters(rows, chapters)
 
     # 第二轮：精排
-    cand_lines = [_candidate_line(db, i, r) for i, r in enumerate(rows, 1)]
-    sys_prompt2 = (
-        "你是美国 HTS 归类专家。下面是从税则库检索出的候选子目。"
-        "每行格式：序号. 编码 | 归类路径（父级 > 子级，判定条件多在父级上）| 税率 | 301 | 判定条件。"
-        f"请为商品「{description}」选择最合适的 {top_n} 个候选，按匹配度排序。\n"
-        "选择时必须依据归类路径中的实际措辞（材质、织法、含量阈值、涂层、"
-        "重量/尺寸/价值门槛），不要只看末级品名——末级常常只是 'Other'。\n"
-        "reason 必须引用候选行中的原文依据，不要泛泛而谈。\n"
-        "若某候选的成立取决于尚未确认的商品属性（如羊毛含量是否达到 36%、"
-        "面料是针织还是梭织、有无塑料涂层），写进 need_verify。\n"
-        "只输出 JSON，格式：{\"picks\": [{\"code\": \"8位编码\", \"confidence\": 0.9, "
-        "\"reason\": \"引用原文的中文理由\", \"need_verify\": [\"需确认的商品属性\"]}]}，"
-        "code 必须来自候选列表，confidence 为 0-1 数值。"
-    )
     try:
-        r2 = provider.chat_json(
-            [{"role": "system", "content": sys_prompt2},
-             {"role": "user", "content": "候选子目：\n" + "\n".join(cand_lines)}],
-            fallback=None,
-        )
+        picks = _ai_rerank(provider, db, description, rows, top_n)
     except AIProviderError as e:
         return {"error": f"AI 归类失败：{e}"}
-    picks = (r2.get("picks") if isinstance(r2, dict) else None) or []
     if not picks:
         return {"error": "AI 未返回有效归类结果，请重试或联系人工复核。"}
 
@@ -449,8 +496,84 @@ def classify_product(db, description, top_n=3, origin="CN"):
         "keywords": keywords,
         "chapters": chapters,
         "跨章": len({c["编码"][:2] for c in candidates}) > 1,
+        "降级": degraded,
         "disclaimer": "AI 归类结果仅供参考，正式报关归类以 CBP 裁定与海关税则为准，请人工复核。"
                       "各候选的「判定条件」与「证据清单」来自官方税则原文，可作为论证依据。",
+    }
+
+
+# ---------- 搜索页的 AI 增强（与「税率搜索」合并的入口） ----------
+
+def assist_search(db, keyword, top_n=3, origin="CN", limit=40, sort="relevance"):
+    """
+    在「税率搜索」已出本地结果的基础上，用 AI 补召回 + 精排。
+
+    与 classify_product 的区别：这里不替换本地结果，而是"并入"——
+    本地词表搜到的行保留，AI 关键词新搜到的行标记来源后追加。
+    这样模型抽风时用户手上仍有那份确定性的本地结果兜底。
+
+    返回 {'关键词','章号建议','新增候选','精排','降级','disclaimer'}，
+    或 {'error': ...}（AI 未配置/调用失败），调用方据此静默降级。
+    """
+    import rate
+
+    provider = get_provider()
+    if provider is None:
+        return {"error": "AI 服务未配置"}
+
+    try:
+        keywords, chapters = _ai_keywords(provider, keyword)
+    except AIProviderError as e:
+        return {"error": f"AI 调用失败：{e}"}
+    if not keywords:
+        return {"error": "AI 未能从该描述中提取检索词"}
+
+    local_rows = rate.search(db, keyword, limit=limit, sort=sort)
+    local_codes = {re.sub(r"\D", "", str(r["编码"])) for r in local_rows}
+
+    ai_rows = _recall_candidates(db, keywords, limit=limit)
+    new_rows = [r for r in ai_rows
+                if re.sub(r"\D", "", str(r["编码"])) not in local_codes]
+
+    # 精排在"本地 + AI 新增"的合集上做，否则模型看不到本地那部分，
+    # 可能挑出一个不如本地首条的候选却显得很确定
+    merged = _rank_by_chapters(local_rows + new_rows, chapters, limit=limit)
+    if not merged:
+        return {"error": "本地税则库无匹配候选"}
+
+    try:
+        picks = _ai_rerank(provider, db, keyword, merged, top_n)
+    except AIProviderError as e:
+        return {"error": f"AI 调用失败：{e}"}
+
+    code_by_norm = {re.sub(r"\D", "", r["编码"]): r for r in merged}
+    ranked = []
+    for pk in picks[:top_n]:
+        row = code_by_norm.get(re.sub(r"\D", "", str(pk.get("code") or "")))
+        if not row:
+            continue
+        code8 = re.sub(r"\D", "", row["编码"])[:8]
+        crs = _criteria_safe(db, code8)
+        ranked.append({
+            "编码": row["编码"],
+            "商品描述": row["商品描述"],
+            "判定条件": crs,
+            "证据清单": _evidence_safe(crs),
+            "confidence": _clamp_confidence(pk.get("confidence")),
+            "reason": str(pk.get("reason", ""))[:300],
+            "需确认": [str(v)[:80] for v in (pk.get("need_verify") or [])][:5],
+        })
+
+    for r in new_rows:
+        r["来源"] = "AI"
+    return {
+        "关键词": keywords,
+        "章号建议": chapters,
+        "新增候选": new_rows,
+        "精排": ranked,
+        "跨章": len({c["编码"][:2] for c in ranked}) > 1,
+        "disclaimer": "AI 只负责在候选中挑选与说明理由；税率、判定条件、证据清单均来自本地官方税则原文。"
+                      "正式归类以 CBP 裁定为准。",
     }
 
 

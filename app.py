@@ -404,6 +404,48 @@ class CompareRequest(BaseModel):
     codes: list = Field(default_factory=list, description="待比较的候选 HTS 编码（2 个以上）")
 
 
+class SearchAssistRequest(BaseModel):
+    keyword: str = Field(default="", description="商品描述或关键词")
+    sort: str = Field(default="relevance", description="本地检索排序，与 /api/search 一致")
+    limit: int = Field(default=40, ge=1, le=100, description="送入精排的候选上限")
+    unit_value: Optional[float] = Field(default=None, description="单位货值 USD，用于折算新增候选的从量税")
+    origin: str = Field(default="CN", description="原产地")
+
+
+@app.post("/api/search/ai")
+def api_search_assist(req: SearchAssistRequest):
+    """
+    搜索页的 AI 增强：补召回 + 精排。
+
+    与 /api/search 是两段式而非替代关系——前端先拿本地结果渲染出表格，
+    再调这里把 AI 新找到的候选并进同一张表。AI 未配置或调用失败时返回
+    {'error': ...}，前端静默保留本地结果，不打断查询。
+    """
+    if not (req.keyword or "").strip():
+        raise HTTPException(status_code=400, detail="请输入商品描述或关键词")
+    import traceback
+    try:
+        import ai
+        import rate
+    except Exception as e:
+        return {"error": f"AI 模块加载失败：{e}"}
+
+    db = get_db()
+    try:
+        result = ai.assist_search(db, req.keyword.strip(), origin=req.origin,
+                                  limit=req.limit, sort=req.sort)
+    except Exception as e:
+        traceback.print_exc()
+        return {"error": f"AI 分析异常：{e}"}
+    # 新增候选要和本地结果同列，否则前端表格列数对不上
+    if req.unit_value and result.get("新增候选"):
+        for r in result["新增候选"]:
+            total = rate.calc_total(db, re.sub(r"\D", "", r["编码"]), unit_value=req.unit_value)
+            r["总税负估算"] = total["总税负估算"]
+            r["301加征数值"] = total["301加征数值"]
+    return result
+
+
 @app.post("/api/compare")
 def api_compare(req: CompareRequest):
     """
