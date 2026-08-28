@@ -663,6 +663,7 @@
 
     <div class="card" id="resultCard" style="display:none;">
       <h2><span class="step">2</span> 查询结果 <span id="sourceInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <div class="error-bar" id="skippedBar"></div>
       <div class="stats" id="statsBar"></div>
       <div class="filter-bar" id="filterBar">
         <button class="filter-btn active" data-f="all" onclick="setFilter('all')">全部 <span class="cnt"></span></button>
@@ -1124,6 +1125,21 @@ function render(data, source) {
 
   const s = data.stats;
   const originTxt = (s.origin || (data.origin || '中国'));
+  // 未采用的输入：位数不对或不在税则表内的，必须显式列出——
+  // 否则结果行数比输入少，用户不会知道少了哪几行（Excel 吃掉前导零是常见来源）
+  const skipped = data['未采用'] || [];
+  const skipEl = document.getElementById('skippedBar');
+  if (skipped.length) {
+    skipEl.innerHTML = `⚠ 有 <b>${skipped.length}</b> 项输入未被采用：` +
+      skipped.slice(0, 8).map(i =>
+        `<div style="margin-top:4px;"><code>${esc(i['原文'])}</code> — ${esc(i['原因'])}
+         <span style="color:var(--muted);">${esc(i['建议'] || '')}</span></div>`).join('') +
+      (skipped.length > 8 ? `<div style="margin-top:4px;">…其余 ${skipped.length - 8} 项</div>` : '');
+    skipEl.classList.add('show');
+  } else {
+    skipEl.classList.remove('show');
+  }
+
   // 命中且加征 / 命中但豁免 0% / 未命中 分开展示；后三类为 0 时不占位
   document.getElementById('statsBar').innerHTML = `
     <div class="stat total">原产地<b>${esc(originTxt)}</b></div>

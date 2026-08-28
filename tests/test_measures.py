@@ -538,6 +538,65 @@ class TestBuildSanityCheck(unittest.TestCase):
         self.assertTrue(any("rates_8" in f for f in failures))
 
 
+class TestExtractCodes(unittest.TestCase):
+    """编码提取：不能静默丢弃无法采用的输入，也不能把单号/日期当成编码"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def _issues(self, text):
+        return {i["原文"]: i for i in core.extract_codes_detailed(text, self.db)[1]}
+
+    def test_valid_codes_extracted(self):
+        codes, issues = core.extract_codes_detailed(
+            "8507.60.00, 6204.69.45, 6307.90.9842", self.db)
+        self.assertEqual(codes, ["85076000", "62046945", "6307909842"])
+        self.assertEqual(issues, [])
+
+    def test_leading_zero_stripped_by_excel(self):
+        # Excel 按数值存储会把 0101.21.00 变成 1012100，此前直接消失
+        codes, issues = core.extract_codes_detailed("1012100", self.db)
+        self.assertEqual(codes, [])
+        self.assertEqual(len(issues), 1)
+        self.assertIn("0101.21.00", issues[0]["建议"])
+        self.assertIn("已在税则表中", issues[0]["建议"])
+
+    def test_six_digit_heading_reported(self):
+        issues = self._issues("090111")
+        self.assertIn("090111", issues)
+        self.assertIn("补全至 8 位", issues["090111"]["建议"])
+
+    def test_order_number_not_treated_as_code(self):
+        # 'INV-20260827' 的数字段位数恰好是 8，此前会被当成编码送去查询
+        codes, issues = core.extract_codes_detailed("发票号 INV-20260827", self.db)
+        self.assertEqual(codes, [])
+        self.assertEqual(len(issues), 1)
+        self.assertIn("不在 2026 现行 HTS 税则表内", issues[0]["原因"])
+
+    def test_ordinary_numbers_ignored(self):
+        # 单价、数量这类短数字不该产生噪音提示
+        codes, issues = core.extract_codes_detailed("单价 10.50 USD 数量 1200 件", self.db)
+        self.assertEqual(codes, [])
+        self.assertEqual(issues, [])
+
+    def test_dedupe_preserves_order(self):
+        codes, _ = core.extract_codes_detailed(
+            "8507.60.00, 6204.69.45, 8507.60.00", self.db)
+        self.assertEqual(codes, ["85076000", "62046945"])
+
+    def test_backward_compatible_wrapper(self):
+        # extract_codes 仍返回纯列表，老调用方不受影响
+        self.assertEqual(core.extract_codes("8507.60.00, 6204.69.45"),
+                         ["85076000", "62046945"])
+
+    def test_without_db_no_table_validation(self):
+        # 不传 db 时不做税则表校验，行为与此前一致（不误报）
+        codes, issues = core.extract_codes_detailed("8507.60.00")
+        self.assertEqual(codes, ["85076000"])
+        self.assertEqual(issues, [])
+
+
 class TestMeasuresConfigCache(unittest.TestCase):
     """配置缓存：命中缓存不重复读盘，但文件改动后立即失效"""
 

@@ -173,11 +173,17 @@ def api_source_csv(key: str = "htsdata", line: int = None, around: int = 3):
 @app.post("/api/query")
 def api_query(req: QueryRequest):
     """文本查询：POST JSON {"text": "6204.69.45, 8703.80.00", "origin": "CN"}"""
-    codes = core.extract_codes(req.text)
+    db = get_db()
+    codes, issues = core.extract_codes_detailed(req.text, db)
     if not codes:
-        raise HTTPException(status_code=400, detail="未解析到任何 HTS 编码，请检查输入格式（8位或10位，如 6204.69.45）")
-    results, stats = core.batch_query(get_db(), codes, origin=req.origin)
-    return {"results": results, "stats": stats, "origin": req.origin}
+        detail = "未解析到任何 HTS 编码，请检查输入格式（8位或10位，如 6204.69.45）"
+        if issues:
+            detail += "；以下输入无法采用：" + "；".join(
+                f"{i['原文']}（{i['原因']}）" for i in issues[:5])
+        raise HTTPException(status_code=400, detail=detail)
+    results, stats = core.batch_query(db, codes, origin=req.origin)
+    # 未采用的输入必须回报：否则结果行数比输入少，用户不知道少了哪几行
+    return {"results": results, "stats": stats, "origin": req.origin, "未采用": issues}
 
 
 @app.post("/api/upload")
@@ -189,20 +195,23 @@ async def api_upload(file: UploadFile = File(...), origin: Optional[str] = Form(
         raise HTTPException(status_code=400, detail=f"文件超过 {MAX_UPLOAD // 1048576}MB 限制")
     ext = os.path.splitext(filename)[1].lower()
     try:
+        db = get_db()
         if ext in (".xlsx", ".xls"):
             df = pd.read_excel(io.BytesIO(content), sheet_name=0, dtype=str)
-            codes = core.extract_codes(df.to_csv(index=False))
+            codes, issues = core.extract_codes_detailed(df.to_csv(index=False), db)
         elif ext == ".csv":
             df = pd.read_csv(io.StringIO(content.decode("utf-8-sig", errors="replace")), dtype=str)
-            codes = core.extract_codes(df.to_csv(index=False))
+            codes, issues = core.extract_codes_detailed(df.to_csv(index=False), db)
         else:
-            codes = core.extract_codes(content.decode("utf-8-sig", errors="replace"))
+            codes, issues = core.extract_codes_detailed(
+                content.decode("utf-8-sig", errors="replace"), db)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"文件解析失败：{e}")
     if not codes:
         raise HTTPException(status_code=400, detail=f"文件 {filename} 中未解析到 HTS 编码")
     results, stats = core.batch_query(get_db(), codes, origin=origin)
-    return {"results": results, "stats": stats, "source": filename, "origin": origin}
+    return {"results": results, "stats": stats, "source": filename, "origin": origin,
+            "未采用": issues}
 
 
 # Excel / Sheets 会把以 = + - @ 开头（含前导 TAB/CR）的单元格当公式执行。

@@ -106,16 +106,86 @@ def fmt(code: str, length: int = 10) -> str:
     return f"{code[0:4]}.{code[4:6]}.{code[6:8]}"
 
 
+# 候选扫描：数字与点组成的串。比"直接按 8/10 位匹配"更宽，
+# 目的是把位数不对的近似串也捞出来分类，而不是当它不存在。
+_CODE_TOKEN_RE = re.compile(r"(?<![\d.])\d[\d.]*\d(?![\d.])")
+
+
 def extract_codes(text: str):
-    """从任意文本中提取 HTS 编码（8位或10位，带点或不带点），去重保序"""
-    pat = re.compile(r"\b\d{4}\.?\d{2}\.?\d{2}\.?\d{0,4}\b")
-    seen, out = set(), []
-    for m in pat.finditer(text or ""):
-        code = re.sub(r"\D", "", m.group())
-        if len(code) in (8, 10) and code not in seen:
-            seen.add(code)
-            out.append(code)
-    return out
+    """从任意文本中提取 HTS 编码（8位或10位，带点或不带点），去重保序。
+
+    保持原签名与行为不变，供不关心异常项的调用方使用；
+    需要知道"哪些输入被丢弃了"时用 extract_codes_detailed。
+    """
+    return extract_codes_detailed(text)[0]
+
+
+def extract_codes_detailed(text: str, db=None):
+    """
+    提取 HTS 编码，并回报无法采用的输入，返回 (codes, issues)。
+
+    此前只认 8/10 位、其余直接丢弃且不作声，两个方向都会出问题：
+
+      漏：Excel 把 '0101.21.00' 存成数值会吃掉前导零变成 1012100（7 位），
+          9 位则常见于复制时截断。这些输入直接消失，批量查询的结果行数
+          比输入少，而用户无从得知少了哪几行。
+      多：'INV-20260827'、'SO2026081234' 里的数字串位数恰好是 8/10，
+          会被当成编码送去查询。
+
+    传入 db 时按税则表校验，可区分"真编码"与"位数凑巧的单号/日期"，
+    并对缺前导零的串给出可直接采用的补零建议。
+
+    issues 每项：{原文, 位数, 原因, 建议}
+    """
+    rates_8 = (db or {}).get("rates_8") or {}
+    desc_10 = (db or {}).get("desc_10") or {}
+
+    def known(c):
+        """该编码是否在税则表内；无 db 时不做判断（一律视为已知）"""
+        if not rates_8:
+            return True
+        return c in rates_8 if len(c) == 8 else (c in desc_10 or c[:8] in rates_8)
+
+    seen, out, issues = set(), [], []
+    for m in _CODE_TOKEN_RE.finditer(text or ""):
+        raw = m.group()
+        code = re.sub(r"\D", "", raw)
+        n = len(code)
+        if n < 6 or n > 11:
+            continue                      # 与 HTS 编码差得太远，不打扰用户
+        if n in (8, 10):
+            if not known(code):
+                issues.append({
+                    "原文": raw, "位数": n,
+                    "原因": "位数符合但不在 2026 现行 HTS 税则表内",
+                    "建议": "确认是否为单号/日期等非编码数字，或为旧版编码",
+                })
+                continue
+            if code not in seen:
+                seen.add(code)
+                out.append(code)
+            continue
+        # 位数不对：给出可核对的修复建议，而不是默默扔掉
+        issue = {"原文": raw, "位数": n, "原因": "", "建议": ""}
+        if n in (7, 9):
+            padded = "0" + code
+            issue["原因"] = f"{n} 位，非有效编码长度（应为 8 或 10 位）"
+            if known(padded):
+                # 补零后确实存在，基本可以断定是 Excel 按数值存储吃掉了前导零
+                issue["建议"] = (f"疑似前导零丢失（Excel 按数值存储会吃掉开头的 0），"
+                                 f"补零后为 {fmt(padded, len(padded))}，已在税则表中，请确认")
+            else:
+                # 补零不成立，更可能是复制粘贴时截断了尾部
+                issue["建议"] = ("可能是前导零丢失或尾部截断；"
+                                 f"补零后 {fmt(padded, len(padded))} 不在税则表中，请核对原始编码")
+        elif n == 6:
+            issue["原因"] = "6 位品目，信息不足以判定 301"
+            issue["建议"] = "请补全至 8 位子目"
+        else:  # 11
+            issue["原因"] = "11 位，超出 HTS 编码长度"
+            issue["建议"] = "请核对是否混入了其他数字"
+        issues.append(issue)
+    return out, issues
 
 
 def _fmt_c99(c99):
