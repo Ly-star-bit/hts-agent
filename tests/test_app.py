@@ -410,6 +410,80 @@ class TestSourceAPI(unittest.TestCase):
         self.assertIn("FLIP 301", flip["文件"])
 
 
+class TestCompareAPI(unittest.TestCase):
+    """归类对比接口：候选并列 + 跨章分歧提示"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(app_mod.app)
+
+    def test_cross_chapter_compare(self):
+        r = self.client.post("/api/compare",
+                             json={"codes": ["3926.20.60", "6201.40.35"]})
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertTrue(d["跨章"])
+        self.assertEqual(d["章列表"], ["39", "62"])
+        self.assertIn("预裁定", d["分歧提示"])
+        self.assertEqual(len(d["候选"]), 2)
+        for it in d["候选"]:
+            for k in ("完整品名", "一般税率", "判定条件", "证据清单",
+                      "等效从价", "总税负估算", "301判定"):
+                self.assertIn(k, it)
+
+    def test_base_rate_low_but_total_higher(self):
+        # 3926.20.60 基础 Free 却因 301 加征使总税负高于 6201.40.35——
+        # 正是"按最低税率挑编码"会踩的坑，接口必须把总税负一并给出
+        d = self.client.post("/api/compare",
+                             json={"codes": ["3926.20.60", "6201.40.35"]}).json()
+        by = {i["编码"]: i for i in d["候选"]}
+        self.assertEqual(by["39262060"]["等效从价"], "0%")
+        self.assertEqual(by["62014035"]["等效从价"], "14.9%")
+        pct = lambda s: float(s.split("%")[0])
+        self.assertGreater(pct(by["39262060"]["总税负估算"]),
+                           pct(by["62014035"]["总税负估算"]))
+
+    def test_same_chapter_no_dispute_hint(self):
+        d = self.client.post("/api/compare",
+                             json={"codes": ["6201.40.35", "6201.40.40"]}).json()
+        self.assertFalse(d["跨章"])
+        self.assertEqual(d["分歧提示"], "")
+
+    def test_requires_two_codes(self):
+        self.assertEqual(
+            self.client.post("/api/compare", json={"codes": ["6201.40.35"]}).status_code, 400)
+        self.assertEqual(
+            self.client.post("/api/compare", json={"codes": []}).status_code, 400)
+
+
+class TestSearchSpecialChapters(unittest.TestCase):
+    """搜索默认剔除 98/99 章：它们不是可归类的进口编码"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(app_mod.app)
+
+    def test_excluded_by_default(self):
+        d = self.client.post("/api/search",
+                             json={"keyword": "wool coat", "limit": 30}).json()
+        self.assertTrue(d["results"])
+        self.assertFalse([r for r in d["results"] if r["编码"][:2] in ("98", "99")])
+
+    def test_included_on_request(self):
+        d = self.client.post("/api/search",
+                             json={"keyword": "wool coat", "limit": 30,
+                                   "include_special": True}).json()
+        self.assertTrue(d["results"])
+
+    def test_results_carry_full_desc(self):
+        d = self.client.post("/api/search",
+                             json={"keyword": "dress patterns", "limit": 5}).json()
+        self.assertTrue(d["results"])
+        for r in d["results"]:
+            self.assertIn("完整品名", r)
+            self.assertIn("归类路径", r)
+
+
 class TestExportInjection(unittest.TestCase):
     """导出防公式注入：Excel/Sheets 会执行以 = + - @ 开头的单元格"""
 

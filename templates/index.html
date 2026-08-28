@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HTS 关税智能查询工具</title>
+<!-- 内联 SVG 图标：浏览器每次访问都会自动请求 /favicon.ico，没有就是一条 404
+     控制台噪音。用 data URI 直接给掉，不必新增静态文件与路由。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a56db'/%3E%3Ctext x='16' y='23' font-size='19' font-family='monospace' font-weight='bold' fill='white' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <script>
   // 主题初始化必须在首次绘制前同步执行，否则会先闪一帧默认主题再切过去。
   // 因此这段刻意放在 <head> 里、且不等 DOMContentLoaded。
@@ -719,18 +722,33 @@
       </div>
       <div class="error-bar" id="searchError"></div>
     </div>
+    <!-- 归类对比：候选常跨章，单个关键词搜不到一起（塑料雨衣 39 章 vs 梭织夹克 62 章
+         用词完全不同），而实际工作中手上往往已经有几个备选税号，因此直接输入是主路径 -->
+    <div class="card">
+      <h2><span class="step">◇</span> 归类对比（一物多号时用）</h2>
+      <p class="hint">同一商品有多个可能税号时，并列对比各自的判定条件与所需证据。
+        可直接输入备选编码，也可在下方搜索结果里勾选。</p>
+      <div class="inline-form">
+        <input type="text" id="cmpCodes" class="grow"
+               placeholder="输入 2 个以上备选编码，逗号分隔，如：3926.20.60, 6201.40.35">
+        <button class="btn-primary" id="btnCompareManual" onclick="doCompareManual()">对比</button>
+      </div>
+      <div class="error-bar" id="cmpError"></div>
+    </div>
+
     <div class="card" id="searchResultCard" style="display:none;">
       <h2><span class="step">2</span> 搜索结果 <span id="searchResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
       <div class="result-count" id="searchResultCount"></div>
       <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
         <table>
           <colgroup>
-            <col style="width:11%"><col style="width:26%">
-            <col style="width:12%"><col style="width:9%"><col style="width:10%">
-            <col style="width:9%"><col style="width:10%"><col style="width:13%">
+            <col style="width:4%"><col style="width:11%"><col style="width:24%">
+            <col style="width:11%"><col style="width:8%"><col style="width:9%">
+            <col style="width:9%"><col style="width:10%"><col style="width:14%">
           </colgroup>
           <thead>
             <tr>
+              <th title="勾选 2 个以上候选进行归类对比"><input type="checkbox" id="cmpAll" onclick="toggleAllCmp(this)"></th>
               <th>编码</th><th>商品描述</th><th>一般税率</th><th>税率类型</th>
               <th>等效从价</th><th>301判定</th><th>301加征</th><th>总税负估算</th>
             </tr>
@@ -739,7 +757,11 @@
         </table>
       </div>
       <div class="actions">
+        <button class="btn-primary" id="btnCompare" onclick="doCompare()" disabled>
+          归类对比 <span id="cmpCount"></span>
+        </button>
         <button class="btn-export" id="btnSearchExport" onclick="exportGeneric('search')">导出 CSV</button>
+        <span class="hint" style="margin:0;">勾选 2 个以上候选，对比判定条件与所需证据</span>
       </div>
     </div>
   </div>
@@ -1508,12 +1530,13 @@ function renderSearch(data) {
   body.innerHTML = '';
   if (!data.results.length) {
     const hasCJK = /[\u4e00-\u9fff]/.test(data.keyword || '');
-    body.innerHTML = `<tr><td colspan="8" class="empty">${
+    body.innerHTML = `<tr><td colspan="9" class="empty">${
       hasCJK
         ? '税率搜索需要英文关键词或编码。中文商品名请到「AI 助手」用自然语言问（如"帮我归类：锂电池"）'
         : '没有匹配结果，请尝试更短的英文关键词（如 battery / apparel）'
     }</td></tr>`;
     document.getElementById('searchResultCount').textContent = '';
+    syncCmpButton();
     return;
   }
   document.getElementById('searchResultCount').textContent =
@@ -1522,9 +1545,12 @@ function renderSearch(data) {
     const tr = document.createElement('tr');
     const tag = tagClass(r['301判定']);
     if (isHit(r)) tr.className = 'row-hit';
+    // 完整品名（含归类路径）放进 title：子目品名多为 Other，单看无从判断
+    const full = r['完整品名'] || r['商品描述'];
     tr.innerHTML = `
+      <td><input type="checkbox" class="cmp-pick" value="${esc(r['编码'])}" onclick="syncCmpButton()"></td>
       <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}</td>
-      <td class="desc" data-full="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
+      <td class="desc" data-full="${esc(full)}" title="${esc(full)}">${esc(r['商品描述'])}</td>
       <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
       <td>${esc(r['税率类型'])}</td>
       <td class="ellipsis" data-full="${esc(r['等效从价'])}">${esc(r['等效从价'])}</td>
@@ -1533,7 +1559,130 @@ function renderSearch(data) {
       <td class="ellipsis" data-full="${esc(r['总税负估算'] || '')}">${esc(r['总税负估算'] || '—')}</td>`;
     body.appendChild(tr);
   });
+  syncCmpButton();
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ================= 归类对比 =================
+   同一商品常有多个可能税号（多功能产品、材质卡在阈值附近、针织/梭织之分）。
+   这里把候选的判定条件与所需证据并列摆出来，而不是替用户挑一个最便宜的。 */
+
+function cmpPicked() {
+  return Array.from(document.querySelectorAll('.cmp-pick:checked')).map(x => x.value);
+}
+
+function syncCmpButton() {
+  const n = cmpPicked().length;
+  const btn = document.getElementById('btnCompare');
+  btn.disabled = n < 2;
+  document.getElementById('cmpCount').textContent = n ? `(${n})` : '';
+  const all = document.getElementById('cmpAll');
+  const boxes = document.querySelectorAll('.cmp-pick');
+  if (all) all.checked = boxes.length > 0 && n === boxes.length;
+}
+
+function toggleAllCmp(src) {
+  document.querySelectorAll('.cmp-pick').forEach(b => { b.checked = src.checked; });
+  syncCmpButton();
+}
+
+async function doCompare() {
+  const codes = cmpPicked();
+  if (codes.length < 2) return;
+  const btn = document.getElementById('btnCompare');
+  btn.classList.add('loading');
+  btn.disabled = true;
+  try {
+    renderCompare(await apiPost('/api/compare', { codes }));
+  } catch (e) {
+    alert('对比失败：' + e.message);
+  } finally {
+    btn.classList.remove('loading');
+    syncCmpButton();
+  }
+}
+
+async function doCompareManual() {
+  const err = document.getElementById('cmpError');
+  err.classList.remove('show');
+  const raw = document.getElementById('cmpCodes').value || '';
+  // 复用后端同款提取口径：8 位或 10 位，带点不带点都认
+  const codes = (raw.match(/\d{4}\.?\d{2}\.?\d{2}\.?\d{0,4}/g) || [])
+    .filter(c => [8, 10].includes(c.replace(/\D/g, '').length));
+  if (codes.length < 2) {
+    err.textContent = '请至少输入 2 个有效编码（8 位或 10 位），逗号或空格分隔';
+    err.classList.add('show');
+    return;
+  }
+  try {
+    renderCompare(await apiPost('/api/compare', { codes }));
+  } catch (e) {
+    err.textContent = '对比失败：' + e.message;
+    err.classList.add('show');
+  }
+}
+
+function renderCompare(data) {
+  const items = data['候选'] || [];
+  // 税率差额：直接点出分歧的金额意义，这是要不要申请预裁定的判断依据
+  const vals = items.map(i => parseFloat(String(i['等效从价']).replace('%', '')))
+                    .filter(v => !isNaN(v));
+  const spread = vals.length >= 2 ? (Math.max(...vals) - Math.min(...vals)).toFixed(1) : null;
+
+  let html = '';
+  if (data['跨章']) {
+    html += `<div class="error-bar show" style="margin-top:0;">⚠ ${esc(data['分歧提示'])}</div>`;
+  }
+  if (spread !== null && parseFloat(spread) > 0) {
+    html += `<div class="info-bar">候选间基础税率差 <b>${spread}</b> 个百分点。
+      注意：基础税率低不等于总税负低——301 等加征可能反转结果，请看每条的「总税负估算」。</div>`;
+  }
+
+  html += '<div class="ai-cards" style="margin-top:14px;">';
+  items.forEach(it => {
+    const crs = it['判定条件'] || [];
+    const ev = it['证据清单'] || [];
+    html += `<div class="ai-card">
+      <div class="ai-code">${esc(coreFmt(it['编码']))}</div>
+      <div class="ai-desc" title="${esc(it['完整品名'])}">${esc(it['完整品名'])}</div>
+      <div style="font-size:13px;margin:8px 0;">
+        一般税率 <b>${esc(it['一般税率'] || '—')}</b>
+        ｜ 等效 <b>${esc(it['等效从价'] || '—')}</b><br>
+        总税负 <b style="color:var(--hit)">${esc(it['总税负估算'] || '—')}</b>
+        ｜ 301 ${esc(it['301判定'] || '—')}
+      </div>
+      <div style="font-size:12px;font-weight:600;margin-top:10px;">报这个编码需要能证明：</div>`;
+    if (!crs.length) {
+      html += `<div class="ai-reason">本地品名中未抽出量化判定条件。
+        不代表没有条件——章注、类注与 GRI 不在本地数据内，仍需人工核对官方税则。</div>`;
+    } else {
+      html += '<div class="ai-reason" style="padding:0;background:none;">';
+      crs.forEach(c => {
+        html += `<div style="margin-bottom:8px;">
+          <span class="tag warn">${esc(c['类型'])}</span>
+          <span style="font-size:11px;color:var(--muted);">${esc(c['出处'])}</span>
+          <div style="font-size:12px;margin:3px 0 0;">${esc(c['原文'])}</div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+    if (ev.length) {
+      html += `<div style="font-size:12px;font-weight:600;margin-top:10px;">需备材料：</div>
+        <ul style="font-size:12px;padding-left:18px;margin-top:4px;">
+        ${ev.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`;
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  html += `<div class="hint" style="margin-top:12px;">${esc(data['提示'] || '')}</div>`;
+
+  openSrcModal('归类对比', html);
+}
+
+/* 编码补点：后端 compare 返回的是纯数字 8 位 */
+function coreFmt(c) {
+  const s = String(c || '');
+  return s.length === 8 ? `${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}` : s;
 }
 
 /* ================= 成本估算 ================= */
