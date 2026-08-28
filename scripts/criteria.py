@@ -179,6 +179,94 @@ def compare(db, codes):
     return {"候选": items, "跨章": cross, "章列表": chapters, "分歧提示": hint}
 
 
+# ---------- 信息不足时该补问什么 ----------
+
+NARROW_TOP_N = 20      # 只看用户实际会看的那批结果
+NARROW_MAX_VALUES = 4  # 每类条件展示的取值上限
+NARROW_VALUE_CHARS = 70
+
+# 品名末尾的 (353)、(653) 之类是纺织品统计类别号，不是归类条件的一部分。
+# 不剥掉的话，同一个条件会因为类别号不同被当成多种取值，
+# 用户看到的是"6 种取值"实际只有 2 个真条件。
+_STAT_CAT_RE = re.compile(r"\s*\(\d{3}\)\s*$")
+
+
+def _narrow_key(raw):
+    """条件原文 → 去重键：剥统计类别号、去尾标点、忽略大小写与截断差异"""
+    s = _STAT_CAT_RE.sub("", raw).strip().rstrip(",;:. ").lower()
+    # 展示时会截断到 NARROW_VALUE_CHARS，若两条截断后一样，用户看到的就是重复项
+    return s[:NARROW_VALUE_CHARS]
+
+
+def narrowing_questions(db, rows, top_n=NARROW_TOP_N):
+    """
+    从检索结果里导出"还需要确认哪些商品属性"。
+
+    起因：相关度评分是逐词二元计分（自身品名命中满权重、祖先命中打 0.35 折），
+    同一父节点下的子目必然同分——'jacket' 200 条结果只有 2 个不同分值，
+    最大并列组 189 条。此前按编码打破平局，结果是"稳定地任意"。
+
+    但给这堆并列硬造一个排序是错的方向。它们同分恰恰说明**查询信息不足以
+    区分**：用户没说材质，那 Of cotton / Of wool / Of man-made fibers 就该
+    并列，把其中一个排前面是在替用户猜。正确的输出不是排序，是把决定分类的
+    那几个属性问回去——这也正是归类实务里的做法。
+
+    返回 [{类型, 取值: [...], 覆盖编码数, 证据}, ...]，按涉及取值数排序。
+    只保留出现 2 种以上取值的条件类型：单一取值说明所有候选在该维度一致，
+    问了也不能缩小范围。
+    """
+    seen_codes = []
+    for r in (rows or [])[:top_n]:
+        c8 = re.sub(r"\D", "", str(r.get("编码", "")))[:8]
+        if len(c8) == 8:
+            seen_codes.append(c8)
+
+    # 类型 → {归一化取值: (展示原文, 命中编码数, 证据)}
+    kinds = {}
+    for c8 in seen_codes:
+        for c in extract(db, c8):
+            kind = c["类型"]
+            raw = re.sub(r"\s+", " ", c["原文"]).strip()
+            key = _narrow_key(raw)
+            bucket = kinds.setdefault(kind, {})
+            if key in bucket:
+                bucket[key] = (bucket[key][0], bucket[key][1] + 1, bucket[key][2])
+            else:
+                bucket[key] = (_STAT_CAT_RE.sub("", raw).strip(), 1, c.get("证据", ""))
+
+    out = []
+    for kind, bucket in kinds.items():
+        if len(bucket) < 2:
+            continue  # 所有候选在该维度一致，问了也不缩小范围
+        vals = sorted(bucket.values(), key=lambda t: -t[1])
+        out.append({
+            "类型": kind,
+            "取值": [v[0][:NARROW_VALUE_CHARS] for v in vals[:NARROW_MAX_VALUES]],
+            "取值总数": len(bucket),
+            "覆盖编码数": sum(v[1] for v in vals),
+            "证据": vals[0][2],
+        })
+    out.sort(key=lambda d: -d["取值总数"])
+    return out
+
+
+def tie_ratio(rows, top_n=NARROW_TOP_N):
+    """
+    前 top_n 条里最大同分组的占比。
+
+    接近 1 说明排序几乎没有区分力，此时"第一条"不代表最匹配，
+    只代表编码最小——这件事必须让用户知道，否则会被排序误导。
+    """
+    head = (rows or [])[:top_n]
+    if len(head) < 2:
+        return 0.0
+    counts = {}
+    for r in head:
+        s = r.get("相关度")
+        counts[s] = counts.get(s, 0) + 1
+    return round(max(counts.values()) / len(head), 3)
+
+
 # ---------- 一物多号的自动识别 ----------
 
 DISPUTE_TOP_K = 8       # 只看最相关的前若干条：更靠后的多是同词碰巧命中，不是候选

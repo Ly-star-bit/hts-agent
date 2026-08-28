@@ -308,6 +308,58 @@ class TestSearchRecall(unittest.TestCase):
                         f"首位应是服装章，实际 {rows[0]['编码']}")
 
 
+class TestWeaveChapterBias(unittest.TestCase):
+    """
+    织法 → 章的偏置。
+
+    61 章 heading 字面写着 "knitted or crocheted"，62 章的 heading 完全不提
+    织法（"梭织"是靠"不在 61 章"反向定义的，两章里出现 'woven' 的行只有 4 条）。
+    结果是不对称的错误：搜"针织夹克"正确，搜"梭织夹克"前 20 条里 14 条却是
+    针织的 61 章成衣。61/62 税率不同，归错章就是归错码。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def _chapters(self, q, n=20):
+        return [r["章"] for r in rate.search(self.db, q, limit=60, sort="relevance")[:n]]
+
+    def test_woven_query_excludes_knit_chapter(self):
+        chs = self._chapters("梭织夹克")
+        self.assertTrue(chs)
+        self.assertNotIn("61", chs, "查梭织不该返回 61 章（按定义就是针织）")
+
+    def test_knit_query_prefers_61(self):
+        chs = self._chapters("针织夹克")
+        self.assertTrue(chs)
+        self.assertNotIn("62", chs, "查针织不该返回 62 章（按定义就是非针织）")
+
+    def test_woven_coated_jacket(self):
+        chs = self._chapters("梭织涂层夹克")
+        self.assertNotIn("61", chs)
+
+    def test_contradictory_intent_cancels(self):
+        """用户自己都没说清织法时，不该由检索替他决定"""
+        b = rate._weave_bias(["woven", "knitted"])
+        self.assertEqual(b.get("61", 0), 0.0)
+        self.assertEqual(b.get("62", 0), 0.0)
+
+    def test_synonym_pair_counted_once(self):
+        """knitted / crocheted 是官方固定搭配的两半，展开后不能把偏置翻倍"""
+        one = rate._weave_bias(["knitted"])
+        both = rate._weave_bias(["knitted", "crocheted"])
+        self.assertEqual(one, both)
+
+    def test_no_bias_without_weave_terms(self):
+        self.assertEqual(rate._weave_bias(["battery", "lithium"]), {})
+
+    def test_fabric_chapters_unaffected(self):
+        """'woven' 在 50-58 章面料里是正常词，偏置只针对 61/62 成衣章"""
+        b = rate._weave_bias(["woven"])
+        self.assertEqual(set(b), {"61", "62"})
+
+
 class TestSearchDeterminism(unittest.TestCase):
     """
     同一查询必须每次返回同一批结果。

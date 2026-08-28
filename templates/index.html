@@ -394,7 +394,7 @@
     border-radius: 10px; padding: 12px 14px; background: var(--gray-bg);
   }
   .dispute-head { display: flex; align-items: baseline; gap: 8px; }
-  .dispute-head .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 15px; }
+  .dispute-head .code { font-family: var(--font-mono); font-size: 15px; }
   .hd { font-size: 11px; color: var(--muted); }
   .dispute-desc {
     font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.5;
@@ -410,6 +410,12 @@
     color: var(--warn); font-weight: 600;
   }
   .dispute-none { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.6; }
+  /* 待确认属性里的税则原文取值 */
+  .info-bar code {
+    font-family: var(--font-mono); font-size: 12px;
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; white-space: normal;
+  }
 
   /* 搜索页内的 AI 补充分析结果 */
   .tag-ai {
@@ -426,7 +432,7 @@
     width: 20px; height: 20px; border-radius: 50%; background: var(--primary); color: #fff;
     font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
   }
-  .ai-pick-head .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 15px; }
+  .ai-pick-head .code { font-family: var(--font-mono); font-size: 15px; }
   .ai-pick-head .conf { font-size: 12px; color: var(--muted); }
   .ai-pick-desc { font-size: 13px; color: var(--muted); margin-top: 6px; }
   .ai-pick-reason { font-size: 13px; line-height: 1.7; margin-top: 8px; }
@@ -1633,7 +1639,9 @@ function renderSearch(data) {
         : '可在「AI 助手」配置 AI 服务后使用补充分析。'}</div>`;
   }
   document.getElementById('searchNotes').innerHTML = notes;
-  document.getElementById('disputeBox').innerHTML = renderDispute(data['归类分歧']);
+  document.getElementById('disputeBox').innerHTML =
+    renderNarrowing(data['待确认属性'], data['并列度'], data.results.length)
+    + renderDispute(data['归类分歧']);
   syncSearchAiButton();
 
   if (!data.results.length) {
@@ -1652,6 +1660,30 @@ function renderSearch(data) {
   data.results.forEach(r => body.appendChild(searchRow(r)));
   syncCmpButton();
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------- 信息不足时补问什么 ----------
+   相关度是逐词二元计分，同一父节点下的子目必然同分（'jacket' 200 条结果
+   只有 2 个不同分值）。给这堆并列硬排个序是在替用户猜——它们同分恰恰说明
+   查询信息不足。这里不伪造排序，而是把决定分类的属性问回去。 */
+function renderNarrowing(items, tie, total) {
+  if (!items || !items.length) return '';
+  let h = `<div class="info-bar" style="border-left:3px solid var(--warn);">
+    <b>还需要确认这些信息才能定编码：</b>`;
+  if (tie >= 0.5) {
+    h += `<br><span style="font-size:12px;">
+      前 20 条里有 ${Math.round(tie * 100)}% 相关度完全相同——排第一的并不比后面的更匹配，
+      只是编码更小。补齐下列属性才能真正收敛。</span>`;
+  }
+  h += `<ul style="margin:8px 0 0;padding-left:20px;font-size:13px;line-height:1.8;">`;
+  items.forEach(n => {
+    const vals = n['取值'].map(v => `<code>${esc(v)}</code>`).join(' / ');
+    const more = n['取值总数'] > n['取值'].length
+      ? `<span class="hd"> 等 ${n['取值总数']} 种</span>` : '';
+    h += `<li><b>${esc(n['类型'])}</b>：${vals}${more}
+      <div class="hd">需备：${esc(n['证据'])}</div></li>`;
+  });
+  return h + `</ul></div>`;
 }
 
 /* ---------- 一物多号：由搜索结果自动报出，不需要用户先勾选 ----------

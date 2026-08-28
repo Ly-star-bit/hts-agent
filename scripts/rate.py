@@ -440,6 +440,43 @@ def build_search_index(db):
 # 祖先词命中的权重系数：够让 'Other' 这类子目被检索到，又不至于压过精确匹配
 PATH_WEIGHT = 0.35
 
+# 织法 → 章的偏置。这条知识**无法从文本得到**，必须外挂：
+#   61 章 heading 字面写着 "knitted or crocheted"（全库 350 处祖先命中），
+#   而 62 章的 heading 完全不提织法——"梭织"是靠"不在 61 章"反向定义的，
+#   61/62 两章里出现 'woven' 的行总共只有 4 条。
+# 于是产生一个不对称的错误：搜"针织夹克"正确（词面命中 61 章），搜"梭织夹克"
+# 前 20 条里却有 14 条是针织的 61 章成衣——织法整个反了。而 61/62 税率不同，
+# 归错章就是归错码。criteria._CHAPTER_RULES 早已编码了同一事实，只是检索侧不知道。
+# 幅度取 4.0，与既有的词组连续命中加分（+4/+6）同量级。
+_WEAVE_CHAPTER_BIAS = {
+    "woven":     {"62": 4.0, "61": -4.0},
+    "knitted":   {"61": 4.0, "62": -4.0},
+    "crocheted": {"61": 4.0, "62": -4.0},
+}
+
+
+def _weave_bias(tokens):
+    """
+    查询词 → {章: 偏置}。
+
+    knitted 与 crocheted 是同一个意图的两种说法（官方固定搭配
+    "knitted or crocheted"），只计一次，否则同义词展开会把偏置翻倍。
+    若查询同时含互斥意图（woven + knitted），两边相加自然抵消为 0——
+    用户自己都没说清织法时，不该由检索替他决定。
+    """
+    bias, seen = {}, set()
+    for t in tokens:
+        rule = _WEAVE_CHAPTER_BIAS.get(t)
+        if not rule:
+            continue
+        key = tuple(sorted(rule.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+        for ch, d in rule.items():
+            bias[ch] = bias.get(ch, 0.0) + d
+    return bias
+
 
 def _clear_index_cache():
     """测试用：清空索引缓存"""
@@ -548,6 +585,7 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
     N = max(len(desc_map), 1)
     # idf 权重：罕见词（lithium）权重大，宽泛词（electric）权重小
     weights = {tok: math.log(N / (len(index.get(tok, set())) + 1)) + 0.5 for tok in tokens}
+    weave = _weave_bias(tokens)
     rows = []
     for code in codes:
         desc = desc_map.get(code, "")
@@ -581,6 +619,8 @@ def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
             score += 5
         if norm_kw and len(norm_kw) >= 6 and code.startswith(norm_kw):
             score += 8
+        # 织法偏置：61 章按定义就是针织，查"梭织"时它不该与 62 章并列
+        score += weave.get(code[:2], 0.0)
         c99 = db["sec301_map"].get(code)
         pct301 = db["c99_percent"].get(c99) if c99 else None
         if pct301:

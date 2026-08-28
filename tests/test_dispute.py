@@ -86,6 +86,109 @@ class TestGrouping(unittest.TestCase):
         self.assertFalse(criteria.detect_dispute(self.db, [row("85", None)])["有分歧"])
 
 
+class TestNarrowingQuestions(unittest.TestCase):
+    """
+    信息不足时补问什么。
+
+    相关度是逐词二元计分，同一父节点下的子目必然同分——'jacket' 200 条结果
+    只有 2 个不同分值，最大并列组 189 条。给这堆并列硬造排序是在替用户猜；
+    它们同分恰恰说明查询信息不足，正确的输出是把决定分类的属性问回去。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def _ask(self, q):
+        rows = rate.search(self.db, q, limit=200, sort="relevance")
+        return {n["类型"]: n for n in criteria.narrowing_questions(self.db, rows)}
+
+    def test_material_asked_when_unspecified(self):
+        """用户没说材质，Of cotton / Of wool / Of man-made fibers 就该被问"""
+        got = self._ask("梭织涂层夹克")
+        self.assertIn("主材质", got)
+        vals = " ".join(got["主材质"]["取值"]).lower()
+        self.assertIn("cotton", vals)
+        self.assertIn("wool", vals)
+
+    def test_value_threshold_asked(self):
+        """不锈钢餐具的税号取决于单价档位，这个必须问"""
+        got = self._ask("不锈钢餐具")
+        self.assertIn("价值门槛", got)
+        self.assertIn("¢", " ".join(got["价值门槛"]["取值"]))
+
+    def test_evidence_attached(self):
+        got = self._ask("不锈钢餐具")
+        self.assertIn("发票", got["价值门槛"]["证据"])
+
+    def test_single_value_not_asked(self):
+        """所有候选在某维度取值一致时，问了也不缩小范围，不该出现"""
+        rows = rate.search(self.db, "梭织涂层夹克", limit=200, sort="relevance")
+        for n in criteria.narrowing_questions(self.db, rows):
+            self.assertGreaterEqual(n["取值总数"], 2, f"{n['类型']} 只有一种取值不该被问")
+
+    def test_nothing_to_ask_when_determined(self):
+        """锂电池落在 8507.60，没有待定条件"""
+        self.assertEqual(self._ask("锂电池"), {})
+
+    def test_values_deduped_case_insensitively(self):
+        """'Containing' 与 'containing' 是同一条件，不能算两种取值"""
+        rows = rate.search(self.db, "jacket", limit=200, sort="relevance")
+        for n in criteria.narrowing_questions(self.db, rows):
+            low = [v.lower() for v in n["取值"]]
+            self.assertEqual(len(low), len(set(low)), f"{n['类型']} 的取值仅大小写不同")
+
+    def test_statistical_category_stripped(self):
+        """
+        品名末尾的 (353)/(653) 是纺织品统计类别号，不是条件的一部分。
+        不剥掉的话同一条件会被算成多种取值——实测"含量阈值"报 6 种，
+        去掉类别号后只有 3 个真条件。
+        """
+        self.assertEqual(criteria._narrow_key("containing 10 percent of down (353)"),
+                         criteria._narrow_key("Containing 10 percent of down (653)"))
+        got = self._ask("梭织涂层夹克")
+        self.assertEqual(got["含量阈值"]["取值总数"], 3)
+        for v in got["含量阈值"]["取值"]:
+            self.assertNotRegex(v, r"\(\d{3}\)\s*$", "展示值仍带统计类别号")
+
+    def test_values_unique_after_truncation(self):
+        """展示会截断，截断后重复的项对用户就是重复项"""
+        for q in ("梭织涂层夹克", "jacket", "wool coat"):
+            rows = rate.search(self.db, q, limit=200, sort="relevance")
+            for n in criteria.narrowing_questions(self.db, rows):
+                shown = [v.strip().lower() for v in n["取值"]]
+                self.assertEqual(len(shown), len(set(shown)),
+                                 f"{q} 的 {n['类型']} 截断后出现重复展示值")
+
+    def test_empty_rows(self):
+        self.assertEqual(criteria.narrowing_questions(self.db, []), [])
+
+
+class TestTieRatio(unittest.TestCase):
+    """并列度：排序几乎没区分力这件事必须让用户知道"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_flat_query_high_ratio(self):
+        rows = rate.search(self.db, "梭织涂层夹克", limit=200, sort="relevance")
+        self.assertGreater(criteria.tie_ratio(rows), 0.5,
+                           "该查询前 20 条大面积同分，应报高并列度")
+
+    def test_single_result(self):
+        self.assertEqual(criteria.tie_ratio([{"相关度": 1.0}]), 0.0)
+        self.assertEqual(criteria.tie_ratio([]), 0.0)
+
+    def test_all_distinct(self):
+        rows = [{"相关度": float(i)} for i in range(10)]
+        self.assertAlmostEqual(criteria.tie_ratio(rows), 0.1)
+
+    def test_all_same(self):
+        rows = [{"相关度": 5.0} for _ in range(10)]
+        self.assertAlmostEqual(criteria.tie_ratio(rows), 1.0)
+
+
 class TestDistinguishingText(unittest.TestCase):
     """
     分歧点：候选彼此独有的路径措辞。

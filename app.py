@@ -399,7 +399,11 @@ def api_search(req: SearchRequest):
         return {"results": rows, "count": len(rows), "keyword": req.keyword,
                 "检索词": _expanded if applied else "",
                 "同义词映射": applied, "未识别": leftover,
-                "归类分歧": dispute}
+                "归类分歧": dispute,
+                # 大量候选同分时，"第一条"并不代表最匹配。与其伪造排序，
+                # 不如把决定分类的那几个属性问回去
+                "待确认属性": criteria.narrowing_questions(db, rows),
+                "并列度": criteria.tie_ratio(rows)}
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"搜索服务端异常：{e}")
