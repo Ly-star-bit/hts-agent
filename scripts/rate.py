@@ -280,11 +280,52 @@ def _fmt_av(av):
 _index_cache = None
 
 
+def path_of(db, code):
+    """取某个 8 位子目的归类路径（祖先品名列表）。db 里存的是字符串表下标。"""
+    nodes = db.get("path_nodes") or []
+    idxs = (db.get("rates_8", {}).get(code) or {}).get("path") or []
+    return [nodes[i] for i in idxs if 0 <= i < len(nodes)]
+
+
+def full_desc(db, code):
+    """归类路径 + 自身品名，用 ' > ' 连接。子目品名多为 'Other'，单看无意义。"""
+    info = db.get("rates_8", {}).get(code) or {}
+    parts = [p.rstrip(":").strip() for p in path_of(db, code)]
+    own = (info.get("desc") or "").rstrip(":").strip()
+    if own:
+        parts.append(own)
+    return " > ".join(p for p in parts if p)
+
+
+def _stem(w):
+    """
+    轻量英文复数还原。HTS 品名里的词形变体绝大多数就是单复数：
+    coats / gloves / batteries / fibers / cells。
+
+    此前只有 prefix5（取前 5 字符）做词干归并，要求词长 ≥5，于是 coat↔coats、
+    wool↔woolen、cell↔cells 这些 4 字母词完全匹配不上——而服装、材料类的关键词
+    恰恰大量是短词，'wool coat' 这种最自然的查询直接返回空。
+    """
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"          # batteries → battery
+    if len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us", "is")):
+        return w[:-1]                # coats → coat；glass / status 不动
+    return w
+
+
 def build_search_index(db):
     """
     构建内存倒排索引（模块级缓存）：
-      - token(小写词) -> [norm8 编码]          精确词索引
-      - prefix5(词前5字符) -> [norm8 编码]     词干索引（battery/batteries 共用 'batte'）
+      - index: token -> [norm8]         自身品名词索引（同时以原形与词干双键收录）
+      - prefix5 -> [norm8]              前 5 字符词干索引（长词的模糊归并）
+      - path_index: token -> [norm8]    祖先品名词索引（同样双键收录）
+
+    双键收录 + 查询时也查词干，等于双向归一：'coats' 收在 {coats, coat} 下，
+    查 'coat' 或 'coats' 都能命中。
+
+    祖先词单独建索引而不是并进主索引：大量子目品名就是 'Other'，不吃祖先词根本
+    检索不到；但祖先词覆盖面很广（一个品目下挂几十个子目），并进主索引会淹没
+    精确匹配。因此分开存，打分时祖先命中按较低权重计入。
     """
     global _index_cache
     if _index_cache is not None:
@@ -292,15 +333,30 @@ def build_search_index(db):
     index = {}
     prefix5 = {}
     desc_map = {}
+    path_index = {}
+
+    def _add(target, tok, code):
+        target.setdefault(tok, set()).add(code)
+        st = _stem(tok)
+        if st != tok:
+            target.setdefault(st, set()).add(code)
+
     for code, info in db["rates_8"].items():
         desc = info.get("desc", "")
         desc_map[code] = desc
         for tok in re.findall(r"[a-z0-9]+", desc.lower()):
-            index.setdefault(tok, set()).add(code)
+            _add(index, tok, code)
             if len(tok) >= 5:
                 prefix5.setdefault(tok[:5], set()).add(code)
-    _index_cache = (index, desc_map, prefix5)
+        for anc in path_of(db, code):
+            for tok in re.findall(r"[a-z0-9]+", anc.lower()):
+                _add(path_index, tok, code)
+    _index_cache = (index, desc_map, prefix5, path_index)
     return _index_cache
+
+
+# 祖先词命中的权重系数：够让 'Other' 这类子目被检索到，又不至于压过精确匹配
+PATH_WEIGHT = 0.35
 
 
 def _clear_index_cache():
@@ -325,7 +381,7 @@ def _stem_match(a, b):
     return n >= 5
 
 
-def search(db, keyword, limit=100, sort="tax_asc"):
+def search(db, keyword, limit=100, sort="tax_asc", include_special=False):
     """
     关键词搜索 8 位子目：匹配英文品名 + 编码。
 
@@ -334,6 +390,14 @@ def search(db, keyword, limit=100, sort="tax_asc"):
       - tax_desc  按等效从价税率降序
       - relevance 按匹配相关度
       - code_asc  按编码升序
+
+    include_special：是否包含第 98/99 章，默认否。
+      98 章是特殊归类条款（复进口、随身物品免税等），99 章是临时立法条款
+      （9902 临时减免、9903 加征/配额）。两者都不是"给商品定编码"时的答案——
+      它们要么是附加适用，要么是特殊情形，正式归类必须落在第 1-97 章。
+      而 99 章品名往往写得极其具体（如 "Boys' woven man-made fiber coats,
+      containing 36 percent..."），词组匹配得分很高，不排除会霸占结果首位，
+      诱导用户拿一个不能用于常规申报的编码去报关。
 
     返回:
       [{'编码', '商品描述', '一般税率', '税率类型', '等效从价', '等效从价数值',
@@ -344,7 +408,7 @@ def search(db, keyword, limit=100, sort="tax_asc"):
         return []
     import core as _core
     measures = _core.load_measures_config()  # cn301 禁用时 301 加征列不输出
-    index, desc_map, prefix5 = build_search_index(db)
+    index, desc_map, prefix5, path_index = build_search_index(db)
 
     # 编码直接匹配
     codes = set()
@@ -360,12 +424,21 @@ def search(db, keyword, limit=100, sort="tax_asc"):
     # 纯 AND 会因官方品名不含这些词而召回为空，纯 OR 又会被宽泛词淹没精确词。
     tokens = [t for t in re.findall(r"[a-z0-9]+", kw)
               if len(t) >= 2 and not t.isdigit()]  # 纯数字 token（编码片段）无语义，过滤
+    def _hits(tok, with_path=True):
+        """某个词命中的编码集合：原形 + 词干 + 前缀归并 +（可选）祖先品名"""
+        st = _stem(tok)
+        hit = set(index.get(tok, set())) | set(index.get(st, set()))
+        if len(tok) >= 5:
+            hit |= prefix5.get(tok[:5], set())  # 长词的前缀归并
+        if with_path:
+            # 让品名为 'Other' 的子目也能被检索到
+            hit |= path_index.get(tok, set()) | path_index.get(st, set())
+        return hit
+
     if tokens:
         and_hits = None
         for tok in tokens:
-            hit = set(index.get(tok, set()))
-            if len(tok) >= 5:
-                hit |= prefix5.get(tok[:5], set())  # 词干变体：battery → batteries
+            hit = _hits(tok)
             and_hits = hit if and_hits is None else (and_hits & hit)
         if and_hits:
             codes |= and_hits
@@ -373,12 +446,13 @@ def search(db, keyword, limit=100, sort="tax_asc"):
             min_hits = 2 if len(tokens) >= 2 else 1
             hit_counts = {}
             for tok in tokens:
-                hit = set(index.get(tok, set()))
-                if len(tok) >= 5:
-                    hit |= prefix5.get(tok[:5], set())
-                for c in hit:
+                for c in _hits(tok):
                     hit_counts[c] = hit_counts.get(c, 0) + 1
             codes |= {c for c, n in hit_counts.items() if n >= min_hits}
+
+    # 第 98/99 章不是常规归类结果，默认剔除（编码前缀匹配时若用户明确查 98/99 则保留）
+    if not include_special and not (norm_kw and norm_kw[:2] in ("98", "99")):
+        codes = {c for c in codes if c[:2] not in ("98", "99")}
 
     # 打分排序
     import math
@@ -392,11 +466,28 @@ def search(db, keyword, limit=100, sort="tax_asc"):
         gen = info.get("general", "")
         p = parse_rate(gen)
         av = estimate_ad_valorem(gen)  # 无单位货值：纯从价可比较，从量返回 None
-        # 相关度：加权词干命中分 + 描述开头命中加权 + 编码命中加权
+        # 相关度：自身品名命中满权重，祖先品名命中按 PATH_WEIGHT 折算，
+        # 再加描述开头命中与编码命中的加权
         desc_low = desc.lower()
         words = re.findall(r"[a-z0-9]+", desc_low)
-        score = sum(weights.get(t, 1.0) for t in tokens
-                    if any(_stem_match(t, w) for w in words))
+        anc = path_of(db, code)
+        anc_words = {_stem(w) for w in re.findall(r"[a-z0-9]+", " ".join(anc).lower())}
+        score = 0.0
+        for t in tokens:
+            w = weights.get(t, 1.0)
+            if any(_stem_match(t, x) for x in words):
+                score += w
+            elif _stem(t) in anc_words:
+                score += w * PATH_WEIGHT
+        # 词组连续命中加分：'man-made fibers' 是官方固定说法，拆成 man/made/fibers
+        # 三个高频词独立计分会让"碰巧含这三个词"的无关子目挤到前面。
+        # 整串在完整品名里连续出现，说明匹配到的是术语本身而非几个散词。
+        if len(tokens) >= 2:
+            full_low = full_desc(db, code).lower()
+            if kw in full_low:
+                score += 6
+            elif kw in desc_low:
+                score += 4
         if desc_low.startswith(kw):
             score += 5
         if norm_kw and len(norm_kw) >= 6 and code.startswith(norm_kw):
@@ -415,6 +506,11 @@ def search(db, keyword, limit=100, sort="tax_asc"):
         rows.append({
             "编码": core_fmt(code),
             "商品描述": desc,
+            # 归类路径：子目品名多为 'Other'，判定条件（材质/织法/含量阈值）写在祖先上，
+            # 归类争议场景下这才是能拿来论证的依据
+            "归类路径": [a.rstrip(":").strip() for a in anc],
+            "完整品名": full_desc(db, code),
+            "章": code[:2],
             "一般税率": gen,
             "税率类型": {"free": "免税", "percent": "从价", "specific": "从量",
                          "compound": "复合", "reference": "引用", "complex": "复杂",

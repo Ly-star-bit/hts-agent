@@ -208,5 +208,97 @@ class TestSearch(unittest.TestCase):
         self.assertEqual(rate.search(self.db, ""), [])
 
 
+class TestClassificationPath(unittest.TestCase):
+    """归类路径：判定条件（材质/织法/含量阈值）写在祖先品名上，必须还原出来"""
+
+    @classmethod
+    def setUpClass(cls):
+        import core
+        cls.db = core.load_db()
+
+    def test_path_carries_material_criterion(self):
+        # 6201.40.35 自身品名只有 'Padded sleeveless jackets'，看不出是化纤制；
+        # 'Of man-made fibers' 在父节点上——归类争议里的材质分水岭
+        path = rate.path_of(self.db, "62014035")
+        self.assertTrue(any("man-made fibers" in p.lower() for p in path))
+
+    def test_sibling_differs_only_by_threshold(self):
+        # 同父节点下 6201.40.40 靠"羊毛≥36%"与 6201.40.35 分开，税率天差地别
+        import core
+        a = core.query_one(self.db, "62014035")
+        b = core.query_one(self.db, "62014040")
+        self.assertIn("36 percent or more by weight of wool", b["商品描述"])
+        self.assertNotEqual(a["一般税率"], b["一般税率"])
+
+    def test_full_desc_joins_path(self):
+        full = rate.full_desc(self.db, "63079098")
+        self.assertIn("Other made up articles", full)   # 祖先
+        self.assertTrue(full.endswith("Other"))         # 自身
+
+    def test_query_exposes_path(self):
+        import core
+        r = core.query_one(self.db, "62014035")
+        self.assertIn("归类路径", r)
+        self.assertTrue(r["归类路径"])
+
+
+class TestSearchRecall(unittest.TestCase):
+    """搜索召回：短词词干、祖先词、章节过滤"""
+
+    @classmethod
+    def setUpClass(cls):
+        import core
+        cls.db = core.load_db()
+
+    def setUp(self):
+        rate._clear_index_cache()
+
+    def tearDown(self):
+        rate._clear_index_cache()
+
+    def test_stem_plurals(self):
+        # 4 字母短词此前完全匹配不上复数形式（prefix5 要求词长≥5）
+        self.assertEqual(rate._stem("coats"), "coat")
+        self.assertEqual(rate._stem("gloves"), "glove")
+        self.assertEqual(rate._stem("batteries"), "battery")
+        self.assertEqual(rate._stem("cells"), "cell")
+        # 不该被误伤的
+        self.assertEqual(rate._stem("glass"), "glass")
+        self.assertEqual(rate._stem("status"), "status")
+        self.assertEqual(rate._stem("this"), "this")
+
+    def test_short_word_query_not_empty(self):
+        # 'wool coat' 改前返回 0 条
+        self.assertTrue(rate.search(self.db, "wool coat", limit=5))
+
+    def test_ancestor_only_term_is_findable(self):
+        # 'dress patterns' 只出现在祖先品名里，改前返回 0 条
+        rows = rate.search(self.db, "dress patterns", limit=5)
+        self.assertTrue(rows)
+        self.assertTrue(all(r["编码"].startswith("6307") for r in rows))
+
+    def test_special_chapters_excluded_by_default(self):
+        # 98/99 章不是可归类的进口编码，默认不得出现在结果里
+        for kw in ("wool coat", "gloves", "lithium battery"):
+            rows = rate.search(self.db, kw, limit=20)
+            self.assertFalse([r for r in rows if r["编码"][:2] in ("98", "99")],
+                             f"'{kw}' 结果混入 98/99 章")
+
+    def test_special_chapters_reachable_when_asked(self):
+        # 显式按编码查 99 章仍要能查到
+        rows = rate.search(self.db, "9903.88", limit=5, sort="code_asc")
+        self.assertTrue(rows)
+        self.assertTrue(all(r["编码"].startswith("9903") for r in rows))
+        # 或显式打开开关
+        self.assertTrue(rate.search(self.db, "gloves", limit=20, include_special=True))
+
+    def test_phrase_bonus_ranks_term_match_first(self):
+        # 'man-made fibers anorak' 改前首位是塑料地板砖（自身品名含 man-made fibers）
+        rows = rate.search(self.db, "man-made fibers anorak", limit=5, sort="relevance")
+        self.assertTrue(rows)
+        self.assertTrue(rows[0]["编码"].startswith(("61", "62")),
+                        f"首位应是服装章，实际 {rows[0]['编码']}")
+
+
 if __name__ == "__main__":
     unittest.main()

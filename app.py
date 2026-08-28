@@ -269,6 +269,7 @@ class SearchRequest(BaseModel):
     sort: str = Field(default="tax_asc", description="排序：tax_asc / tax_desc / relevance / code_asc")
     limit: int = Field(default=100, ge=1, le=500)
     unit_value: Optional[float] = Field(default=None, description="单位货值 USD，用于折算从量税（可选）")
+    include_special: bool = Field(default=False, description="是否包含第 98/99 章（特殊/临时条款，默认排除）")
 
 
 class EstimateRequest(BaseModel):
@@ -372,7 +373,8 @@ def api_search(req: SearchRequest):
         import rate
 
         db = get_db()
-        rows = rate.search(db, req.keyword, limit=req.limit, sort=req.sort)
+        rows = rate.search(db, req.keyword, limit=req.limit, sort=req.sort,
+                           include_special=req.include_special)
         # 可选：给定单位货值时计算总税负
         if req.unit_value:
             for r in rows:

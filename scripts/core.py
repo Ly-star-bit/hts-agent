@@ -350,6 +350,10 @@ def query_one(db, code, origin="CN"):
     # 基础信息（两种原产地共用）
     base = rates_8.get(code8, {})
     desc = desc_10.get(code) or base.get("desc", "")
+    # 归类路径：祖先品名承载材质/织法/含量阈值等判定条件，供归类论证与人工复核
+    _nodes = db.get("path_nodes") or []
+    cls_path = [_nodes[i].rstrip(":").strip()
+                for i in (base.get("path") or []) if 0 <= i < len(_nodes)]
     general = base.get("general", "")
     special = base.get("special", "")
     col2 = base.get("col2", "")
@@ -424,6 +428,7 @@ def query_one(db, code, origin="CN"):
         "输入编码": fmt(code, 10) if n == 10 else (fmt(code, 8) if n == 8 else code),
         "8位子目": fmt(code8, 8) if len(code8) == 8 else code8,
         "商品描述": desc or "（无描述，见备注）",
+        "归类路径": cls_path,
         "一般税率": general,
         "特殊税率": special,
         "第二栏税率": col2,

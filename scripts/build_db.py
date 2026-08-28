@@ -37,33 +37,60 @@ def norm(code: str) -> str:
 def parse_hts_csv():
     """
     解析 htsdata.csv，返回：
-      - rates_8:   {norm8: {desc, general, special, col2}}     8位子目税率与描述
+      - rates_8:   {norm8: {desc, path, general, special, col2, line}}  8位子目税率与描述
       - desc_10:   {norm10: desc}                               10位统计后缀描述（更具体）
       - add_duty:  {norm(8或10): 附加关税文本}                   反倾销/反补贴等附加税
       - c99_rates: {norm(9903.xx): General税率文本}             99章子目税率（含301加征比例）
+
+    关于 path（归类路径）：
+    HTS 是树形税则，子目品名只写与父级的差异，单看往往没有意义——6201.40.35 的品名
+    就是 "Padded sleeveless jackets"，看不出它是化纤制；而"是不是化纤制"恰恰写在
+    父节点 6201.40 "Of man-made fibers" 上，正是归类争议里的材质分水岭。
+    更极端的是大量子目品名就是 "Other" / "Of cotton (220)"，完全无法检索。
+
+    CSV 的 Indent 列给出了层级，且**结构节点（HTS Number 为空的行，如 "Other:"、
+    "Of man-made fibers:"）本身也参与层级**，因此不能像此前那样直接跳过——
+    跳过它们会让路径断层。这里用 (缩进 → 品名) 的栈还原每个编码的祖先链。
     """
     rates_8 = {}
     desc_10 = {}
     add_duty = {}
     c99_rates = {}
+    stack = []          # [(indent, desc)]，维护当前所在的层级路径
     with open(HTS_CSV, encoding="utf-8-sig", newline="") as f:
         reader = csv.reader(f)
         next(reader)  # 跳过表头
         for row in reader:
-            if not row or not row[0].strip():
-                continue  # 层级描述行（HTS Number 为空）
+            if not row or len(row) < 3:
+                continue
             # 注意：CSV 中存在跨物理行的记录（描述内嵌换行），enumerate 计数会偏移，
             # 必须用 reader.line_num 记录真实物理行号，保证"来源追溯"定位准确
             line_no = reader.line_num
-            raw = row[0].strip().strip('"')
-            n = norm(raw)
             desc = row[2].strip()
-            general = row[4].strip()
-            special = row[5].strip()
-            col2 = row[6].strip()
-            add = row[8].strip()
+            try:
+                indent = int((row[1] or "").strip())
+            except ValueError:
+                indent = len(stack)     # 缩进列异常时按当前深度处理，不让路径断掉
+
+            # 维护层级栈：弹出所有不比当前浅的节点，再压入自己
+            while stack and stack[-1][0] >= indent:
+                stack.pop()
+            ancestors = [d for _, d in stack]
+            if desc:
+                stack.append((indent, desc))
+
+            raw = row[0].strip().strip('"')
+            if not raw:
+                continue        # 纯结构节点：已入栈供后代取用，本身无编码无税率
+            n = norm(raw)
+            general = row[4].strip() if len(row) > 4 else ""
+            special = row[5].strip() if len(row) > 5 else ""
+            col2 = row[6].strip() if len(row) > 6 else ""
+            add = row[8].strip() if len(row) > 8 else ""
+            entry = {"desc": desc, "path": list(ancestors), "general": general,
+                     "special": special, "col2": col2, "line": line_no}
             if len(n) == 8:
-                rates_8[n] = {"desc": desc, "general": general, "special": special, "col2": col2, "line": line_no}
+                rates_8[n] = entry
                 if add:
                     add_duty.setdefault(n, add)
             elif len(n) == 10:
@@ -73,10 +100,17 @@ def parse_hts_csv():
                 # 部分 8 位子目在官方文件中只以 10 位形式出现（如 0203.29.20.00），
                 # 税率写在 10 位行上：将其继承到 8 位前缀，保证 301 判定可回查税率。
                 if general and n[:8] not in rates_8:
-                    rates_8[n[:8]] = {"desc": desc, "general": general, "special": special, "col2": col2, "line": line_no}
+                    rates_8[n[:8]] = entry
             if n.startswith("9903"):
                 c99_rates[n] = general
-    return rates_8, desc_10, add_duty, c99_rates
+
+    # 路径节点重复率约 89%（34814 次引用 / 3815 个不同字符串），直接内联会让
+    # 数据库多出 2.8MB。改存字符串表 + 下标引用，降到 0.5MB。
+    path_nodes = sorted({d for e in rates_8.values() for d in e["path"]})
+    node_idx = {s: i for i, s in enumerate(path_nodes)}
+    for e in rates_8.values():
+        e["path"] = [node_idx[d] for d in e["path"]]
+    return rates_8, desc_10, add_duty, c99_rates, path_nodes
 
 
 def parse_ustr_pdf():
@@ -202,8 +236,9 @@ def sanity_check(counts):
 def build():
     os.makedirs(DATA_DIR, exist_ok=True)
     print("① 解析 htsdata.csv ...")
-    rates_8, desc_10, add_duty, c99_rates = parse_hts_csv()
-    print(f"   8位子目: {len(rates_8)} | 10位描述: {len(desc_10)} | 附加税行: {len(add_duty)} | 9903子目: {len(c99_rates)}")
+    rates_8, desc_10, add_duty, c99_rates, path_nodes = parse_hts_csv()
+    print(f"   8位子目: {len(rates_8)} | 10位描述: {len(desc_10)} | 附加税行: {len(add_duty)} "
+          f"| 9903子目: {len(c99_rates)} | 归类路径节点: {len(path_nodes)}")
 
     print("② 解析 USTR China Tariffs PDF ...")
     sec301_map, sec301_map_10, sec301_partial_8, sec301_pages = parse_ustr_pdf()
@@ -245,7 +280,8 @@ def build():
             "rates_8_count": len(rates_8),
             "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         },
-        "rates_8": rates_8,          # norm8 -> 基础税率/描述（含 CSV 行号 line）
+        "rates_8": rates_8,          # norm8 -> 基础税率/描述（path 为 path_nodes 下标列表）
+        "path_nodes": path_nodes,    # 归类路径节点字符串表（供 path 下标引用）
         "desc_10": desc_10,          # norm10 -> 具体描述
         "add_duty": add_duty,        # norm(8/10) -> 附加关税
         "sec301_map": sec301_map,    # norm8 -> norm(9903.xx)
