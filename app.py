@@ -285,6 +285,7 @@ class AIAskRequest(BaseModel):
 
 class AIClassifyRequest(BaseModel):
     description: str = Field(default="", description="商品描述")
+    origin: Optional[str] = Field(default="CN", description="原产地：CN（默认）/ VN / 其他国家代码")
 
 
 class AIInterpretRequest(BaseModel):
@@ -293,6 +294,7 @@ class AIInterpretRequest(BaseModel):
 
 class AIAnalyzeRequest(BaseModel):
     items: list = Field(default_factory=list, description="商品清单：[{'name': 品名, 'unit_value': 可选}]")
+    origin: Optional[str] = Field(default="CN", description="原产地：CN（默认）/ VN / 其他国家代码")
 
 
 class AIConfigRequest(BaseModel):
@@ -424,7 +426,7 @@ def api_ai_classify(req: AIClassifyRequest):
         raise HTTPException(status_code=400, detail="请提供商品描述")
     import ai
 
-    return ai.classify_product(get_db(), req.description.strip())
+    return ai.classify_product(get_db(), req.description.strip(), origin=req.origin)
 
 
 @app.post("/api/ai/ask")
@@ -454,7 +456,7 @@ def api_ai_analyze(req: AIAnalyzeRequest):
         raise HTTPException(status_code=400, detail="清单为空")
     import ai
 
-    return ai.analyze_list(get_db(), req.items)
+    return ai.analyze_list(get_db(), req.items, origin=req.origin)
 
 
 if __name__ == "__main__":

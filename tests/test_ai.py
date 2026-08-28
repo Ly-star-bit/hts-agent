@@ -213,5 +213,69 @@ class TestConfig(unittest.TestCase):
         self.assertFalse(r["ok"])
 
 
+class TestHallucinationGuard(unittest.TestCase):
+    """LLM 给出的编码不在本地召回候选内时，两条归类链路都必须拒绝，不能兜底"""
+
+    @classmethod
+    def setUpClass(cls):
+        import core
+        cls.db = core.load_db()
+
+    def test_analyze_list_rejects_code_outside_candidates(self):
+        # 第一轮出关键词，第二轮 pick 一个候选集里不存在的编码
+        _install_fake([
+            '{"items": [{"index": 1, "keywords": ["furniture", "wood"]}]}',
+            '{"picks": [{"index": 1, "code": "9403.99.90", "confidence": 0.95,'
+            ' "reason": "木制卧室家具，整体归入此目"}]}',
+            "报告",
+        ])
+        r = ai.analyze_list(self.db, [{"name": "木制卧室家具"}])
+        d = r["details"][0]
+        self.assertIn("error", d, "幻觉编码必须被拒绝，不能静默替换成召回第一名")
+        # 不得把 AI 为别的编码写的理由/置信度透传出去
+        self.assertNotIn("confidence", d)
+        self.assertNotIn("reason", d)
+
+    def test_classify_accepts_code_without_dots(self):
+        # 模型返回不带点的编码是常见形态，不应被误判为幻觉
+        _install_fake([
+            '{"keywords": ["lithium", "battery"]}',
+            '{"picks": [{"code": "85076000", "confidence": 0.9, "reason": "锂离子电池"}]}',
+        ])
+        r = ai.classify_product(self.db, "锂电池")
+        self.assertNotIn("error", r)
+        self.assertTrue(r["candidates"])
+        self.assertEqual(r["candidates"][0]["编码"], "8507.60.00")
+
+    def test_classify_still_rejects_true_hallucination(self):
+        _install_fake([
+            '{"keywords": ["lithium", "battery"]}',
+            '{"picks": [{"code": "0000.00.00", "confidence": 0.9, "reason": "编造的"}]}',
+        ])
+        r = ai.classify_product(self.db, "锂电池")
+        self.assertIn("error", r)
+
+
+class TestAIOriginPlumbing(unittest.TestCase):
+    """origin 必须贯通到 AI 链路，否则界面选了越南仍按中国原产算 301"""
+
+    @classmethod
+    def setUpClass(cls):
+        import core
+        cls.db = core.load_db()
+
+    def test_classify_respects_origin(self):
+        replies = ['{"keywords": ["lithium", "battery"]}',
+                   '{"picks": [{"code": "8507.60.00", "confidence": 0.9, "reason": "锂电池"}]}']
+        _install_fake(list(replies))
+        cn = ai.classify_product(self.db, "锂电池", origin="CN")["candidates"][0]
+        _install_fake(list(replies))
+        vn = ai.classify_product(self.db, "锂电池", origin="VN")["candidates"][0]
+        # 中国 3.4% + 301 25% = 28.4%；越南不适用中国 301 → 3.4%
+        self.assertIn("28.4%", cn["总税负估算"])
+        self.assertIn("3.4%", vn["总税负估算"])
+        self.assertNotEqual(cn["总税负估算"], vn["总税负估算"])
+
+
 if __name__ == "__main__":
     unittest.main()

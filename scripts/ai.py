@@ -295,7 +295,7 @@ def _recall_candidates(db, keywords, limit=40):
 
 # ---------- AI 功能 ----------
 
-def classify_product(db, description, top_n=3):
+def classify_product(db, description, top_n=3, origin="CN"):
     """
     商品描述 → HTS 编码推荐。
 
@@ -369,16 +369,18 @@ def classify_product(db, description, top_n=3):
     if not picks:
         return {"error": "AI 未返回有效归类结果，请重试或联系人工复核。"}
 
-    # 引擎校验
+    # 引擎校验：编码两边都归一化后比较。
+    # 候选表的键带点（'8507.60.00'），模型却常返回不带点的 '85076000'，
+    # 若只比字面量会把大量合法结果误判成幻觉。
     candidates = []
-    code_by_fmt = {r["编码"]: r for r in rows}
+    code_by_norm = {re.sub(r"\D", "", r["编码"]): r for r in rows}
     for pk in picks[:top_n]:
-        code = str(pk.get("code") or "").strip()
-        norm = re.sub(r"\D", "", code)
-        row = code_by_fmt.get(code) or code_by_fmt.get(norm, {})
+        norm = re.sub(r"\D", "", str(pk.get("code") or ""))
+        row = code_by_norm.get(norm)
         if not row:
             continue
-        total = rate_calc(db, norm)
+        # 用候选行自身的编码算税，不用模型给的字符串——匹配放宽后两者可能不再等价
+        total = rate_calc(db, re.sub(r"\D", "", row["编码"]), origin=origin)
         candidates.append({
             "编码": row["编码"],
             "商品描述": row["商品描述"],
@@ -403,11 +405,11 @@ def classify_product(db, description, top_n=3):
     }
 
 
-def rate_calc(db, norm_code):
-    """带容错的 calc_total 封装"""
+def rate_calc(db, norm_code, unit_value=None, origin="CN"):
+    """带容错的 calc_total 封装。origin 必须透传，否则越南/其他原产地会被按中国算。"""
     try:
         import rate
-        return rate.calc_total(db, norm_code)
+        return rate.calc_total(db, norm_code, unit_value=unit_value, origin=origin)
     except Exception:
         return None
 
@@ -492,7 +494,8 @@ def ask_tax_question(db, question, origin="CN"):
 
     if isinstance(r, dict) and r.get("type") == "classify":
         desc = r.get("description") or question
-        return {"type": "classify", "description": desc, **classify_product(db, desc)}
+        return {"type": "classify", "description": desc,
+                **classify_product(db, desc, origin=origin)}
     if isinstance(r, dict) and r.get("type") == "faq":
         try:
             answer = provider.chat(
@@ -509,7 +512,7 @@ def ask_tax_question(db, question, origin="CN"):
     return {"error": "无法理解问题，请补充商品名称或 HTS 编码。"}
 
 
-def analyze_list(db, items):
+def analyze_list(db, items, origin="CN"):
     """
     商品清单批量分析：为每个商品归类 + 查税，LLM 汇总分析报告。
 
@@ -586,9 +589,21 @@ def analyze_list(db, items):
         for i, rows, it in pending:
             pk = pick_map.get(i, {})
             code = re.sub(r"\D", "", str(pk.get("code") or ""))
-            chosen = next((r for r in rows if re.sub(r"\D", "", r["编码"]) == code), rows[0])
-            total = rate_calc(db, re.sub(r"\D", "", chosen["编码"]))
-            unit_value = it.get("unit_value")
+            # 匹配不上就报错，不能退回 rows[0]。退回等于把 AI 从未选过的编码
+            # 连同 AI 为另一个编码写的理由和置信度一起交给用户，而用户看不出这是兜底——
+            # 对报关来说，"存在但归错的编码"比"不存在的编码"更危险（后者报关时会被打回）。
+            # 与 classify_product 的拦截策略保持一致。
+            chosen = next((r for r in rows if re.sub(r"\D", "", r["编码"]) == code), None)
+            if chosen is None:
+                details_map[i] = {
+                    "序号": i,
+                    "品名": it.get("name", ""),
+                    "error": ("AI 返回的编码不在本地召回的候选列表中，未做归类。"
+                              "候选：" + "、".join(r["编码"] for r in rows[:5])),
+                }
+                continue
+            total = rate_calc(db, re.sub(r"\D", "", chosen["编码"]),
+                              unit_value=it.get("unit_value"), origin=origin)
             details_map[i] = {
                 "序号": i,
                 "品名": it.get("name", ""),
