@@ -615,6 +615,32 @@ def _clamp_confidence(v):
         return 0.0
 
 
+# 置信度低于此值即标存疑：AI 自己没把握，用户该复核
+_LOW_CONF = 0.6
+
+
+def _classify_flags(confidence, suggested_chapters, code):
+    """
+    归类结果的存疑信号列表。空列表 = 无明显疑点。
+
+    两个正交信号：
+    - 低置信度：AI 自认没把握。
+    - 建议章 vs 结果章打架：关键词步骤猜的章与最终编码的章不一致，说明这条在
+      AI 内部就是矛盾的。实测「不锈钢菜刀」建议章 85、结果落到 72 章（钢铁废料，
+      应为 8211 刀具），置信度却 0.8——低置信度抓不到，靠这个矛盾才标得出来。
+      建议章是"加权不过滤"的软信号，所以不一致不等于一定错，只作提示。
+    """
+    flags = []
+    if confidence and confidence < _LOW_CONF:
+        flags.append(f"AI 置信度偏低（{confidence:.0%}），建议人工复核")
+    ch = re.sub(r"\D", "", str(code or ""))[:2]
+    sugg = [str(c).zfill(2)[:2] for c in (suggested_chapters or []) if str(c).strip()]
+    if ch and sugg and ch not in sugg:
+        flags.append(f"AI 建议章 {'/'.join(sugg)} 与结果编码章 {ch} 不一致，"
+                     f"可能召回或归类有偏，请核对是否归错大类")
+    return flags
+
+
 def rate_calc(db, norm_code, unit_value=None, origin="CN"):
     """带容错的 calc_total 封装。origin 必须透传，否则越南/其他原产地会被按中国算。"""
     try:
@@ -779,13 +805,13 @@ def analyze_list(db, items, origin="CN"):
                 "error": f"本地库未匹配（AI 检索词：{' '.join(kws) or '无'}；已按品名原文重试）",
             }
             continue
-        pending.append((i, rows[:12], it, note))
+        pending.append((i, rows[:12], it, note, chs))
 
     # 第二轮：批量精排
     details_map = {}
     if pending:
         batch_lines = []
-        for i, rows, it, _note in pending:
+        for i, rows, it, _note, _chs in pending:
             tops = "; ".join(f"{r['编码']}({r['商品描述'][:40]}, {r['一般税率']})" for r in rows[:6])
             batch_lines.append(f"{i}. 商品「{it.get('name', '')}」候选: {tops}")
         sys_prompt2 = (
@@ -812,7 +838,7 @@ def analyze_list(db, items, origin="CN"):
                 continue
             pick_map[idx] = pk
 
-        for i, rows, it, note in pending:
+        for i, rows, it, note, chs in pending:
             pk = pick_map.get(i, {})
             code = re.sub(r"\D", "", str(pk.get("code") or ""))
             # 匹配不上就报错，不能退回 rows[0]。退回等于把 AI 从未选过的编码
@@ -830,6 +856,7 @@ def analyze_list(db, items, origin="CN"):
                 continue
             total = rate_calc(db, re.sub(r"\D", "", chosen["编码"]),
                               unit_value=it.get("unit_value"), origin=origin)
+            conf = _clamp_confidence(pk.get("confidence"))
             details_map[i] = {
                 "序号": i,
                 "品名": it.get("name", ""),
@@ -841,10 +868,14 @@ def analyze_list(db, items, origin="CN"):
                 "301加征": chosen["301加征"],
                 "9903子目": chosen["9903子目"],
                 "总税负估算": total["总税负估算"] if total else "",
-                "confidence": pk.get("confidence", 0),
+                "confidence": conf,
                 "reason": pk.get("reason", ""),
                 # 走了降级检索的行要标出来，否则用户无从判断这条为什么质量偏低
                 "备注": note,
+                # 存疑信号：让"AI 归错但装得很自信"的行在界面上可见。实测「不锈钢菜刀」
+                # 被归到 7204 钢铁废料（应为 8211 刀具），置信度却给到 0.8——单看置信度
+                # 抓不到，但 AI 建议章(85) 与结果编码章(72) 打架，这个矛盾能标出来。
+                "存疑": _classify_flags(conf, chs, chosen["编码"]),
             }
 
     details = [details_map.get(i) or recall_failed.get(i)

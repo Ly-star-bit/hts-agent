@@ -345,6 +345,9 @@
   tr.row-hit .add-pct { font-size: 16px; font-weight: 800; color: var(--hit); text-shadow: var(--glow-text); }
   tr.row-na { background: var(--gray-bg); }
   tr.row-na:hover { background: var(--hover); }
+  /* 存疑行：左侧警示条，让"AI 归错却自信"的行一眼可辨。不改整行底色，
+     避免和 row-hit(命中301)的红底打架——只加左边框 */
+  tr.row-suspect td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
 
   /* 表格 */
   .table-wrap {
@@ -2568,13 +2571,22 @@ function renderList(data) {
     const tag = tagClass(r['301判定']);
     if (isHit(r)) tr.className = 'row-hit';
     const conf = Math.round((r.confidence || 0) * 100);
-    const why = [r.reason ? `${esc(r.reason)}` : '',
+    // 存疑信号：AI 归错却装得自信的行要看得出来（实测「不锈钢菜刀」被归到 7204
+    // 钢铁废料、置信度还 0.8）。存疑行整行加左侧警示条，疑点进理由列顶部
+    const flags = Array.isArray(r['存疑']) ? r['存疑'] : [];
+    if (flags.length) tr.classList.add('row-suspect');
+    const flagHtml = flags.length
+      ? `<div style="color:var(--hit);font-weight:600;margin-bottom:4px;">⚠ ${flags.map(esc).join('；')}</div>`
+      : '';
+    const why = [flagHtml,
+                 r.reason ? `${esc(r.reason)}` : '',
                  r['备注'] ? `<span style="color:var(--warn)">${esc(r['备注'])}</span>` : '']
                 .filter(Boolean).join('<br>');
     tr.innerHTML = `
       <td>${r['序号']}</td>
       <td>${esc(r['品名'])}</td>
-      <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}
+      <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}${
+        flags.length ? ' <span class="tag hit" title="该行有存疑信号，见理由列">存疑</span>' : ''}
         <div class="hd">置信度 ${conf}%</div></td>
       <td class="desc" data-full="${esc(r['商品描述'])}" title="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
       <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>

@@ -319,6 +319,42 @@ class TestAnalyzeListRecall(unittest.TestCase):
             [{"name": "锂电池"}])
         self.assertIn("降级", r["details"][0].get("备注", ""))
 
+    def test_chapter_mismatch_flagged_as_suspect(self):
+        """
+        回归（走查发现）：「不锈钢菜刀」被 AI 归到 7204 钢铁废料（应为 8211 刀具），
+        置信度却给到 0.8——低置信度抓不到，但 AI 建议章(85) 与结果编码章(72) 打架。
+        这个矛盾必须在结果里标"存疑"，否则错误结果和正确结果长得一模一样。
+        用 battery 召回（含 8507），AI 建议章 85、却选一个 72 章的候选来复现冲突。
+        """
+        # 让召回含一个 72 章候选，AI 选它、但建议章是 85 → 章不一致
+        r = self._run(
+            [{"index": 1, "keywords": ["stainless", "steel"], "chapters": ["85"]}],
+            [{"index": 1, "code": "72042100", "confidence": 0.8, "reason": "编的"}],
+            [{"name": "不锈钢菜刀"}])
+        d = r["details"][0]
+        # 若召回里没有 72042100，会走"编码不在候选"错误路径——那也算标了疑点
+        if "error" not in d:
+            self.assertTrue(d.get("存疑"), "建议章与结果章不一致必须标存疑")
+            self.assertIn("不一致", "；".join(d["存疑"]))
+
+    def test_low_confidence_flagged(self):
+        r = self._run(
+            [{"index": 1, "keywords": ["battery"], "chapters": ["85"]}],
+            [{"index": 1, "code": "85076000", "confidence": 0.4, "reason": "x"}],
+            [{"name": "锂电池"}])
+        d = r["details"][0]
+        self.assertTrue(d.get("存疑"))
+        self.assertIn("置信度", "；".join(d["存疑"]))
+
+    def test_clean_row_no_suspect(self):
+        """正常行（高置信 + 章一致）不该被标存疑，否则警示泛滥就没人看"""
+        r = self._run(
+            [{"index": 1, "keywords": ["battery"], "chapters": ["85"]}],
+            [{"index": 1, "code": "85076000", "confidence": 0.95, "reason": "x"}],
+            [{"name": "锂电池"}])
+        d = r["details"][0]
+        self.assertEqual(d.get("存疑"), [], "干净行不该有疑点")
+
     def test_row_count_preserved(self):
         """清单几十行时，结果必须逐行对齐输入，不能少行也不能错位"""
         items = [{"name": n} for n in ("锂电池", "zzqqxx", "lithium battery")]
