@@ -51,6 +51,7 @@ hts_agent/
 │   ├── core.py                    # 核心查询逻辑（Web 与命令行共用）
 │   ├── rate.py                    # ★ 税率引擎：税率解析 / 总税负计算 / 关键词搜索
 │   ├── ai.py                      # ★ AI 增强层（归类/问税/解读/批量分析，provider 可插拔）
+│   ├── cross.py                   # ★ CBP 裁定先例检索（CROSS，联网可选，失败静默降级）
 │   ├── db_diff.py                 # ★ 数据库版本对比与变动追踪
 │   └── query_301.py               # 命令行版查询工具
 ├── data/
@@ -65,7 +66,9 @@ hts_agent/
 │   ├── test_rate.py               # 税率引擎测试
 │   ├── test_ai.py                 # AI 层测试（假 Provider）
 │   ├── test_app.py                # Web API 集成测试
+│   ├── test_cross.py              # CROSS 裁定检索测试（网络全程 mock，不联网）
 │   └── test_measures.py           # 多措施测试：301 flip/越南轨道/FLIP 301/措施开关配置/中国回归
+├── .cache/cross/                  # CROSS 查询缓存（不入 git，可随时删除）
 └── output/                        # 命令行查询结果输出目录（不入 git）
 ```
 
@@ -136,7 +139,45 @@ python scripts/query_301.py --search "lithium battery" --top 20
 
 # 4. 成本估算：总税负 = 基础 + 适用措施 + 附加税（--unit-value 折算从量税，--origin 选原产地）
 python scripts/query_301.py --estimate -c "8507.60.00, 0101.21.00" --unit-value 10 --origin CN
+
+# ---- CBP 裁定先例（需联网，可选）----
+# 5. 查 CBP 实际把同类商品判给了什么编码
+python scripts/cross.py "lithium ion battery" --codes 8507.60.00,8506.50.00
 ```
+
+---
+
+## CBP 裁定先例（`scripts/cross.py`）
+
+本地税则库只有品名文本，而决定归类的**章注/类注/GRI 不在其中**——这是本工具的
+结构性边界。[CROSS](https://rulings.cbp.gov) 是 CBP 自己的裁定库（22 万条、每日增量），
+里面写着海关**实际**把什么货判给了什么编码，往往能直接跨过论证给出答案。
+
+例：8506（原电池）vs 8507（蓄电池）的分界是"能不能充电"，本地数据抽不出这个条件，
+但 CBP 在 **N286124** 里已明文判过——不可充电锂电池 → 8506.50.0000，
+可充电锂离子 → 8507.60.0020。
+
+```bash
+python scripts/cross.py "lithium primary battery non-rechargeable" --codes 8506.50.00,8507.60.00
+```
+
+用法要点：
+
+- **`term` 是全文检索，不是编码字段查询。** 搜 `8507.60.00` 命中的是正文提到该编码的
+  裁定（多为 protest / drawback），不是"归到这个码"的裁定。要找某编码的先例，
+  用商品英文名检索再按 `tariffs` 过滤——`precedents()` 就是干这个的。
+- **「候选外编码」是归类信号**：CBP 把同类货判到了你没考虑的编码上。标「同品目」的
+  与候选同 4 位品目、仅子目不同，最值得先看。
+- **引用前必看状态**。裁定会被撤销/修改（实测 `battery` 前 300 条里有 12 条失效）。
+  引用一条已撤销的裁定比不引用更糟。模块把三个来源字段归一为「状态」，
+  失效的不隐藏但排在后面并标注被谁撤销。
+- **裁定不是保护伞**：只对申请人的该笔交易具法律约束力，他人可参考但货物有差异时未必适用。
+- 接口公开无需认证，数据属公共领域（data.gov 标注 `usa.gov/government-works`），
+  但**无公开文档、无 SLA**。因此本模块超时 10 秒、结果落 `.cache/cross/`（失败也短暂缓存，
+  避免离线时每次干等），且**任何失败都返回 `{"error": ...}` 而非抛异常**——
+  CROSS 是锦上添花，本地税则查询才是主链路。
+- 裁定正文**不做 AI 转述**，只给原文链接。先例的价值就在于它是 CBP 的原话，
+  一经转述就不能拿去跟海关讲了。
 
 ---
 
