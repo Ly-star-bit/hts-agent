@@ -58,7 +58,7 @@
     --gray-bg: #f9fafb;
 
     --focus-ring: 0 0 0 3px rgba(26,86,219,.12);
-    --shadow-card: 0 1px 3px rgba(0,0,0,.06);
+    --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
     --shadow-pop: 0 4px 16px rgba(0,0,0,.28);
     --shadow-modal: 0 12px 40px rgba(0,0,0,.3);
     --overlay: rgba(0,0,0,.45);
@@ -374,15 +374,43 @@
   .add-pct { color: var(--hit); font-weight: 700; white-space: nowrap; }
   .note { color: var(--muted); font-size: 12px; }
   .empty { text-align: center; color: var(--muted); padding: 30px; }
+  /* 提示条：左侧色条 + 极浅底，而非通栏大色块——搜索页一次能弹三四条，
+     大色块会堆成几堵墙，把真正的结果表挤到屏幕外。文字用正文色，靠左条区分语义 */
   .info-bar {
-    background: var(--miss-bg); color: var(--miss); border: 1px solid var(--miss-border);
-    border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 13px;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-left: 3px solid var(--miss);
+    border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 13px; line-height: 1.5;
   }
   .error-bar {
-    display: none; background: var(--hit-bg); color: var(--hit);
-    border: 1px solid var(--hit-border); border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 13px;
+    display: none; background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-left: 3px solid var(--hit);
+    border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 13px; line-height: 1.5;
   }
   .error-bar.show { display: block; }
+  .info-bar b, .error-bar b { color: var(--text); }
+
+  /* 可折叠提示块：一物多号/待确认属性默认收起，标题栏只留一句结论，
+     点开才展开完整对照——把 ~400px 的面板从"结果和用户之间的墙"变成"可展开的抽屉" */
+  .fold { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-2); overflow: hidden; }
+  .fold > summary {
+    cursor: pointer; padding: 9px 14px; font-size: 13px; font-weight: 600;
+    list-style: none; display: flex; align-items: center; gap: 8px;
+    user-select: none;
+  }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary::before {
+    content: "▸"; color: var(--muted); font-size: 11px; transition: transform .15s;
+  }
+  .fold[open] > summary::before { transform: rotate(90deg); }
+  .fold > summary .fold-tag {
+    font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+    background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border);
+  }
+  .fold > summary .fold-tag.alert {
+    background: var(--hit-bg); color: var(--hit); border-color: var(--hit-border);
+  }
+  .fold > .fold-body { padding: 4px 14px 14px; border-top: 1px solid var(--border); }
 
   /* 一物多号：结果表上方自动摊开的候选对照 */
   .dispute-grid {
@@ -1669,8 +1697,9 @@ function renderSearch(data) {
   const left = data['未识别'] || [];
   let notes = '';
   if (mapped.length) {
-    notes += '<div class="info-bar">已按官方税则用词检索：' +
-      mapped.map(m => `${esc(m['输入词'])} → <b>${esc((m['检索词'] || []).join(' '))}</b>`).join('；') +
+    // 同义词映射是"检索成功"的次要旁注，不该占一整条通栏色带——降为一行浅灰小字
+    notes += '<div class="hint" style="margin:8px 0 0;">已按官方税则用词检索：' +
+      mapped.map(m => `${esc(m['输入词'])} → <b style="color:var(--text)">${esc((m['检索词'] || []).join(' '))}</b>`).join('；') +
       '</div>';
   }
   if (left.length) {
@@ -1710,12 +1739,15 @@ function renderSearch(data) {
    查询信息不足。这里不伪造排序，而是把决定分类的属性问回去。 */
 function renderNarrowing(items, tie, total) {
   if (!items || !items.length) return '';
-  let h = `<div class="info-bar" style="border-left:3px solid var(--warn);">
-    <b>还需要确认这些信息才能定编码：</b>`;
+  const summary = `<span class="fold-tag">待确认 ${items.length} 项</span>`
+    + `<span>补齐这些属性才能定编码`
+    + (tie >= 0.5 ? `　<b>前 20 条 ${Math.round(tie * 100)}% 同分</b>` : '')
+    + `</span>`;
+  let h = `<details class="fold"><summary>${summary}</summary><div class="fold-body">`;
   if (tie >= 0.5) {
-    h += `<br><span style="font-size:12px;">
+    h += `<div class="hint" style="margin:6px 0 0;">
       前 20 条里有 ${Math.round(tie * 100)}% 相关度完全相同——排第一的并不比后面的更匹配，
-      只是编码更小。补齐下列属性才能真正收敛。</span>`;
+      只是编码更小。补齐下列属性才能真正收敛。</div>`;
   }
   h += `<ul style="margin:8px 0 0;padding-left:20px;font-size:13px;line-height:1.8;">`;
   items.forEach(n => {
@@ -1725,7 +1757,7 @@ function renderNarrowing(items, tie, total) {
     h += `<li><b>${esc(n['类型'])}</b>：${vals}${more}
       <div class="hd">需备：${esc(n['证据'])}</div></li>`;
   });
-  return h + `</ul></div>`;
+  return h + `</ul></div></details>`;
 }
 
 /* ---------- 一物多号：由搜索结果自动报出，不需要用户先勾选 ----------
@@ -1738,17 +1770,26 @@ function renderDispute(d) {
   const groups = d['分组'] || [];
   const codes = groups.map(g => g['编码']);
 
-  let h = `<div class="error-bar show" style="margin-top:12px;">
-    ⚠ 这个描述同时命中 <b>${groups.length}</b> 个品目，属于「一物多号」——
-    需要按商品实际特征定夺报哪个。${esc(d['提示'] || '')}</div>`;
+  // 折叠摘要：一句话把这个面板最关键的两件事说清——命中几个品目、是否税负反转。
+  // 税负反转是"别按最低税率挑便宜的"的警报，比品目数更该抢眼，用红标
+  const reversal = !!d['税负反转'];
+  const summary = `<span class="fold-tag${reversal ? ' alert' : ''}">一物多号</span>`
+    + `<span>命中 <b>${groups.length}</b> 个品目`
+    + (reversal ? '，<b style="color:var(--hit)">存在税负反转</b>'
+      : (d['基础税差'] > 0 ? `，基础税差 ${d['基础税差']} 个百分点` : ''))
+    + `　按商品实际特征定夺报哪个</span>`;
 
-  if (d['税负反转']) {
-    h += `<div class="info-bar"><b>注意税负反转：</b>${esc(d['税负反转'])}</div>`;
+  // 反转/税差警示留在摘要下方常驻（不折叠）——它是决策警报，不该藏进抽屉
+  let alert = '';
+  if (reversal) {
+    alert = `<div class="error-bar show"><b>税负反转：</b>${esc(d['税负反转'])}</div>`;
   } else if (d['基础税差'] !== null && d['基础税差'] > 0) {
-    h += `<div class="info-bar">候选间基础税率差 <b>${d['基础税差']}</b> 个百分点，
+    alert = `<div class="info-bar">候选间基础税率差 <b>${d['基础税差']}</b> 个百分点，
       归错码的成本直接体现在这里。</div>`;
   }
 
+  let h = `<details class="fold"><summary>${summary}</summary><div class="fold-body">`;
+  h += esc(d['提示'] || '') ? `<div class="hint" style="margin:6px 0 0;">${esc(d['提示'])}</div>` : '';
   h += `<div class="dispute-grid">`;
   groups.forEach(g => {
     // 总税负原串带"（含301/FLIP301/附加税估算）"后缀，卡片里只留百分比
@@ -1786,7 +1827,9 @@ function renderDispute(d) {
       </button>
       <span class="hint" style="margin:0;">也可在下方结果表勾选任意候选自行组合</span>
     </div>`;
-  return h;
+  h += `</div></details>`;   // 关闭 fold-body 与 details
+  // 反转警示放在折叠块之后、常驻可见
+  return h + alert;
 }
 
 /* 本地结果与 AI 补召回的行共用同一套单元格，否则两批数据列宽/语义会漂 */
