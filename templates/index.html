@@ -2098,7 +2098,100 @@ function renderCompare(data) {
   html += '</div>';
   html += `<div class="hint" style="margin-top:12px;">${esc(data['提示'] || '')}</div>`;
 
+  // CBP 先例块：默认只有入口不发请求——查先例要打外网（10s 超时），
+  // 不能拖慢对比弹窗本身；点了按钮才拉，失败也只影响这一块
+  currentCmpItems = items;
+  html += `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="font-weight:600;font-size:13px;">CBP 裁定先例（CROSS）</div>
+      <div class="hint" style="margin:4px 0 8px;">查海关对同类商品实际判过的编码。CROSS 为英文库，检索词需用英文品名。</div>
+      <div class="inline-form">
+        <input type="text" id="crossTerm" class="grow" value="${esc(crossDefaultTerm(items))}"
+               placeholder="英文品名，如 lithium ion battery">
+        <button class="btn-primary" id="btnCross" onclick="doCrossPrecedents()">查先例</button>
+      </div>
+      <div id="crossResult"></div>
+    </div>`;
+
   openSrcModal('归类对比', html);
+}
+
+/* ---------- CBP 先例（CROSS） ---------- */
+let currentCmpItems = [];
+
+/* 默认检索词：取候选完整品名的最末一段（如 'Lithium-ion batteries'）。
+   子目品名常是 'Other'，那样的段没有检索价值，往前找第一段像品名的 */
+function crossDefaultTerm(items) {
+  for (const it of items) {
+    const segs = String(it['完整品名'] || '').split('>').map(s => s.trim()).reverse();
+    for (const s of segs) {
+      const clean = s.replace(/\(\d{3}\)\s*$/, '').replace(/[:;,]+$/, '').trim();
+      if (clean && !/^others?$/i.test(clean) && clean.length >= 4) return clean.slice(0, 80);
+    }
+  }
+  return '';
+}
+
+async function doCrossPrecedents() {
+  const term = document.getElementById('crossTerm').value.trim();
+  const box = document.getElementById('crossResult');
+  if (!term) {
+    box.innerHTML = '<div class="error-bar show">请输入英文检索词（CROSS 为英文库）</div>';
+    return;
+  }
+  const btn = document.getElementById('btnCross');
+  btn.disabled = true;
+  box.innerHTML = '<div class="info-bar">正在查询 rulings.cbp.gov ……</div>';
+  try {
+    const codes = currentCmpItems.map(it => String(it['编码']));
+    const d = await apiPost('/api/cross/precedents', { term, codes, limit: 10 });
+    box.innerHTML = renderCrossPrecedents(d);
+  } catch (e) {
+    // 外网服务，失败是常态之一：只影响本块，对比结果原样保留
+    box.innerHTML = `<div class="error-bar show">先例查询失败：${esc(e.message)}。本地对比结果不受影响，可稍后重试或直接访问 rulings.cbp.gov</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderCrossPrecedents(d) {
+  const rows = d['先例'] || [];
+  const others = d['候选外编码'] || [];
+  if (!rows.length && !others.length) {
+    return `<div class="info-bar">「${esc(d['检索词'])}」共命中 ${d['命中总数'] || 0} 条裁定，但没有判给候选编码的归类先例。${esc(d['提示'] || '')}</div>`;
+  }
+  const nHq = rows.filter(r => r['来源'] === 'HQ').length;
+  const nBad = rows.filter(r => r['状态'] !== '现行').length;
+  const nOld = rows.filter(r => r['版本提示']).length;
+  let h = `<div class="info-bar">命中 ${d['命中总数']} 条，展示 ${rows.length} 条先例`
+        + (nHq ? `（HQ ${nHq} 条）` : '')
+        + (nBad ? `，<b style="color:var(--hit)">${nBad} 条已撤销/修改</b>` : '')
+        + (nOld ? `，${nOld} 条早于 HS 修订` : '') + `</div>`;
+
+  rows.forEach(r => {
+    const bad = r['状态'] !== '现行';
+    h += `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+      <a href="${esc(r['链接'])}" target="_blank" rel="noopener" style="font-weight:600;">${esc(r['裁定号'])}</a>
+      <span style="color:var(--muted);">${esc(r['日期'])}</span>
+      <span class="tag ${r['来源'] === 'HQ' ? 'warn' : ''}" title="HQ（总部）层级高于 NY，可撤销 NY 的裁定">${esc(r['来源'])}</span>
+      ${bad ? `<span class="tag hit">${esc(r['状态'])}</span>` : ''}
+      <div style="margin:3px 0;">${esc(r['主题'])}</div>
+      <div style="color:var(--muted);font-size:12px;">判给编码：${
+        r['编码'].map(c => (r['命中候选'] || []).some(m => c.replace(/\D/g,'').startsWith(m.replace(/\D/g,'')))
+          ? `<b>${esc(c)}</b>` : esc(c)).join('、')
+      }${(r['命中候选'] || []).length ? '（加粗 = 命中本次候选）' : ''}</div>
+      ${bad ? `<div style="color:var(--hit);font-size:12px;">⚠ ${esc(r['状态说明'])}</div>` : ''}
+      ${r['版本提示'] ? `<div style="color:var(--muted);font-size:12px;">⚠ ${esc(r['版本提示'])}</div>` : ''}
+    </div>`;
+  });
+
+  if (others.length) {
+    h += `<div style="margin-top:8px;font-size:12px;"><b>候选外编码</b>（CBP 把同类商品判到的其他编码，候选集可能不完整）：`
+       + others.map(g => `${esc(g['编码'])}${g['同品目'] ? '<span class="tag warn">同品目</span>' : ''}×${g['裁定数']}`).join('　')
+       + `</div>`;
+  }
+  h += `<div class="hint" style="margin-top:8px;">${esc(d['提示'] || '')}</div>`;
+  return h;
 }
 
 /* 编码补点：后端 compare 返回的是纯数字 8 位 */

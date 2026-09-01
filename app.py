@@ -482,6 +482,30 @@ def api_compare(req: CompareRequest):
     return result
 
 
+class CrossPrecedentsRequest(BaseModel):
+    term: str = Field(default="", description="商品英文名或关键词（CROSS 为英文库）")
+    codes: list = Field(default_factory=list, description="本地候选编码，用于命中过滤")
+    limit: int = Field(default=10, ge=1, le=50, description="返回的先例条数上限")
+
+
+@app.post("/api/cross/precedents")
+def api_cross_precedents(req: CrossPrecedentsRequest):
+    """
+    CBP 裁定先例检索（CROSS）。
+
+    与 /api/search/ai 同一降级约定：外部服务失败返回 {'error': ...} 而非 5xx，
+    前端静默保留本地结果——CROSS 是锦上添花，本地税则查询才是主链路。
+    cross.precedents 自身承诺绝不抛异常，这里的 try 只兜模块加载。
+    """
+    if not (req.term or "").strip():
+        raise HTTPException(status_code=400, detail="请输入英文检索词（CROSS 为英文库）")
+    try:
+        import cross
+    except Exception as e:
+        return {"error": f"CROSS 模块加载失败：{e}"}
+    return cross.precedents(req.term.strip(), req.codes, limit=req.limit)
+
+
 @app.post("/api/estimate")
 def api_estimate(req: EstimateRequest):
     """成本估算：按编码批量计算总税负（基础 + 301 + 附加税）"""

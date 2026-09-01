@@ -147,7 +147,11 @@ python scripts/cross.py "lithium ion battery" --codes 8507.60.00,8506.50.00
 
 ---
 
-## CBP 裁定先例（`scripts/cross.py`）
+## CBP 裁定先例（`scripts/cross.py` + 归类对比页）
+
+Web 入口：「搜索与归类」→ 勾选候选 → 归类对比弹窗底部「CBP 裁定先例」。
+默认不发请求（外网查询不拖慢对比本身），点「查先例」才拉取；检索词自动取
+候选的英文品名，可编辑。失败只影响该块，本地对比结果不受影响。
 
 本地税则库只有品名文本，而决定归类的**章注/类注/GRI 不在其中**——这是本工具的
 结构性边界。[CROSS](https://rulings.cbp.gov) 是 CBP 自己的裁定库（22 万条、每日增量），

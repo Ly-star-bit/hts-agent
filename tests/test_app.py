@@ -456,6 +456,88 @@ class TestCompareAPI(unittest.TestCase):
             self.client.post("/api/compare", json={"codes": []}).status_code, 400)
 
 
+class TestCrossPrecedentsAPI(unittest.TestCase):
+    """
+    CBP 先例接口。网络层（cross._get）整体替换，不联网——
+    联网测的是 CBP 的可用性，不是本接口的行为。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(app_mod.app)
+
+    def setUp(self):
+        import tempfile
+
+        import cross
+        self._cross = cross
+        self._get = cross._get
+        self._dir = cross.CACHE_DIR
+        self._tmp = tempfile.TemporaryDirectory()
+        cross.CACHE_DIR = self._tmp.name  # 别让测试写进真实缓存目录
+
+    def tearDown(self):
+        self._cross._get = self._get
+        self._cross.CACHE_DIR = self._dir
+        self._tmp.cleanup()
+
+    def _stub(self, rulings):
+        self._cross._get = lambda path, params: {
+            "rulings": rulings, "totalHits": len(rulings)}
+
+    @staticmethod
+    def _raw(number, tariffs, **kw):
+        return {"rulingNumber": number, "subject": kw.get("subject", "x"),
+                "categories": "Classification",
+                "rulingDate": kw.get("date", "2023-05-01") + "T00:00:00",
+                "collection": kw.get("collection", "ny"),
+                "relatedRulings": [], "modifiedBy": [], "modifies": [],
+                "revokedBy": kw.get("revoked_by", []), "revokes": [],
+                "tariffs": tariffs, "operationallyRevoked": False,
+                "commodityGrouping": ""}
+
+    def test_precedents_shape(self):
+        self._stub([self._raw("N305619", "8507.60.0020"),
+                    self._raw("X1", "3926.90.9989")])
+        r = self.client.post("/api/cross/precedents",
+                             json={"term": "lithium battery",
+                                   "codes": ["8507.60.00", "8506.50.00"]})
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual([x["裁定号"] for x in d["先例"]], ["N305619"])
+        it = d["先例"][0]
+        for k in ("日期", "来源", "主题", "编码", "命中候选", "状态",
+                  "状态说明", "版本提示", "链接"):
+            self.assertIn(k, it)
+        self.assertEqual(it["命中候选"], ["8507.60.00"])
+        self.assertTrue(d["候选外编码"])
+
+    def test_empty_term_rejected(self):
+        r = self.client.post("/api/cross/precedents", json={"term": "  "})
+        self.assertEqual(r.status_code, 400)
+
+    def test_upstream_failure_degrades_not_500(self):
+        """与 /api/search/ai 同约定：外部失败返回 {error}，不打断前端"""
+        def _boom(path, params):
+            raise RuntimeError("upstream down")
+        self._cross._get = _boom
+        r = self.client.post("/api/cross/precedents",
+                             json={"term": "battery", "codes": ["8507.60.00"]})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("error", r.json())
+
+    def test_revoked_flag_surfaces(self):
+        """撤销标注必须穿透到 API 响应——这是引用先例前唯一不能省的检查"""
+        self._stub([self._raw("N232914", "8507.60.0020",
+                              revoked_by=["H249299"])])
+        d = self.client.post("/api/cross/precedents",
+                             json={"term": "battery",
+                                   "codes": ["8507.60.00"]}).json()
+        it = d["先例"][0]
+        self.assertEqual(it["状态"], "已撤销")
+        self.assertIn("H249299", it["状态说明"])
+
+
 class TestSearchSpecialChapters(unittest.TestCase):
     """搜索默认剔除 98/99 章：它们不是可归类的进口编码"""
 
