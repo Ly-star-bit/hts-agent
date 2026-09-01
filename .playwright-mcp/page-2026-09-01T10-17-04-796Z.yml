@@ -1,0 +1,37 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - group "界面主题" [ref=f2e4]:
+      - button "现代" [ref=f2e5] [cursor=pointer]
+      - button "黑神话" [ref=f2e6] [cursor=pointer]
+    - heading "HTS 关税智能查询工具 美国对华 Section 301" [level=1] [ref=f2e7]:
+      - text: HTS 关税智能查询工具
+      - generic [ref=f2e8]: 美国对华 Section 301
+    - paragraph [ref=f2e9]: 编码查询 · 税率搜索 · 成本估算 · AI 归类助手
+    - generic [ref=f2e10]:
+      - text: 数据源：htsdata.csv + China Tariffs_2026HTSRev15.pdf + FLIP 301 Investigation Final Action FRN 7-23-26 FINAL.pdf ｜ 301 映射 10,391 条 ｜ 8位子目 14,954 个 ｜
+      - link "📄 查看数据来源" [ref=f2e11] [cursor=pointer]:
+        - /url: javascript:void(0)
+      - text: ｜ 构建于 2026-08-28 03:43:02
+  - navigation [ref=f2e12]:
+    - button "编码查询" [ref=f2e13] [cursor=pointer]
+    - button "搜索与归类" [ref=f2e14] [cursor=pointer]
+    - button "成本估算" [active] [ref=f2e15] [cursor=pointer]
+    - button "清单归类" [ref=f2e16] [cursor=pointer]
+    - button "数据变动" [ref=f2e17] [cursor=pointer]
+  - generic [ref=f2e146]:
+    - heading "1 总税负成本估算（基础 + 301 + 附加税）" [level=2] [ref=f2e147]:
+      - generic [ref=f2e148]: "1"
+      - text: 总税负成本估算（基础 + 301 + 附加税）
+    - paragraph [ref=f2e149]: 从量税（如 1¢/kg）需提供单位货值才能折算成百分比；复合税同时列出。估算仅供参考，正式申报以海关裁定为准。
+    - textbox "粘贴 HTS 编码，多个用逗号/换行分隔： 8507.60.00 0101.21.00" [ref=f2e150]:
+      - /placeholder: "粘贴 HTS 编码，多个用逗号/换行分隔：\n8507.60.00\n0101.21.00"
+    - generic [ref=f2e151]:
+      - generic [ref=f2e152]: 原产地：
+      - combobox [ref=f2e153]:
+        - option "中国（含 301）" [selected]
+        - option "越南（MFN，无 301）"
+        - option "其他国家（MFN，无 301）"
+      - generic [ref=f2e154]: 单位货值 USD：
+      - spinbutton "如 5.0（美元/公斤或美元/件）" [ref=f2e155]
+      - button "估算总税负" [ref=f2e156] [cursor=pointer]
+  - contentinfo [ref=f2e37]: 重要提示：本工具仅供内部效率参考。 ① 301 加征仅适用于中国原产商品；② 命中清单的商品可能已有 USTR 豁免，申报前请核对豁免清单； ③ 税率 = 基础税率 + 301 加征（从量税需按货值折算）；④ 正式报关以 CBP 裁定与 USTR 官方公告为准。

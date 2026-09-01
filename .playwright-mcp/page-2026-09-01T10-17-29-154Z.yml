@@ -1,0 +1,38 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - group "界面主题" [ref=f2e4]:
+      - button "现代" [ref=f2e5] [cursor=pointer]
+      - button "黑神话" [ref=f2e6] [cursor=pointer]
+    - heading "HTS 关税智能查询工具 美国对华 Section 301" [level=1] [ref=f2e7]:
+      - text: HTS 关税智能查询工具
+      - generic [ref=f2e8]: 美国对华 Section 301
+    - paragraph [ref=f2e9]: 编码查询 · 税率搜索 · 成本估算 · AI 归类助手
+    - generic [ref=f2e10]:
+      - text: 数据源：htsdata.csv + China Tariffs_2026HTSRev15.pdf + FLIP 301 Investigation Final Action FRN 7-23-26 FINAL.pdf ｜ 301 映射 10,391 条 ｜ 8位子目 14,954 个 ｜
+      - link "📄 查看数据来源" [ref=f2e11] [cursor=pointer]:
+        - /url: javascript:void(0)
+      - text: ｜ 构建于 2026-08-28 03:43:02
+  - navigation [ref=f2e12]:
+    - button "编码查询" [ref=f2e13] [cursor=pointer]
+    - button "搜索与归类" [ref=f2e14] [cursor=pointer]
+    - button "成本估算" [ref=f2e15] [cursor=pointer]
+    - button "清单归类" [ref=f2e16] [cursor=pointer]
+    - button "数据变动" [active] [ref=f2e17] [cursor=pointer]
+  - generic [ref=f2e173]:
+    - heading "↻ 数据更新变动提醒" [level=2] [ref=f2e174]:
+      - generic [ref=f2e175]: ↻
+      - text: 数据更新变动提醒
+    - paragraph [ref=f2e176]: 每次官方数据更新并重建数据库（python scripts/build_db.py）后，此处显示与上一版本相比的变动清单，便于发现"你的商品税率变了"。
+    - generic [ref=f2e177]:
+      - generic [ref=f2e178]:
+        - generic [ref=f2e179]: 变动总数0
+        - generic [ref=f2e180]: 新增子目0
+        - generic [ref=f2e181]: 删除子目0
+        - generic [ref=f2e182]: 税率变化0
+        - generic [ref=f2e183]: 301 变化0
+        - generic [ref=f2e184]: 附加税0
+        - generic [ref=f2e185]: 措施数据0
+      - generic [ref=f2e186]: 最近更新：2026-08-28 03:43:02
+      - generic [ref=f2e187]: 以下类别本次首次纳入变动监控，无历史快照可比对， 下次更新起生效：FLIP 301 措施定义、FLIP 301 豁免清单、越南措施、301 档位调整记录、附加税变化、301十位映射变化
+      - generic [ref=f2e188]: 本次更新无明细变动。
+  - contentinfo [ref=f2e37]: 重要提示：本工具仅供内部效率参考。 ① 301 加征仅适用于中国原产商品；② 命中清单的商品可能已有 USTR 豁免，申报前请核对豁免清单； ③ 税率 = 基础税率 + 301 加征（从量税需按货值折算）；④ 正式报关以 CBP 裁定与 USTR 官方公告为准。
