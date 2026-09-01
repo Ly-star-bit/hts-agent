@@ -2105,15 +2105,19 @@ function renderCompare(data) {
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
       <div style="font-weight:600;font-size:13px;">CBP 裁定先例（CROSS）</div>
       <div class="hint" style="margin:4px 0 8px;">查海关对同类商品实际判过的编码。CROSS 为英文库，检索词需用英文品名。</div>
+      <div id="crossLocal"></div>
       <div class="inline-form">
         <input type="text" id="crossTerm" class="grow" value="${esc(crossDefaultTerm(items))}"
                placeholder="英文品名，如 lithium ion battery">
-        <button class="btn-primary" id="btnCross" onclick="doCrossPrecedents()">查先例</button>
+        <button class="btn-primary" id="btnCross" onclick="doCrossPrecedents()">在线检索 CROSS</button>
       </div>
       <div id="crossResult"></div>
     </div>`;
 
   openSrcModal('归类对比', html);
+  // 本地镜像自动反查：离线毫秒级，不用等用户点。未建镜像时静默跳过——
+  // 在线检索入口仍在，没建镜像的用户不该被提示打扰
+  loadCrossLocal(items.map(it => String(it['编码'])));
 }
 
 /* ---------- CBP 先例（CROSS） ---------- */
@@ -2154,6 +2158,54 @@ async function doCrossPrecedents() {
   }
 }
 
+/* 单条先例的渲染，本地镜像与在线检索共用——两条数据通道，一副面孔，
+   否则撤销/版本警示只在一边出现就是事故 */
+function crossRulingRow(r) {
+  const bad = r['状态'] !== '现行';
+  return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+    <a href="${esc(r['链接'])}" target="_blank" rel="noopener" style="font-weight:600;">${esc(r['裁定号'])}</a>
+    <span style="color:var(--muted);">${esc(r['日期'])}</span>
+    <span class="tag ${r['来源'] === 'HQ' ? 'warn' : ''}" title="HQ（总部）层级高于 NY，可撤销 NY 的裁定">${esc(r['来源'])}</span>
+    ${bad ? `<span class="tag hit">${esc(r['状态'])}</span>` : ''}
+    <div style="margin:3px 0;">${esc(r['主题'])}</div>
+    <div style="color:var(--muted);font-size:12px;">判给编码：${
+      r['编码'].map(c => {
+        const hit = (r['命中候选'] || []).some(m => c.replace(/\D/g,'').startsWith(m.replace(/\D/g,'')));
+        const dead = (r['失效编码'] || []).includes(c);
+        let s = hit ? `<b>${esc(c)}</b>` : esc(c);
+        // 编码搬家没有撤销标记，全靠这一处：删除线 + 悬停说明
+        if (dead) s = `<span style="text-decoration:line-through;" title="该编码已不在现行税则，归类思路可参考，编码须以现行税则重新落位">${s}</span><span style="color:var(--hit);">⚠</span>`;
+        return s;
+      }).join('、')
+    }${(r['命中候选'] || []).length ? '（加粗 = 命中本次候选）' : ''}${
+      (r['失效编码'] || []).length ? '（删除线 = 已不在现行税则）' : ''}</div>
+    ${bad ? `<div style="color:var(--hit);font-size:12px;">⚠ ${esc(r['状态说明'])}</div>` : ''}
+    ${r['版本提示'] ? `<div style="color:var(--muted);font-size:12px;">⚠ ${esc(r['版本提示'])}</div>` : ''}
+  </div>`;
+}
+
+/* 本地镜像自动反查：完整计数 + 前几条。库未建时静默不渲染 */
+async function loadCrossLocal(codes) {
+  const box = document.getElementById('crossLocal');
+  if (!box || !codes.length) return;
+  let d;
+  try {
+    d = await apiPost('/api/cross/local', { codes, limit: 6 });
+  } catch (e) {
+    return;  // 镜像未构建/读取失败：静默，在线检索入口仍在
+  }
+  const counts = d['每码先例数'] || {};
+  const rows = d['先例'] || [];
+  let h = `<div class="info-bar">本地镜像（完整反查，数据截至 ${esc(String(d['数据截至'] || '').slice(0, 10))}）：`
+        + Object.entries(counts).map(([c, n]) => `${esc(c)} 共 <b>${n}</b> 条先例`).join('，')
+        + `</div>`;
+  if (rows.length) {
+    h += rows.map(crossRulingRow).join('');
+    h += `<div class="hint" style="margin:6px 0 10px;">${esc(d['提示'] || '')}</div>`;
+  }
+  box.innerHTML = h;
+}
+
 function renderCrossPrecedents(d) {
   const rows = d['先例'] || [];
   const others = d['候选外编码'] || [];
@@ -2168,22 +2220,7 @@ function renderCrossPrecedents(d) {
         + (nBad ? `，<b style="color:var(--hit)">${nBad} 条已撤销/修改</b>` : '')
         + (nOld ? `，${nOld} 条早于 HS 修订` : '') + `</div>`;
 
-  rows.forEach(r => {
-    const bad = r['状态'] !== '现行';
-    h += `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
-      <a href="${esc(r['链接'])}" target="_blank" rel="noopener" style="font-weight:600;">${esc(r['裁定号'])}</a>
-      <span style="color:var(--muted);">${esc(r['日期'])}</span>
-      <span class="tag ${r['来源'] === 'HQ' ? 'warn' : ''}" title="HQ（总部）层级高于 NY，可撤销 NY 的裁定">${esc(r['来源'])}</span>
-      ${bad ? `<span class="tag hit">${esc(r['状态'])}</span>` : ''}
-      <div style="margin:3px 0;">${esc(r['主题'])}</div>
-      <div style="color:var(--muted);font-size:12px;">判给编码：${
-        r['编码'].map(c => (r['命中候选'] || []).some(m => c.replace(/\D/g,'').startsWith(m.replace(/\D/g,'')))
-          ? `<b>${esc(c)}</b>` : esc(c)).join('、')
-      }${(r['命中候选'] || []).length ? '（加粗 = 命中本次候选）' : ''}</div>
-      ${bad ? `<div style="color:var(--hit);font-size:12px;">⚠ ${esc(r['状态说明'])}</div>` : ''}
-      ${r['版本提示'] ? `<div style="color:var(--muted);font-size:12px;">⚠ ${esc(r['版本提示'])}</div>` : ''}
-    </div>`;
-  });
+  h += rows.map(crossRulingRow).join('');
 
   if (others.length) {
     h += `<div style="margin-top:8px;font-size:12px;"><b>候选外编码</b>（CBP 把同类商品判到的其他编码，候选集可能不完整）：`

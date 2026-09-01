@@ -287,8 +287,42 @@ def match_codes(ruling, codes):
     return out
 
 
+def _flag_dead_codes(items, alive_codes):
+    """
+    与现行税则对账：裁定引用的编码若已不在今天的 HTS 里，逐条标进「失效编码」。
+
+    为什么必须有这一列：撤销有红标（revokedBy），编码被 HS/HTS 修订改号却
+    **什么标都没有**——CROSS 不会为此回头撤销裁定。全库实测（2026-09）：
+    90 年代裁定引用的编码 42% 已不在现行税则，2000 年代 28%，2010 年代 17%。
+    用户看到一条"现行"的老裁定就抄编码，抄到的可能是十年前就删掉的号。
+
+    alive_codes 是现行 8 位码集合（rates_8 的键）。只核 8 位及以上、非 98/99
+    章的编码；短码（老裁定只写到 6 位）无法与 8 位表对账，不标——宁可漏标
+    也不误标，误标会教用户不信任这个警告。
+
+    返回是否有任何失效编码（调用方据此追加提示行）。
+    """
+    if not alive_codes:
+        return False
+    any_dead = False
+    for it in items:
+        dead = []
+        for disp, digits in zip(it["编码"], it["编码数字"]):
+            d8 = digits[:8]
+            if (len(digits) >= 8 and not d8.startswith(("98", "99"))
+                    and d8 not in alive_codes):
+                dead.append(disp)
+        it["失效编码"] = dead
+        any_dead = any_dead or bool(dead)
+    return any_dead
+
+
+_DEAD_CODE_TIP = ("部分裁定引用的编码已不在现行税则（已标注）——税则修订不会触发"
+                  "撤销标记，归类思路可参考，编码必须以现行税则重新落位。")
+
+
 def precedents(term, codes=None, limit=20, page_size=DEFAULT_PAGE_SIZE,
-               use_cache=True):
+               use_cache=True, alive_codes=None):
     """
     给定商品英文名与本地候选编码，返回 CBP 对同类商品实际判过的先例。
 
@@ -367,6 +401,8 @@ def precedents(term, codes=None, limit=20, page_size=DEFAULT_PAGE_SIZE,
     if any(r["版本提示"] for r in matched):
         tips.append("部分裁定早于 HS 修订（已标注）：归类逻辑通常仍成立，但其中的"
                     "6 位编码可能已变更——CROSS 不会为此标记撤销，须自行回现行税则核对。")
+    if _flag_dead_codes(matched, alive_codes):
+        tips.append(_DEAD_CODE_TIP)
     if other_list:
         tips.append("「候选外编码」是 CBP 把同类商品判到的、不在你候选集里的编码；"
                     "标「同品目」的与候选同 4 位品目、仅子目不同，最值得先看。")
@@ -382,6 +418,140 @@ def precedents(term, codes=None, limit=20, page_size=DEFAULT_PAGE_SIZE,
     }
 
 
+# ---------- 本地镜像（cross_sync.py 构建的 SQLite，一期） ----------
+
+DB_PATH = os.path.join(BASE_DIR, "data", "cross.db")
+
+
+def db_available(db_path=None):
+    return os.path.exists(db_path or DB_PATH)
+
+
+def _open_ro(db_path):
+    import sqlite3
+    # 只读打开：查询路径绝不该有机会写库，同步是 cross_sync 的事
+    return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+
+
+def _row_to_raw(row):
+    """库行 → API 原始记录形态，喂给 _norm_ruling 复用同一套归一/状态/版本逻辑。
+    状态与版本提示在读取时计算而非入库时固化——判定规则改了，老数据自动跟上。"""
+    (number, date, collection, subject, categories, tariffs,
+     revoked_by, modified_by, op_revoked, related) = row
+    return {
+        "rulingNumber": number, "rulingDate": date, "collection": collection,
+        "subject": subject, "categories": categories, "tariffs": tariffs,
+        "revokedBy": json.loads(revoked_by or "[]"),
+        "modifiedBy": json.loads(modified_by or "[]"),
+        "operationallyRevoked": bool(op_revoked),
+        "relatedRulings": json.loads(related or "[]"),
+    }
+
+
+_RULING_COLS = ("number,date,collection,subject,categories,tariffs,"
+                "revoked_by,modified_by,op_revoked,related")
+
+
+def local_status(db_path=None):
+    """镜像状态：给界面标注"数据截至何时"用。不可用返回 {'可用': False}。"""
+    # DB_PATH 在调用时解析而非默认参数里绑定：默认参数在 def 时求值，
+    # 测试替换 cross.DB_PATH 会悄悄不生效
+    db_path = db_path or DB_PATH
+    if not db_available(db_path):
+        return {"可用": False}
+    try:
+        conn = _open_ro(db_path)
+        try:
+            meta = dict(conn.execute("SELECT key, value FROM meta"))
+            n = conn.execute("SELECT COUNT(*) FROM rulings").fetchone()[0]
+        finally:
+            conn.close()
+        return {"可用": True, "条数": n,
+                "上次同步": meta.get("last_sync", ""),
+                "服务端条数": meta.get("server_count", ""),
+                "失败切片": int(meta.get("failed_slices") or 0)}
+    except Exception:
+        return {"可用": False}
+
+
+def code_precedents(codes, limit=20, db_path=None, alive_codes=None):
+    """
+    本地镜像反查：这些候选编码历史上的**全部**先例。
+
+    这是镜像存在的理由——API 的 term 全文检索答不了这个问题（命中的是正文
+    提到编码的 protest/drawback 案），客户端过滤又只能看见拉回的前几页。
+    本地全量 tariffs 索引给出的是完整答案：「8506.50.00 共 N 条先例」的 N
+    是精确计数，不是"检索到的前 N 条"。
+
+    与 precedents()（在线检索）的关系是互补不是替代：这里按编码精确反查、
+    离线、毫秒级；那里按商品词模糊召回、能发现候选外编码。排序上本地没有
+    相关度可用，按 现行 > HQ > 日期新 排列。
+
+    返回 {"先例","每码先例数","数据截至","提示"}；失败返回 {"error": ...}。
+    """
+    db_path = db_path or DB_PATH   # 调用时解析，测试可替换 cross.DB_PATH
+    codes = [c for c in (codes or []) if len(_norm_code(c)) >= 8]
+    if not codes:
+        return {"error": "请提供至少一个 8 位候选编码"}
+    if not db_available(db_path):
+        return {"error": "本地裁定库未构建，请运行 python scripts/cross_sync.py"}
+    try:
+        conn = _open_ro(db_path)
+        try:
+            numbers, counts = set(), {}
+            for c in codes:
+                w = _norm_code(c)[:8]
+                # 两段匹配与 match_codes 同口径：
+                #   BETWEEN 段抓"等于 w 或以 w 开头的 10 位统计码"
+                #   IN 段抓"比 w 短、且是 w 前缀的老编码"（如只写到 6 位的裁定）
+                prefixes = [w[:n] for n in range(4, 8)]
+                rows = conn.execute(
+                    f"SELECT DISTINCT number FROM ruling_codes "
+                    f"WHERE (code BETWEEN ? AND ? || '9999') "
+                    f"   OR code IN ({','.join('?' * len(prefixes))})",
+                    [w, w] + prefixes).fetchall()
+                numbers.update(r[0] for r in rows)
+                got = conn.execute(
+                    "SELECT n FROM code8_counts WHERE code8=?", (w,)).fetchone()
+                counts[_fmt8(w)] = got[0] if got else 0
+
+            items = []
+            if numbers:
+                ph = ",".join("?" * len(numbers))
+                for row in conn.execute(
+                        f"SELECT {_RULING_COLS} FROM rulings WHERE number IN ({ph})",
+                        list(numbers)):
+                    it = _norm_ruling(_row_to_raw(row))
+                    it["命中候选"] = match_codes(it, codes)
+                    items.append(it)
+            meta = dict(conn.execute("SELECT key, value FROM meta"))
+        finally:
+            conn.close()
+    except Exception as e:
+        return {"error": f"本地裁定库读取失败：{e}"}
+
+    # 现行 > HQ > 日期新。本地没有相关度可用，日期是唯一合理的组内次序；
+    # 两次稳定排序：先排日期，再按（失效、非HQ）分层，层内保持日期序。
+    # 失效的保留但沉底——藏掉会让用户以为无先例
+    items.sort(key=lambda r: r["日期"], reverse=True)
+    items.sort(key=lambda r: (r["状态"] != "现行", r["来源"] != "HQ"))
+    shown = items[:limit]
+
+    tips = ["以上为本地镜像的完整反查（该编码历史上的全部归类先例），"
+            f"数据截至 {meta.get('last_sync', '未知')}。"]
+    if _flag_dead_codes(shown, alive_codes):
+        tips.append(_DEAD_CODE_TIP)
+    if any(r["状态"] != "现行" for r in shown):
+        tips.append("含已撤销/修改的裁定（已标注），撤销件不可作为归类依据。")
+    if any(r["版本提示"] for r in shown):
+        tips.append("部分裁定早于 HS 修订（已标注），6 位编码可能已变更，"
+                    "CROSS 不会为此标记撤销，须回现行税则核对。")
+    tips.append("引用前须读裁定全文的事实描述段，确认货物可比；"
+                "裁定仅对申请人的该笔交易具法律约束力，不构成保护伞。")
+    return {"先例": shown, "每码先例数": counts,
+            "数据截至": meta.get("last_sync", ""), "提示": " ".join(tips)}
+
+
 # ---------- 命令行自查 ----------
 
 def _main(argv):
@@ -395,7 +565,14 @@ def _main(argv):
     a = ap.parse_args(argv)
 
     codes = [c.strip() for c in a.codes.split(",") if c.strip()]
-    r = precedents(a.term, codes, limit=a.limit, use_cache=not a.no_cache)
+    # 本地税则库可用时顺带做现行编码对账；没建库也不该挡住先例查询
+    try:
+        import core
+        alive = set(core.load_db()["rates_8"].keys())
+    except Exception:
+        alive = None
+    r = precedents(a.term, codes, limit=a.limit, use_cache=not a.no_cache,
+                   alive_codes=alive)
     if "error" in r:
         print("失败：" + r["error"])
         return 1
@@ -412,6 +589,8 @@ def _main(argv):
             print(f"  ⚠ {it['状态说明']}")
         if it["版本提示"]:
             print(f"  ⚠ {it['版本提示']}")
+        if it.get("失效编码"):
+            print(f"  ⚠ 已不在现行税则: {', '.join(it['失效编码'])}")
         print(f"  {it['链接']}")
         print()
     if r["候选外编码"]:

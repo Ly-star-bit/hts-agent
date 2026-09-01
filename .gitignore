@@ -45,3 +45,8 @@ output/
 data/sec301_db.json
 data/.db_fingerprint.json
 data/.db_changes.json
+
+# CROSS 裁定库本地镜像（69MB，scripts/cross_sync.py 随时可重建）
+data/cross.db
+data/cross.db-shm
+data/cross.db-wal

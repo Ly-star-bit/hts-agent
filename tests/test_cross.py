@@ -314,6 +314,46 @@ class TestHsVersionNote(CrossTestCase):
         self.assertIn("不会为此标记撤销", tip)
 
 
+class TestDeadCodes(CrossTestCase):
+    """
+    现行税则对账。全库实测（2026-09）：90 年代裁定引用的编码 42% 已不在
+    现行税则，而 CROSS 对此零标记——撤销有红标，编码搬家什么标都没有。
+    """
+
+    ALIVE = {"85076000", "85065000"}
+
+    def test_dead_code_flagged_alive_kept(self):
+        self.stub([raw("N", "8507.60.0020, 8471.92.1000")])
+        r = cross.precedents("battery", ["8507.60.00"], alive_codes=self.ALIVE)
+        it = r["先例"][0]
+        self.assertEqual(it["失效编码"], ["8471.92.1000"])
+        self.assertIn("已不在现行税则", r["提示"])
+
+    def test_all_alive_no_tip(self):
+        self.stub([raw("N", "8507.60.0020")])
+        r = cross.precedents("battery", ["8507.60.00"], alive_codes=self.ALIVE)
+        self.assertEqual(r["先例"][0]["失效编码"], [])
+        self.assertNotIn("已不在现行税则", r["提示"])
+
+    def test_ch99_not_flagged(self):
+        """9903 加征条款不在 rates_8 是正常的，标失效就是误报"""
+        self.stub([raw("N", "8507.60.0020, 9903.88.15")])
+        r = cross.precedents("battery", ["8507.60.00"], alive_codes=self.ALIVE)
+        self.assertEqual(r["先例"][0]["失效编码"], [])
+
+    def test_short_code_not_flagged(self):
+        """6 位短码没法与 8 位表对账——宁可漏标不误标，误标会教用户不信这个警告"""
+        self.stub([raw("N", "8507.60.0020, 850799")])
+        r = cross.precedents("battery", ["8507.60.00"], alive_codes=self.ALIVE)
+        self.assertEqual(r["先例"][0]["失效编码"], [])
+
+    def test_no_alive_set_no_annotation(self):
+        """没给现行码集合（本地税则库未建）时不装作核对过"""
+        self.stub([raw("N", "8471.92.1000")])
+        r = cross.precedents("battery", ["8471.92.10"])
+        self.assertNotIn("失效编码", r["先例"][0])
+
+
 class TestNormalize(CrossTestCase):
 
     def test_fields(self):

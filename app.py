@@ -503,7 +503,35 @@ def api_cross_precedents(req: CrossPrecedentsRequest):
         import cross
     except Exception as e:
         return {"error": f"CROSS 模块加载失败：{e}"}
-    return cross.precedents(req.term.strip(), req.codes, limit=req.limit)
+    # 现行税则对账：裁定引用的编码可能早被修订删掉（90 年代裁定 42% 中招），
+    # 而 CROSS 对此零标记。alive_codes 让 cross 层能标出「失效编码」
+    alive = set(get_db()["rates_8"].keys())
+    return cross.precedents(req.term.strip(), req.codes, limit=req.limit,
+                            alive_codes=alive)
+
+
+class CrossLocalRequest(BaseModel):
+    codes: list = Field(default_factory=list, description="候选编码（8 位以上）")
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+@app.post("/api/cross/local")
+def api_cross_local(req: CrossLocalRequest):
+    """
+    本地镜像反查：候选编码历史上的全部先例（cross_sync.py 构建的 SQLite）。
+
+    与 /api/cross/precedents（在线检索）互补：这里离线、毫秒级、计数完整；
+    那里按商品词模糊召回、能发现候选外编码。镜像未构建时返回 {error}，
+    前端静默跳过——没建镜像的用户仍有在线检索可用，不该被提示打扰。
+    """
+    if not req.codes:
+        raise HTTPException(status_code=400, detail="请提供候选编码")
+    try:
+        import cross
+    except Exception as e:
+        return {"error": f"CROSS 模块加载失败：{e}"}
+    alive = set(get_db()["rates_8"].keys())
+    return cross.code_precedents(req.codes, limit=req.limit, alive_codes=alive)
 
 
 @app.post("/api/estimate")

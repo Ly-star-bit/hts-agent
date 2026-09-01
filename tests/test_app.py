@@ -538,6 +538,89 @@ class TestCrossPrecedentsAPI(unittest.TestCase):
         self.assertIn("H249299", it["状态说明"])
 
 
+class TestCrossLocalAPI(unittest.TestCase):
+    """本地镜像反查接口：镜像未构建时降级为 {error}，前端静默跳过"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(app_mod.app)
+
+    def setUp(self):
+        import tempfile
+
+        import cross
+        import cross_sync
+        self._cross = cross
+        self._orig_db = cross.DB_PATH
+        self._get = cross._get
+        self._tmp = tempfile.TemporaryDirectory()
+        cross.DB_PATH = os.path.join(self._tmp.name, "cross.db")
+        # 用同步器真实建库（假服务端），测的是端到端而不是拼出来的行
+        cross._get = lambda path, params: (
+            {"totalSearchableRulingsCount": 1} if path.endswith("lastupdate")
+            else {"rulings": [{
+                "rulingNumber": "N286124", "subject": "two battery packs",
+                "categories": "Classification",
+                "rulingDate": "2017-06-08T00:00:00", "collection": "ny",
+                "relatedRulings": [], "modifiedBy": [], "modifies": [],
+                "revokedBy": [], "revokes": [],
+                "tariffs": "8506.50.0000, 8507.60.0020",
+                "operationallyRevoked": False, "commodityGrouping": ""}],
+                "totalHits": 1})
+        cross_sync.sync(db_path=cross.DB_PATH, start_year=2017, end_year=2017,
+                        sleep=0, log=lambda *a: None)
+
+    def tearDown(self):
+        self._cross.DB_PATH = self._orig_db
+        self._cross._get = self._get
+        self._tmp.cleanup()
+
+    def test_local_lookup(self):
+        d = self.client.post("/api/cross/local",
+                             json={"codes": ["8507.60.00", "8506.50.00"]}).json()
+        self.assertEqual([x["裁定号"] for x in d["先例"]], ["N286124"])
+        self.assertEqual(sorted(d["先例"][0]["命中候选"]),
+                         ["8506.50.00", "8507.60.00"])
+        self.assertEqual(d["每码先例数"],
+                         {"8507.60.00": 1, "8506.50.00": 1})
+        self.assertTrue(d["数据截至"])
+        # 现行税则对账：两个编码都活着，失效列表应为空（用真实 rates_8 核）
+        self.assertEqual(d["先例"][0]["失效编码"], [])
+
+    def test_dead_code_annotated_against_real_hts(self):
+        """回归：8471.92.10 是被 HS 修订删掉的真实编码，必须标出——
+        90 年代裁定 42% 中招，而 CROSS 对此零标记"""
+        import cross_sync
+        self._cross._get = lambda path, params: (
+            {"totalSearchableRulingsCount": 1} if path.endswith("lastupdate")
+            else {"rulings": [{
+                "rulingNumber": "OLD1", "subject": "input unit",
+                "categories": "Classification",
+                "rulingDate": "1996-03-01T00:00:00", "collection": "ny",
+                "relatedRulings": [], "modifiedBy": [], "modifies": [],
+                "revokedBy": [], "revokes": [],
+                "tariffs": "8471.92.1000, 8507.60.0020",
+                "operationallyRevoked": False, "commodityGrouping": ""}],
+                "totalHits": 1})
+        cross_sync.sync(db_path=self._cross.DB_PATH, start_year=1996,
+                        end_year=1996, sleep=0, log=lambda *a: None)
+        d = self.client.post("/api/cross/local",
+                             json={"codes": ["8471.92.10"]}).json()
+        it = d["先例"][0]
+        self.assertEqual(it["失效编码"], ["8471.92.1000"])
+        self.assertIn("已不在现行税则", d["提示"])
+
+    def test_missing_db_degrades(self):
+        self._cross.DB_PATH = os.path.join(self._tmp.name, "nope.db")
+        r = self.client.post("/api/cross/local", json={"codes": ["8507.60.00"]})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("error", r.json())
+
+    def test_empty_codes_rejected(self):
+        self.assertEqual(
+            self.client.post("/api/cross/local", json={"codes": []}).status_code, 400)
+
+
 class TestSearchSpecialChapters(unittest.TestCase):
     """搜索默认剔除 98/99 章：它们不是可归类的进口编码"""
 
