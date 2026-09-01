@@ -802,7 +802,15 @@ def analyze_list(db, items, origin="CN"):
             return {"error": f"AI 调用失败：{e}"}
         pick_map = {}
         for pk in (r2.get("picks") if isinstance(r2, dict) else []) or []:
-            pick_map[int(pk.get("index", 0))] = pk
+            # index 由模型返回，可能是 null / 字符串 / 缺失。int(None) 会直接
+            # TypeError 炸掉整个清单分析——几十行商品陪一个坏 index 一起死。
+            # 无效 index 的 pick 跳过即可：对应行会走"模型未给出结论"的错误路径，
+            # 用户看到的是该行需人工，而不是整份报告 500。
+            try:
+                idx = int(pk.get("index"))
+            except (TypeError, ValueError):
+                continue
+            pick_map[idx] = pk
 
         for i, rows, it, note in pending:
             pk = pick_map.get(i, {})

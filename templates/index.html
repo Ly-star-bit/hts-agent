@@ -1781,7 +1781,7 @@ function renderDispute(d) {
   });
   h += `</div>
     <div class="actions" style="margin-top:10px;">
-      <button class="btn-primary" onclick='doCompareCodes(${JSON.stringify(codes)})'>
+      <button class="btn-primary" onclick='doCompareCodes(${esc(JSON.stringify(codes))})'>
         详细对比这 ${codes.length} 个（判定条件 + 证据清单）
       </button>
       <span class="hint" style="margin:0;">也可在下方结果表勾选任意候选自行组合</span>

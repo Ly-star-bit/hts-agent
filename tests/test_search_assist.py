@@ -334,6 +334,25 @@ class TestAnalyzeListRecall(unittest.TestCase):
         self.assertEqual([d["品名"] for d in r["details"]],
                          ["锂电池", "zzqqxx", "lithium battery"])
 
+    def test_malformed_pick_index_does_not_crash(self):
+        """
+        回归：index 由模型返回，null/字符串/缺失都出现过。int(None) 会
+        TypeError 炸掉整个清单分析——几十行商品陪一个坏 index 一起死。
+        坏 index 的 pick 跳过，字符串数字要认，正常行不受牵连。
+        """
+        r = self._run(
+            [{"index": 1, "keywords": ["battery"], "chapters": []},
+             {"index": 2, "keywords": ["battery"], "chapters": []},
+             {"index": 3, "keywords": ["battery"], "chapters": []}],
+            [{"index": None, "code": "85076000", "confidence": 0.8, "reason": "坏"},
+             {"index": "2", "code": "85076000", "confidence": 0.8, "reason": "字符串数字"},
+             {"code": "85076000", "confidence": 0.8, "reason": "缺 index"}],
+            [{"name": "锂电池"}, {"name": "lithium battery"}, {"name": "电池"}])
+        self.assertEqual(len(r["details"]), 3, "报告必须完整返回，不能 500")
+        d2 = r["details"][1]
+        self.assertEqual(d2.get("编码"), "8507.60.00", "字符串 '2' 是合法 index，该行要正常出结论")
+        self.assertIn("error", r["details"][0], "index=null 的 pick 跳过后该行报需人工")
+
     def test_hallucinated_code_not_accepted(self):
         """模型返回候选外的编码时不能退回 rows[0] 兜底"""
         r = self._run(
