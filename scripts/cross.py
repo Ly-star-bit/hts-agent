@@ -59,8 +59,15 @@ class CrossError(Exception):
 
 # ---------- 本地缓存 ----------
 
+# 缓存里存的是归一化**之后**的行，因此行结构一变，旧缓存就是带着旧字段的
+# 定时炸弹（加「版本提示」那次，旧条目缺字段会让 precedents() 直接 KeyError）。
+# 把结构版本编进缓存键：结构升级 → 旧条目自然失配 → 当作未命中重新拉取。
+_CACHE_SCHEMA = 2
+
+
 def _cache_key(path, params):
-    raw = path + "?" + json.dumps(params, sort_keys=True, ensure_ascii=False)
+    raw = f"v{_CACHE_SCHEMA}:" + path + "?" + json.dumps(params, sort_keys=True,
+                                                         ensure_ascii=False)
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
@@ -158,6 +165,31 @@ def _status(raw):
     return "现行", ""
 
 
+# HS 每 5 年一次大修，6 位编码会被 WCO 改动（HS 2022 大改的恰恰是电子、LED、
+# 多功能设备——最需要查先例的那类货）。老裁定的归类**逻辑**通常仍然成立，
+# 但它写下的编码可能已不存在或含义已变。关键在于：CROSS 不会把这种情况标成
+# "已撤销"——revoked 标记只防"结论被推翻"，防不住"编码被搬家"。
+# 日期取美国 HTS 实施日而非 WCO 名义生效日（如 HS 2022 经第 10326 号总统公告
+# 于 2022-01-27 落地），因为裁定引用的是 HTSUS。ISO 日期字符串可直接比较。
+_HS_REVISIONS = [
+    ("2022-01-27", "HS 2022"),
+    ("2017-01-01", "HS 2017"),
+    ("2012-02-03", "HS 2012"),
+]
+
+
+def _hs_version_note(date):
+    """裁定日期早于 HS 修订时给出提示；日期缺失/异常按最老处理（宁可多提醒）"""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(date or "")):
+        missed = [name for _, name in _HS_REVISIONS]
+    else:
+        missed = [name for cutoff, name in _HS_REVISIONS if date < cutoff]
+    if not missed:
+        return ""
+    return (f"该裁定早于 {'、'.join(reversed(missed))} 修订，其中的 6 位编码"
+            "可能已变更或删除，引用前须回现行税则核对编码仍然存在")
+
+
 def _norm_ruling(raw):
     """CROSS 原始记录 → 本项目风格的结果行"""
     number = str(raw.get("rulingNumber") or "")
@@ -176,6 +208,7 @@ def _norm_ruling(raw):
         "编码数字": [_norm_code(t) for t in tariffs],
         "状态": state,
         "状态说明": note,
+        "版本提示": _hs_version_note(date),
         "相关裁定": [str(x) for x in (raw.get("relatedRulings") or [])],
         "链接": RULING_URL.format(number=number),
         # 全文是 OLE2 二进制 .doc，不是 HTML；界面上应作为下载链接而非内嵌渲染
@@ -301,10 +334,13 @@ def precedents(term, codes=None, limit=20, page_size=DEFAULT_PAGE_SIZE,
                 if len(g["示例"]) < 3:
                     g["示例"].append({"裁定号": r["裁定号"], "主题": r["主题"][:80]})
 
-    # 只把失效的挪到后面。Python 的 sort 是稳定的，因此现行组内部仍保持 CROSS
-    # 返回的相关度顺序——那是对方的排序结果，比按日期重排有用得多
-    #（早先多写了一次按日期排序，把相关度整个冲掉了，最贴题的 N286124 反而掉出前列）。
-    matched.sort(key=lambda r: r["状态"] != "现行")
+    # 排序：现行在前 > HQ 在前。多条裁定结论冲突时该信哪条，层级说了算——
+    # HQ（总部法规裁定办公室）可以撤销/修改 NY（纽约商品专家部）的裁定，反之
+    # 不行（实测 2399 条样本里 25 次撤销全部由 HQ 发起，NY 撤销任何裁定 0 次）。
+    # Python 的 sort 是稳定的，因此各组内部仍保持 CROSS 返回的相关度顺序——
+    # 那是对方的排序结果，比按日期重排有用得多（早先多写了一次按日期排序，
+    # 把相关度整个冲掉了，最贴题的 N286124 反而掉出前列）。
+    matched.sort(key=lambda r: (r["状态"] != "现行", r["来源"] != "HQ"))
     matched = matched[:limit]
 
     # 同品目的排前面：它离候选最近，最可能是你漏掉的那个子目
@@ -314,10 +350,23 @@ def precedents(term, codes=None, limit=20, page_size=DEFAULT_PAGE_SIZE,
     tips = []
     if not matched and codes:
         tips.append("本次检索未找到判给这些候选编码的裁定。可能是检索词与官方用语不一致，"
-                    "换用税则原文里的说法再试（如 lithium-ion / primary cells）。")
+                    "换用税则原文里的说法再试（如 lithium-ion / primary cells）。"
+                    "确属无先例的新品类且金额较大时，建议申请 CBP 预裁定"
+                    "（eRulings，免费，约 30 天），而不是回头硬翻税则猜一个。")
+    if matched:
+        # 这句在有先例时必须在：subject + tariffs 两行看着就能抄，而裁定的法律
+        # 效力锚定在它描述的那个具体货物上，差一个参数（容量/材质比例/是否
+        # 零售包装）结论就可能翻转。列表页的信息量天然在鼓励"扫一眼就抄"，
+        # 提示必须与之对冲。
+        tips.append("引用先例前须读裁定全文的事实描述段，确认货物与本批实际可比——"
+                    "相似不等于相同，差一个参数结论可能相反。多条结论冲突时，"
+                    "HQ 层级高于 NY，新裁定优于旧裁定。")
     if any(r["状态"] != "现行" for r in matched):
         tips.append("结果中含已撤销或已修改的裁定，已标注状态——引用前务必核对，"
                     "撤销件不可作为归类依据。")
+    if any(r["版本提示"] for r in matched):
+        tips.append("部分裁定早于 HS 修订（已标注）：归类逻辑通常仍成立，但其中的"
+                    "6 位编码可能已变更——CROSS 不会为此标记撤销，须自行回现行税则核对。")
     if other_list:
         tips.append("「候选外编码」是 CBP 把同类商品判到的、不在你候选集里的编码；"
                     "标「同品目」的与候选同 4 位品目、仅子目不同，最值得先看。")
@@ -360,7 +409,9 @@ def _main(argv):
             print(f"  命中候选: {', '.join(it['命中候选'])}")
         print(f"  {it['主题'][:88]}")
         if it["状态说明"]:
-            print(f"  {it['状态说明']}")
+            print(f"  ⚠ {it['状态说明']}")
+        if it["版本提示"]:
+            print(f"  ⚠ {it['版本提示']}")
         print(f"  {it['链接']}")
         print()
     if r["候选外编码"]:

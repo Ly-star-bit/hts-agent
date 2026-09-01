@@ -227,6 +227,93 @@ class TestPrecedents(CrossTestCase):
         self.assertIn("不构成保护伞", cross.precedents("b", ["8507.60.00"])["提示"])
 
 
+class TestRanking(CrossTestCase):
+    """
+    多条裁定结论冲突时该信哪条，层级说了算：HQ（总部）可以撤销/修改 NY 的裁定，
+    反之不行——2399 条真实样本里 25 次撤销全部由 HQ 发起，NY 发起 0 次。
+    """
+
+    def test_hq_ranked_before_ny(self):
+        self.stub([
+            raw("N1", "8507.60.0020", collection="ny"),
+            raw("H1", "8507.60.0020", collection="hq"),
+            raw("N2", "8507.60.0020", collection="ny"),
+        ])
+        r = cross.precedents("battery", ["8507.60.00"])
+        self.assertEqual([x["裁定号"] for x in r["先例"]], ["H1", "N1", "N2"])
+
+    def test_revoked_hq_still_after_current_ny(self):
+        """失效压过层级：被撤销的 HQ 裁定也不能排在现行 NY 前面"""
+        self.stub([
+            raw("H_OLD", "8507.60.0020", collection="hq", revoked_by=["H_NEW"]),
+            raw("N1", "8507.60.0020", collection="ny"),
+        ])
+        r = cross.precedents("battery", ["8507.60.00"])
+        self.assertEqual([x["裁定号"] for x in r["先例"]], ["N1", "H_OLD"])
+
+    def test_relevance_preserved_within_same_tier(self):
+        """同层级（都是现行 NY）内部必须保持 CROSS 的相关度顺序"""
+        self.stub([raw(f"N{i}", "8507.60.0020", collection="ny") for i in range(4)])
+        r = cross.precedents("battery", ["8507.60.00"])
+        self.assertEqual([x["裁定号"] for x in r["先例"]],
+                         ["N0", "N1", "N2", "N3"])
+
+    def test_hierarchy_tip_present_with_matches(self):
+        """"HQ 高于 NY、读全文事实段"必须随先例一起出现——列表页的信息量
+        天然在鼓励扫一眼就抄，提示必须与之对冲"""
+        self.stub([raw("A", "8507.60.0020")])
+        tip = cross.precedents("b", ["8507.60.00"])["提示"]
+        self.assertIn("事实描述", tip)
+        self.assertIn("HQ 层级高于 NY", tip)
+
+    def test_no_precedent_suggests_eruling(self):
+        """CROSS 空手而归的新品类要给出口（预裁定），否则用户会回去硬翻税则猜一个"""
+        self.stub([raw("A", "3926.90.9989")])
+        self.assertIn("预裁定", cross.precedents("b", ["8507.60.00"])["提示"])
+
+
+class TestHsVersionNote(CrossTestCase):
+    """
+    HS 每 5 年一修，老裁定的 6 位编码可能已被 WCO 改掉——而 CROSS 不会为此
+    标记撤销：revoked 只防"结论被推翻"，防不住"编码被搬家"。
+    """
+
+    def test_recent_ruling_no_note(self):
+        self.stub([raw("A", "8507.60.0020", date="2023-05-01")])
+        self.assertEqual(cross.search("b")["裁定"][0]["版本提示"], "")
+
+    def test_pre_2022_flags_hs2022_only(self):
+        self.stub([raw("A", "8507.60.0020", date="2019-08-29")])
+        note = cross.search("b")["裁定"][0]["版本提示"]
+        self.assertIn("HS 2022", note)
+        self.assertNotIn("HS 2017", note)
+
+    def test_old_ruling_flags_all_missed_revisions(self):
+        self.stub([raw("A", "8507.60.0020", date="2000-07-14")])
+        note = cross.search("b")["裁定"][0]["版本提示"]
+        for rev in ("HS 2012", "HS 2017", "HS 2022"):
+            self.assertIn(rev, note)
+
+    def test_boundary_uses_us_implementation_date(self):
+        """HS 2022 在美国经总统公告于 2022-01-27 落地，界线取实施日而非 1 月 1 日"""
+        self.stub([raw("A", "8507.60.0020", date="2022-01-26"),
+                   raw("B", "8507.60.0020", date="2022-01-27")])
+        rows = cross.search("b")["裁定"]
+        self.assertIn("HS 2022", rows[0]["版本提示"])
+        self.assertEqual(rows[1]["版本提示"], "")
+
+    def test_missing_date_treated_as_oldest(self):
+        """日期缺失按最老处理——宁可多提醒，不能让坏数据变成「无风险」"""
+        self.stub([raw("A", "8507.60.0020", date="")])
+        self.assertIn("HS 2012", cross.search("b")["裁定"][0]["版本提示"])
+
+    def test_tip_mentions_version_risk(self):
+        self.stub([raw("A", "8507.60.0020", date="2000-07-14")])
+        tip = cross.precedents("b", ["8507.60.00"])["提示"]
+        self.assertIn("HS 修订", tip)
+        self.assertIn("不会为此标记撤销", tip)
+
+
 class TestNormalize(CrossTestCase):
 
     def test_fields(self):
