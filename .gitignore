@@ -50,3 +50,6 @@ data/.db_changes.json
 data/cross.db
 data/cross.db-shm
 data/cross.db-wal
+
+# Playwright MCP 的临时快照/截图
+.playwright-mcp/
