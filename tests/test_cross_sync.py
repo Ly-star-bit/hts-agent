@@ -376,6 +376,37 @@ class TestEmbedAndSemantic(SyncTestCase):
         self.assertEqual(len(v), 2)
         self.assertAlmostEqual(sum(x * x for x in v), 1.0, places=6)
 
+    def test_embed_text_enriches_with_official_desc(self):
+        """
+        实测坐实的核心：零产品信号的 subject（"Request for Further Review..."）
+        裸嵌入下召回垫底，补上编码官方品名后跳到首位。这里锁住拼接逻辑。
+        """
+        import cross_embed
+        hts = {"82152000": "Spoons, forks, ladles; of stainless steel",
+               "85076000": "Lithium-ion batteries"}
+        # 零信号 subject + 编码 → 官方品名被拼进来
+        t = cross_embed._embed_text("Request for Further Review of Protest",
+                                    ["8215.20.0000"], hts)
+        self.assertIn("Spoons, forks", t)
+        self.assertIn("Request for Further Review", t, "subject 本身要保留")
+
+    def test_embed_text_dedups_and_caps(self):
+        import cross_embed
+        hts = {"85076000": "Lithium-ion batteries", "85065000": "Lithium",
+               "85078000": "Other storage batteries", "85072000": "Lead-acid"}
+        # 4 个编码只取前 3；重复品名去重
+        t = cross_embed._embed_text(
+            "batteries", ["85076000", "85076000", "85065000", "85078000", "85072000"], hts)
+        self.assertEqual(t.count("Lithium-ion batteries"), 1, "重复品名去重")
+        self.assertNotIn("Lead-acid", t, "第 4+ 个编码不计入")
+
+    def test_embed_text_no_desc_falls_back_to_subject(self):
+        """编码查不到官方品名时，退回裸 subject，不产出空串"""
+        import cross_embed
+        self.assertEqual(
+            cross_embed._embed_text("wool coat classification", ["99999999"], {}),
+            "wool coat classification")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -671,6 +671,94 @@ def precedent_counts(codes, db_path=None):
         return {}
 
 
+# ---------- 裁定正文按需拉取（三期：深读的原料） ----------
+
+DOC_CACHE_DIR = os.path.join(BASE_DIR, ".cache", "cross_docs")
+# 正文提取的质量断言：抽出的文本必须含"结论句"或 HTS 编码，否则视为解析失败。
+# 探针实测归类裁定 ~100% 满足；不满足的多是非归类裁定（原产地/估价）或坏文件，
+# 这类退回"仅链接"比展示残缺文本诚实。
+_DOC_CONCLUSION = re.compile(
+    r"applicable subheading|classifiable under|is provided for in|"
+    r"\b\d{4}\.\d{2}\.\d{2,4}\b", re.I)
+
+
+def _parse_doc_bytes(data):
+    """
+    裁定文件字节 → 纯文本。按魔数分派：
+      PDF（%PDF）        → pdfplumber（项目已有依赖）
+      OLE2（D0CF11E0）   → 提取可打印 ASCII 连续串
+    2025 年起 CBP 新裁定发 PDF，之前是 OLE2 .doc。两种都实测 ~100% 可读。
+    解析不出关键段返回 None——个体失败不猜，退回仅链接。
+    """
+    if not data:
+        return None
+    if data[:4] == b"%PDF":
+        try:
+            import io
+
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(data)) as pdf:
+                txt = " ".join((p.extract_text() or "") for p in pdf.pages)
+        except Exception:
+            return None
+    elif data[:4] == b"\xd0\xcf\x11\xe0":
+        # OLE2：正文以明文 ASCII 躺在字节流里（TARIFF NO.: 8506.50.0000 直接可见）。
+        # 不能先剥 HTML 标签——一个杂散 '<' 到下个 '>' 之间会把大段正文整块删掉
+        # （探针里就是这个 bug）。直接抓可打印连续串。
+        runs = re.findall(rb"[\x20-\x7e]{4,}", data)
+        txt = " ".join(r.decode("ascii", "ignore") for r in runs)
+    else:
+        return None
+    txt = re.sub(r"\s+", " ", txt).strip()
+    if len(txt) < 400 or not _DOC_CONCLUSION.search(txt):
+        return None
+    return txt
+
+
+def fetch_ruling_text(number, collection, date, use_cache=True):
+    """
+    按需拉取并解析一条裁定的正文。永久缓存——裁定正文不可变（改判用新裁定号），
+    所以缓存没有 TTL，只存看过的那几十条，不做 22 万全量下载。
+
+    返回纯文本；拉取/解析失败返回 None（调用方退回仅给链接）。
+    """
+    number = str(number or "")
+    collection = str(collection or "").lower()
+    year = str(date or "")[:4]
+    if not (number and collection and year.isdigit()):
+        return None
+
+    fp = os.path.join(DOC_CACHE_DIR, f"{number}.txt")
+    if use_cache:
+        try:
+            with open(fp, encoding="utf-8") as f:
+                cached = f.read()
+            return cached or None
+        except OSError:
+            pass
+
+    try:
+        resp = httpx.get(f"{BASE_URL}/api/getdoc/{collection}/{year}/{number}.doc",
+                         timeout=TIMEOUT * 2)   # 正文比元数据大，给更宽超时
+        resp.raise_for_status()
+        got_file = True
+        text = _parse_doc_bytes(resp.content)
+    except Exception:
+        got_file = False   # 网络失败：不缓存，下次可重试
+        text = None
+
+    # 只在"确实拿到了文件"时才写缓存：解析失败缓存空串（标记不可读，不反复重试），
+    # 但网络失败不缓存——否则一次断网会把这条永久钉成"无正文"
+    if use_cache and got_file:
+        try:
+            os.makedirs(DOC_CACHE_DIR, exist_ok=True)
+            with open(fp, "w", encoding="utf-8") as f:
+                f.write(text or "")
+        except OSError:
+            pass
+    return text
+
+
 # ---------- 命令行自查 ----------
 
 def _main(argv):

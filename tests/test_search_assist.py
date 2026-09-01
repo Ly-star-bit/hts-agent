@@ -398,5 +398,153 @@ class TestClassifyFallback(unittest.TestCase):
         self.assertTrue(r["candidates"])
 
 
+class DeepreadProvider:
+    """深读用假 provider：返回预设 picks（含逐字/篡改两种 quote）"""
+
+    def __init__(self, picks=None, summary="综述", raise_it=False):
+        self._picks = picks or []
+        self._summary = summary
+        self._raise = raise_it
+
+    def chat_json(self, messages, fallback=None):
+        if self._raise:
+            raise ai.AIProviderError("模拟不可用")
+        return {"picks": self._picks, "summary": self._summary}
+
+
+# 一段够长、含结论句与编码的假正文，供原文校验用
+_FAKE_DOC = ("This ruling concerns two battery packs. The applicable subheading "
+             "for the non-rechargeable lithium battery packs will be 8506.50.0000, "
+             "HTSUS. The rechargeable lithium-ion packs are classified under "
+             "8507.60.0020, HTSUS.")
+
+
+class TestDeepread(unittest.TestCase):
+    """
+    三期正文深读：AI 只做定位 + 逐字摘录，不生成归类意见。
+    整个功能的安全底线是"原文校验"——AI 引用的句子必须逐字出现在正文里，
+    否则拿去跟海关讲会翻车。不联网：fetch 与 provider 都注入假的。
+    """
+
+    def _fetch(self, mapping):
+        return lambda num, coll, date: mapping.get(num)
+
+    def _rulings(self, *nums):
+        return [{"裁定号": n, "来源": "NY", "日期": "2017-06-08",
+                 "编码": ["8506.50.0000"], "链接": f"x/{n}"} for n in nums]
+
+    def test_verbatim_quote_passes_verification(self):
+        prov = DeepreadProvider(picks=[{
+            "index": 0, "relevance": "high", "note": "不可充电锂电池",
+            "quote": "The applicable subheading for the non-rechargeable lithium "
+                     "battery packs will be 8506.50.0000, HTSUS."}])
+        r = ai.deepread_precedents(
+            "不可充电锂原电池", self._rulings("N286124"),
+            provider=prov, fetch=self._fetch({"N286124": _FAKE_DOC}))
+        self.assertNotIn("error", r)
+        pick = r["精读"][0]
+        self.assertEqual(pick["相似度"], "high")
+        self.assertTrue(pick["摘录已核对"], "逐字引用应通过原文校验")
+
+    def test_hallucinated_quote_flagged(self):
+        """AI 编造/改写的引用必须被标记——这是防止把假原话拿去报关的关键闸门"""
+        prov = DeepreadProvider(picks=[{
+            "index": 0, "relevance": "high", "note": "x",
+            "quote": "The battery is classified under 9999.99.9999 per this ruling."}])
+        r = ai.deepread_precedents(
+            "锂电池", self._rulings("N286124"),
+            provider=prov, fetch=self._fetch({"N286124": _FAKE_DOC}))
+        self.assertFalse(r["精读"][0]["摘录已核对"], "正文里没有的句子必须标存疑")
+
+    def test_whitespace_normalized_before_match(self):
+        """AI 常把换行/多空格改成单空格，不该因此判为存疑"""
+        prov = DeepreadProvider(picks=[{
+            "index": 0, "relevance": "medium",
+            "quote": "The rechargeable lithium-ion packs are classified under 8507.60.0020, HTSUS."}])
+        r = ai.deepread_precedents(
+            "可充电锂电池", self._rulings("N286124"),
+            provider=prov,
+            fetch=self._fetch({"N286124": _FAKE_DOC.replace(". ", ".\n  ")}))
+        self.assertTrue(r["精读"][0]["摘录已核对"])
+
+    def test_unreadable_ruling_goes_to_unread_not_faked(self):
+        """正文拉不到的裁定归入'未读'并保留链接，绝不假装读过"""
+        prov = DeepreadProvider(picks=[])
+        r = ai.deepread_precedents(
+            "锂电池", self._rulings("N286124", "N999999"),
+            provider=prov,
+            fetch=self._fetch({"N286124": _FAKE_DOC}))  # N999999 拉不到
+        self.assertEqual([x["裁定号"] for x in r["精读"]], ["N286124"])
+        self.assertEqual([x["裁定号"] for x in r["未读"]], ["N999999"])
+
+    def test_all_unreadable_degrades(self):
+        prov = DeepreadProvider(picks=[])
+        r = ai.deepread_precedents(
+            "锂电池", self._rulings("N1", "N2"),
+            provider=prov, fetch=self._fetch({}))
+        self.assertIn("error", r)
+        self.assertEqual([x["裁定号"] for x in r["未读"]], ["N1", "N2"])
+
+    def test_no_provider_degrades(self):
+        r = ai.deepread_precedents("锂电池", self._rulings("N1"),
+                                   provider=None, fetch=self._fetch({"N1": _FAKE_DOC}))
+        # get_provider 未配置时返回 None → error
+        self.assertTrue("error" in r or "精读" in r)
+
+    def test_provider_failure_degrades(self):
+        r = ai.deepread_precedents(
+            "锂电池", self._rulings("N286124"),
+            provider=DeepreadProvider(raise_it=True),
+            fetch=self._fetch({"N286124": _FAKE_DOC}))
+        self.assertIn("error", r)
+
+    def test_bad_pick_index_skipped(self):
+        """模型返回坏 index 不炸，对应行按'无摘录'处理"""
+        prov = DeepreadProvider(picks=[{"index": None, "quote": "x"},
+                                       {"index": 0, "relevance": "low",
+                                        "quote": "8507.60.0020"}])
+        r = ai.deepread_precedents(
+            "锂电池", self._rulings("N286124"),
+            provider=prov, fetch=self._fetch({"N286124": _FAKE_DOC}))
+        self.assertNotIn("error", r)
+        self.assertEqual(len(r["精读"]), 1)
+
+    def test_relevance_sorted_high_first(self):
+        docs = {"A": _FAKE_DOC, "B": _FAKE_DOC, "C": _FAKE_DOC}
+        prov = DeepreadProvider(picks=[
+            {"index": 0, "relevance": "low", "quote": ""},
+            {"index": 1, "relevance": "high", "quote": ""},
+            {"index": 2, "relevance": "medium", "quote": ""}])
+        r = ai.deepread_precedents(
+            "x", self._rulings("A", "B", "C"), provider=prov, fetch=self._fetch(docs))
+        self.assertEqual([x["相似度"] for x in r["精读"]], ["high", "medium", "low"])
+
+
+class TestParseDoc(unittest.TestCase):
+    """正文解析：PDF / OLE2 魔数分派 + 质量断言"""
+
+    def test_ole2_extracts_printable_runs(self):
+        import cross
+        # 伪 OLE2：魔数 + 二进制噪声夹着明文正文
+        data = (b"\xd0\xcf\x11\xe0" + b"\x00\x01\x02" * 50
+                + b"The applicable subheading will be 8506.50.0000, HTSUS. "
+                + b"This is a lithium battery classification ruling. " * 8
+                + b"\x00\xff" * 30)
+        txt = cross._parse_doc_bytes(data)
+        self.assertIsNotNone(txt)
+        self.assertIn("8506.50.0000", txt)
+
+    def test_rejects_short_or_codeless(self):
+        import cross
+        self.assertIsNone(cross._parse_doc_bytes(b"\xd0\xcf\x11\xe0short"))
+        self.assertIsNone(cross._parse_doc_bytes(
+            b"\xd0\xcf\x11\xe0" + b"lots of text but no hts code at all here " * 20))
+
+    def test_unknown_magic_returns_none(self):
+        import cross
+        self.assertIsNone(cross._parse_doc_bytes(b"GIF89a whatever"))
+        self.assertIsNone(cross._parse_doc_bytes(b""))
+
+
 if __name__ == "__main__":
     unittest.main()

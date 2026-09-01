@@ -36,7 +36,7 @@ desktop.ini
 # ===== Runtime output (generated, not source) =====
 output/
 
-# CROSS（CBP 裁定库）的本地查询缓存，随时可重新拉取，不入 git
+# CROSS（CBP 裁定库）的本地查询缓存 + 按需拉取的裁定正文，随时可重拉，不入 git
 .cache/
 
 # ===== Build artifacts: rebuilt by scripts/build_db.py, NOT source =====

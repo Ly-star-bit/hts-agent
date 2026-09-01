@@ -880,3 +880,116 @@ def analyze_list(db, items, origin="CN"):
         report = f"（AI 报告生成失败：{e}）"
 
     return {"report": report, "details": details, "stats": stats}
+
+
+# ---------- 三期：裁定正文深读（AI 定位 + 逐字摘录，不生成归类意见） ----------
+
+def deepread_precedents(query, rulings, provider=None, fetch=None, max_docs=6,
+                        max_chars=5000):
+    """
+    读候选裁定的正文，让 AI 定位与查询商品最相似的先例并**逐字摘录**决定性原文。
+
+    这是二期语义召回之后的"精读确认"环节。二期 subject 向量把 22 万条缩到十几条，
+    这里只对前 max_docs 条按需拉正文——正是它替代了"正文全量 embedding + reranker"：
+    十几条几万字 AI 一次读完，不需要预先向量化。
+
+    AI 的角色被严格限制在"读 + 定位 + 摘录"，不改写、不综述、不生成新的归类意见——
+    先例的价值在于能拿 CBP 原话去跟海关讲，一经转述就作废。为此：
+      - 提示要求逐字引用，禁止改写
+      - 返回后逐条**原文校验**：AI 引用的句子若不在正文里（whitespace 归一后
+        子串比对），标记 quote_verified=False，前端据此警示"引用存疑，请核对原文"
+
+    query    用户商品描述（中/英）
+    rulings  二期/一期召回的裁定列表（需含 裁定号/来源/日期，通常还有 编码）
+    fetch    注入点，默认 cross.fetch_ruling_text；测试传假抓取器不联网
+    返回 {"精读": [...], "综述": str, "未读": [...]}；失败 {"error": ...}
+    """
+    provider = provider or get_provider()
+    if provider is None:
+        return {"error": "AI 服务未配置"}
+    if not (query or "").strip():
+        return {"error": "请输入商品描述"}
+    if fetch is None:
+        import cross
+        fetch = cross.fetch_ruling_text
+
+    # 拉正文（按需、带缓存）。拉不到的归入"未读"，仍给链接，不假装读过
+    docs, unread = [], []
+    for r in (rulings or [])[:max_docs]:
+        num = r.get("裁定号") or r.get("number")
+        text = fetch(num, r.get("来源", "").lower() or r.get("collection", ""),
+                     r.get("日期") or r.get("rulingDate", ""))
+        if text:
+            docs.append((r, text[:max_chars]))
+        else:
+            unread.append({"裁定号": num, "链接": r.get("链接", ""),
+                           "原因": "正文暂不可读（非归类裁定/解析失败/离线），可点链接看原文"})
+    if not docs:
+        return {"error": "候选裁定的正文都拉取失败，无法深读。可稍后重试或直接看链接。",
+                "未读": unread}
+
+    blocks = []
+    for i, (r, text) in enumerate(docs):
+        blocks.append(f"[裁定 {i}] 编号 {r.get('裁定号')}，判给编码 "
+                      f"{'、'.join(r.get('编码', [])) or '（见正文）'}\n正文：{text}")
+    sys_prompt = (
+        "你是美国海关归类专家。下面是若干条 CBP 裁定的正文，以及一个待归类的商品描述。"
+        "你的任务只有三件，逐条完成：\n"
+        "1) 判断该裁定描述的货物与待归类商品的相似度（high/medium/low）；\n"
+        "2) 用一句话说明相似或不同在哪（中文）；\n"
+        "3) 从**该裁定正文里逐字摘录**决定归类的那一句英文原文（quote 字段），"
+        "一个字都不能改、不能翻译、不能拼接。找不到就留空。\n"
+        "严禁给出你自己的归类结论或编码建议——只做定位与摘录。\n"
+        '返回 JSON：{"picks":[{"index":0,"relevance":"high","note":"...","quote":"..."}],'
+        '"summary":"一句话综述哪条最值得参考及为什么，中文"}')
+    try:
+        out = provider.chat_json(
+            [{"role": "system", "content": sys_prompt},
+             {"role": "user", "content": f"待归类商品：{query}\n\n" + "\n\n".join(blocks)}],
+            fallback=None)
+    except AIProviderError as e:
+        return {"error": f"AI 深读失败：{e}", "未读": unread}
+    if not isinstance(out, dict):
+        return {"error": "AI 返回格式异常", "未读": unread}
+
+    picks = {}
+    for p in (out.get("picks") or []):
+        try:
+            picks[int(p.get("index"))] = p
+        except (TypeError, ValueError):
+            continue
+
+    result = []
+    for i, (r, text) in enumerate(docs):
+        p = picks.get(i, {})
+        quote = str(p.get("quote") or "").strip()
+        # 原文校验：这是整个功能的安全底线。AI 可能"记得"一句差不多的原话，
+        # 但拿去跟海关讲必须字字属实。whitespace 归一后做子串比对。
+        verified = bool(quote) and _norm_ws(quote) in _norm_ws(text)
+        result.append({
+            "裁定号": r.get("裁定号"),
+            "来源": r.get("来源", ""),
+            "日期": r.get("日期", ""),
+            "编码": r.get("编码", []),
+            "链接": r.get("链接", ""),
+            "相似度": str(p.get("relevance", "")).lower(),
+            "说明": str(p.get("note", ""))[:200],
+            "原文摘录": quote[:500],
+            "摘录已核对": verified,
+        })
+    # high > medium > low > 空
+    order = {"high": 0, "medium": 1, "low": 2}
+    result.sort(key=lambda x: order.get(x["相似度"], 3))
+    return {
+        "精读": result,
+        "综述": str(out.get("summary", ""))[:400],
+        "未读": unread,
+        "免责": "AI 仅定位并摘录 CBP 原文，未做归类判断；摘录须以裁定原文为准，"
+                "标『引用存疑』的表示未在正文中逐字命中，请点链接核对。",
+    }
+
+
+def _norm_ws(s):
+    """whitespace 归一：换行/多空格压成单空格、去首尾，供原文子串校验"""
+    import re as _re
+    return _re.sub(r"\s+", " ", str(s or "")).strip().lower()

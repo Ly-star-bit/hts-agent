@@ -582,6 +582,30 @@ def api_cross_semantic(req: CrossSemanticRequest):
                                      limit=req.limit, alive_codes=alive)
 
 
+class CrossDeepreadRequest(BaseModel):
+    query: str = Field(default="", description="待归类商品描述")
+    rulings: list = Field(default_factory=list,
+                          description="召回的候选裁定（含 裁定号/来源/日期/编码/链接）")
+
+
+@app.post("/api/cross/deepread")
+def api_cross_deepread(req: CrossDeepreadRequest):
+    """
+    裁定正文深读：拉候选裁定正文，AI 定位最相似者并逐字摘录 CBP 原文。
+    AI 只做定位+摘录，不生成归类意见；摘录经原文校验。
+    AI 未配置 / 正文全拉失败一律 {error} 降级。
+    """
+    if not (req.query or "").strip():
+        raise HTTPException(status_code=400, detail="请输入商品描述")
+    if not req.rulings:
+        raise HTTPException(status_code=400, detail="请提供候选裁定")
+    try:
+        import ai
+    except Exception as e:
+        return {"error": f"AI 模块加载失败：{e}"}
+    return ai.deepread_precedents(req.query.strip(), req.rulings)
+
+
 @app.post("/api/estimate")
 def api_estimate(req: EstimateRequest):
     """成本估算：按编码批量计算总税负（基础 + 301 + 附加税）"""

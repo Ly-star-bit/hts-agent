@@ -30,6 +30,7 @@ cross_embed.py —— 裁定 subject 语义索引（二期）
 import argparse
 import datetime as dt
 import os
+import re
 import sqlite3
 import struct
 import sys
@@ -102,6 +103,59 @@ def pending_rulings(conn):
         WHERE e.number IS NULL AND r.subject != ''""").fetchall()
 
 
+def _load_hts_desc():
+    """
+    编码 → 官方品名+归类路径，用来增强嵌入文本。
+
+    CROSS 的 subject 有约 2% 词不达意（"Request for Further Review of Protest..."、
+    "various gateway..."），但每条裁定都带精确编码，编码的官方 HTS 品名本地就有。
+    把它拼进被嵌入的文本，纯程序性标题也能获得产品语义——零下载、零大模型，
+    却对全部 19 万条归类裁定都有正收益。本地税则库不可用时返回 {}（退化为裸 subject）。
+    """
+    try:
+        import core
+        import rate
+        db = core.load_db()
+        r8 = db.get("rates_8") or {}
+    except Exception:
+        return {}
+    out = {}
+    for c8 in r8:
+        # full_desc 把归类路径拼成完整品名：叶子子目常是 "Of cotton"/"Other"，
+        # 单看没信息，配上祖先路径（"Women's blouses, knitted > Of cotton"）才可检索。
+        # 太长的截断——嵌入文本里官方品名是给 subject 补语义，不该喧宾夺主
+        try:
+            full = rate.full_desc(db, c8)
+        except Exception:
+            full = (r8[c8].get("desc") or "")
+        full = re.sub(r"\s+", " ", full).strip()[:200]
+        if full:
+            out[c8] = full
+    return out
+
+
+def _embed_text(subject, codes, hts_desc):
+    """
+    构造被嵌入的文本 = subject + 该裁定编码的官方品名（去重、限量）。
+
+    只取前 3 个编码的品名：一条裁定判给十几个码时，堆全部品名会稀释 subject
+    本身的语义，反而降召回。3 个足够把 vague subject 拉回可检索。
+    """
+    parts, seen = [subject.strip()], set()
+    for c in codes[:3]:
+        c8 = "".join(ch for ch in str(c) if ch.isdigit())[:8]
+        d = hts_desc.get(c8)
+        if d and d not in seen:
+            seen.add(d)
+            parts.append(d)
+    return " | ".join(p for p in parts if p)
+
+
+def _codes_of(conn, number):
+    return [r[0] for r in conn.execute(
+        "SELECT code FROM ruling_codes WHERE number=?", (number,)).fetchall()]
+
+
 def sync_embeddings(db_path=DB_PATH, rebuild=False, log=print):
     """增量嵌入。返回统计 dict。"""
     conn = open_db(db_path)
@@ -120,12 +174,16 @@ def sync_embeddings(db_path=DB_PATH, rebuild=False, log=print):
                 f"换模型必须 --rebuild 全量重建，不能增量混嵌。")
 
         todo = pending_rulings(conn)
+        hts_desc = _load_hts_desc()   # 编码 → 官方品名，用于增强 vague subject
         total, done, t0 = len(todo), 0, time.time()
-        log(f"待嵌入 {total} 条（模型 {EMBED_MODEL}，{EMBED_DIMS} 维）")
+        log(f"待嵌入 {total} 条（模型 {EMBED_MODEL}，{EMBED_DIMS} 维，"
+            f"官方品名增强 {'开' if hts_desc else '关（本地税则库不可用）'}）")
         now = dt.datetime.now().isoformat(timespec="seconds")
         for i in range(0, total, BATCH):
             chunk = todo[i:i + BATCH]
-            vecs = embed_batch([s for _, _, s in chunk])
+            texts = [_embed_text(s, _codes_of(conn, num), hts_desc)
+                     for _, num, s in chunk]
+            vecs = embed_batch(texts)
             with conn:  # 每批一个事务：中断后重跑自动从断点继续
                 for (rowid, number, _), v in zip(chunk, vecs):
                     tv = _truncate_norm(v)
