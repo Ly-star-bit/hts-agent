@@ -802,15 +802,17 @@
       <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
         <table>
           <colgroup>
-            <col style="width:4%"><col style="width:11%"><col style="width:24%">
-            <col style="width:11%"><col style="width:8%"><col style="width:9%">
-            <col style="width:9%"><col style="width:10%"><col style="width:14%">
+            <col style="width:4%"><col style="width:11%"><col style="width:22%">
+            <col style="width:10%"><col style="width:8%"><col style="width:9%">
+            <col style="width:8%"><col style="width:9%"><col style="width:13%">
+            <col style="width:6%">
           </colgroup>
           <thead>
             <tr>
               <th title="勾选 2 个以上候选进行归类对比"><input type="checkbox" id="cmpAll" onclick="toggleAllCmp(this)"></th>
               <th>编码</th><th>商品描述</th><th>一般税率</th><th>税率类型</th>
               <th>等效从价</th><th>301判定</th><th>301加征</th><th>总税负估算</th>
+              <th title="CBP 对该编码的历史裁定条数（本地镜像完整反查）。数字大 = 海关常这么判，归类有据可循；勾选对比可查看具体裁定">先例数</th>
             </tr>
           </thead>
           <tbody id="searchBody"></tbody>
@@ -1686,7 +1688,7 @@ function renderSearch(data) {
 
   if (!data.results.length) {
     const hasCJK = /[\u4e00-\u9fff]/.test(data.keyword || '');
-    body.innerHTML = `<tr><td colspan="9" class="empty">${
+    body.innerHTML = `<tr><td colspan="10" class="empty">${
       hasCJK
         ? '未匹配到结果。可换用更常见的商品词（如 锂电池 / 针织手套 / 不锈钢餐具），或到「AI 助手」用自然语言描述商品'
         : '没有匹配结果，请尝试更短的英文关键词（如 battery / apparel）'
@@ -1807,7 +1809,13 @@ function searchRow(r) {
     <td class="ellipsis" data-full="${esc(r['等效从价'])}">${esc(r['等效从价'])}</td>
     <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
     <td class="add-pct" data-full="${esc(r['301加征'])}">${esc(r['301加征'])}</td>
-    <td class="ellipsis" data-full="${esc(r['总税负估算'] || '')}">${esc(r['总税负估算'] || '—')}</td>`;
+    <td class="ellipsis" data-full="${esc(r['总税负估算'] || '')}">${esc(r['总税负估算'] || '—')}</td>
+    <td>${
+      // None（键缺失/null）= 镜像没建，显示 "—"；0 = 查过了没有，如实显示 0。
+      // "查过了没有"和"没查"是两个信息，不能都画成横杠
+      r['先例数'] == null ? '<span class="hint" style="margin:0;">—</span>'
+        : (r['先例数'] > 0 ? `<b>${r['先例数']}</b>` : '0')
+    }</td>`;
   return tr;
 }
 

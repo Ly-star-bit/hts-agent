@@ -552,6 +552,36 @@ def code_precedents(codes, limit=20, db_path=None, alive_codes=None):
             "数据截至": meta.get("last_sync", ""), "提示": " ".join(tips)}
 
 
+def precedent_counts(codes, db_path=None):
+    """
+    批量取 8 位码的先例数（code8_counts 预聚合表的键查），给搜索结果表的
+    「先例数」列用。
+
+    返回 {原样传入的编码: 条数}；镜像不可用或读取失败返回 {}——这是增强列，
+    缺席不是错误，不该让一列数字的缺失挡住整个搜索。计数为 0 也如实返回 0：
+    "查过了没有"和"没查"是两个信息。
+    """
+    db_path = db_path or DB_PATH
+    if not db_available(db_path):
+        return {}
+    try:
+        conn = _open_ro(db_path)
+        try:
+            out = {}
+            for c in codes or []:
+                w = _norm_code(c)[:8]
+                if len(w) < 8:
+                    continue
+                row = conn.execute(
+                    "SELECT n FROM code8_counts WHERE code8=?", (w,)).fetchone()
+                out[c] = row[0] if row else 0
+            return out
+        finally:
+            conn.close()
+    except Exception:
+        return {}
+
+
 # ---------- 命令行自查 ----------
 
 def _main(argv):

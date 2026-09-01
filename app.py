@@ -379,6 +379,24 @@ def api_ai_test():
     return ai.test_connection()
 
 
+def _annotate_precedent_counts(rows):
+    """
+    给搜索结果行补「先例数」（CBP 对该 8 位码的历史裁定条数，本地镜像键查）。
+
+    None 与 0 是两个信息：None = 镜像没建（"没查"），0 = 查过了确实没有。
+    前端分别显示 "—" 和 "0"。cross 模块加载失败也按"没查"处理——先例数
+    是增强列，不能挡住搜索主链路。
+    """
+    try:
+        import cross
+        counts = cross.precedent_counts([r["编码"] for r in rows])
+    except Exception:
+        counts = {}
+    for r in rows:
+        r["先例数"] = counts.get(r["编码"])
+    return rows
+
+
 @app.post("/api/search")
 def api_search(req: SearchRequest):
     """关键词搜索：返回匹配子目，可按等效从价税率排序（最低税率）"""
@@ -392,6 +410,9 @@ def api_search(req: SearchRequest):
                            unit_value=req.unit_value, origin=req.origin)
         # 同义词扩展信息：未映射的中文片段必须回报，否则用户会以为已完整检索
         _expanded, applied, leftover = rate.expand_query(req.keyword)
+        # 「先例数」列：CROSS 本地镜像的预聚合键查。镜像没建时 counts 为空、
+        # 该列显示 "—"——这是增强列，缺席不是错误
+        _annotate_precedent_counts(rows)
         # 总税负列由 rate.search 统一补齐（含 unit_value / origin），此处不再重复计算
         # 一物多号自动识别：分歧应该由结果自己报出来，而不是等用户先意识到
         # "我这可能有多个码"再去手动勾选对比
@@ -457,6 +478,10 @@ def api_search_assist(req: SearchAssistRequest):
     except Exception as e:
         traceback.print_exc()
         return {"error": f"AI 分析异常：{e}"}
+    # AI 补召回的行与本地行同表展示，「先例数」列同样要有——
+    # 两批行一副面孔，一列缺失就是错位
+    if result.get("新增候选"):
+        _annotate_precedent_counts(result["新增候选"])
     return result
 
 

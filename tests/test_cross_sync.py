@@ -253,6 +253,23 @@ class TestCodePrecedents(SyncTestCase):
         self._build()
         self.assertIn("error", cross.code_precedents(["8507"], db_path=self.db))
 
+    def test_precedent_counts_bulk(self):
+        """搜索表「先例数」列的键查：查过没有 → 0，短码 → 跳过"""
+        self._build()
+        got = cross.precedent_counts(
+            ["8507.60.00", "3926.90.99", "1111.11.11", "85"], db_path=self.db)
+        # SHORT(850760) 不足 8 位不进计数表；NEW/OLD/HQ1/DEAD 4 条计入
+        self.assertEqual(got["8507.60.00"], 4)
+        self.assertEqual(got["3926.90.99"], 1)
+        self.assertEqual(got["1111.11.11"], 0, "查过了没有 → 0，不是缺席")
+        self.assertNotIn("85", got, "短码无法与 8 位表对账，跳过")
+
+    def test_precedent_counts_missing_db_empty(self):
+        """镜像没建 → {}，一列数字的缺失不能挡住搜索主链路"""
+        got = cross.precedent_counts(
+            ["8507.60.00"], db_path=os.path.join(self._tmp.name, "nope.db"))
+        self.assertEqual(got, {})
+
     def test_local_status(self):
         self._build()
         st = cross.local_status(self.db)

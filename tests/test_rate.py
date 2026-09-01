@@ -300,6 +300,37 @@ class TestSearchRecall(unittest.TestCase):
         # 或显式打开开关
         self.assertTrue(rate.search(self.db, "gloves", limit=20, include_special=True))
 
+    def test_or_degrade_counts_concepts_not_tokens(self):
+        """
+        回归：AI 把"锂电池"改写成 'lithium battery accumulator'，8549 废电池
+        10 条 + 8601 蓄电池机车 2 条全靠 battery+accumulator 凑满"至少 2 词"
+        混进补召回——而这俩是同一概念的并列写法（税则固定搭配 "primary cells,
+        primary batteries and electric accumulators"），不能互相凑数。
+        """
+        rows = rate.search(self.db, "lithium battery accumulator", limit=40)
+        self.assertTrue(rows, "真命中（8507/8506）必须还在")
+        noisy = [r["编码"] for r in rows if r["编码"][:4] in ("8549", "8601")]
+        self.assertEqual(noisy, [], f"同概念词不该凑满 min_hits：{noisy}")
+        codes4 = {r["编码"][:4] for r in rows}
+        self.assertIn("8507", codes4)
+        self.assertIn("8506", codes4)
+
+    def test_single_concept_query_not_starved(self):
+        """battery accumulator 两词同概念 → min_hits 须降为 1，不能返回空。
+        用户真就只说了'电池/蓄电池'时，8549/8601 恰恰是合理结果。"""
+        rows = rate.search(self.db, "battery accumulator", limit=10)
+        self.assertTrue(rows)
+
+    def test_two_real_concepts_unaffected(self):
+        """两个真概念的 OR 降级照旧：概念归组不能把正确候选挡在 min_hits 外"""
+        rows = rate.search(self.db, "woven jacket coated", limit=10)
+        self.assertTrue(rows)
+
+    def test_concept_of_stems_before_grouping(self):
+        self.assertEqual(rate._concept_of("batteries"), rate._concept_of("accumulator"))
+        self.assertEqual(rate._concept_of("cells"), rate._concept_of("battery"))
+        self.assertNotEqual(rate._concept_of("lithium"), rate._concept_of("battery"))
+
     def test_phrase_bonus_ranks_term_match_first(self):
         # 'man-made fibers anorak' 改前首位是塑料地板砖（自身品名含 man-made fibers）
         rows = rate.search(self.db, "man-made fibers anorak", limit=5, sort="relevance")

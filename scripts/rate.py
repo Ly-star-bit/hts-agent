@@ -462,6 +462,23 @@ _WEAVE_CHAPTER_BIAS = {
 }
 
 
+# 同概念的税则并列写法。OR 降级召回按概念计数时，同组的词只算一个证据——
+# 否则一条命中固定搭配 "primary cells, primary batteries and electric
+# accumulators" 的祖先品名就能白拿两三票。组用词干表示（计数前先 _stem）。
+# 只收录税则里确证的并列搭配，宁少勿滥：错误的归组会让两个真概念只算一票，
+# 把正确候选挡在 min_hits 之外。
+_CONCEPT_GROUPS = [
+    {"battery", "accumulator", "cell"},   # 电池：85 章标题三连用
+]
+_CONCEPT_OF = {w: f"g{i}" for i, ws in enumerate(_CONCEPT_GROUPS) for w in ws}
+
+
+def _concept_of(token):
+    """词 → 概念键；不在任何组里的词自成概念（键即词干）"""
+    st = _stem(token)
+    return _CONCEPT_OF.get(st, st)
+
+
 _TOTAL_NUM_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*%")
 
 
@@ -600,12 +617,21 @@ def search(db, keyword, limit=100, sort="relevance", include_special=False,
         if and_hits:
             codes |= and_hits
         else:
-            min_hits = 2 if len(tokens) >= 2 else 1
-            hit_counts = {}
+            # OR 降级按**概念**计数而不是按词：battery / accumulator / cell 是
+            # 同一概念在税则里的并列写法（固定搭配 "primary cells, primary
+            # batteries and electric accumulators"），按词计数它们会互相凑数。
+            # 实测 'lithium battery accumulator'（AI 对"锂电池"的改写）：
+            # 8549 废电池 10 条 + 8601 蓄电池机车 2 条全靠 battery+accumulator
+            # 凑满 2 词混进补召回，而这 12 条与锂电池毫无关系。
+            # 处理方式与 _weave_bias 对 knitted/crocheted 一致：同概念计一次。
+            n_concepts = len({_concept_of(t) for t in tokens})
+            min_hits = 2 if n_concepts >= 2 else 1
+            hit_groups = {}
             for tok in tokens:
+                g = _concept_of(tok)
                 for c in _hits(tok):
-                    hit_counts[c] = hit_counts.get(c, 0) + 1
-            codes |= {c for c, n in hit_counts.items() if n >= min_hits}
+                    hit_groups.setdefault(c, set()).add(g)
+            codes |= {c for c, gs in hit_groups.items() if len(gs) >= min_hits}
 
     # 打分排序
     import math

@@ -587,6 +587,26 @@ class TestCrossLocalAPI(unittest.TestCase):
         # 现行税则对账：两个编码都活着，失效列表应为空（用真实 rates_8 核）
         self.assertEqual(d["先例"][0]["失效编码"], [])
 
+    def test_search_rows_carry_precedent_counts(self):
+        """搜索结果每行带「先例数」；AI 补充行同表展示，同样要有这一列"""
+        d = self.client.post("/api/search",
+                             json={"keyword": "lithium battery", "limit": 5}).json()
+        by = {r["编码"]: r for r in d["results"]}
+        self.assertIn("8507.60.00", by)
+        # fixture 镜像里 N286124 判给了 8507.60/8506.50 各一条
+        self.assertEqual(by["8507.60.00"]["先例数"], 1)
+        self.assertEqual(by["8506.50.00"]["先例数"], 1)
+
+    def test_search_counts_none_when_mirror_absent(self):
+        """镜像没建 → 先例数为 None（"没查"），不是 0（"查过了没有"）"""
+        self._cross.DB_PATH = os.path.join(self._tmp.name, "nope.db")
+        d = self.client.post("/api/search",
+                             json={"keyword": "lithium battery", "limit": 3}).json()
+        self.assertTrue(d["results"])
+        for r in d["results"]:
+            self.assertIn("先例数", r)
+            self.assertIsNone(r["先例数"])
+
     def test_dead_code_annotated_against_real_hts(self):
         """回归：8471.92.10 是被 HS 修订删掉的真实编码，必须标出——
         90 年代裁定 42% 中招，而 CROSS 对此零标记"""
