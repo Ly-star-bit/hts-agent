@@ -2289,8 +2289,15 @@ async function doCrossSemantic() {
     const codes = currentCmpItems.map(it => String(it['编码']));
     const d = await apiPost('/api/cross/semantic', { query: q, codes, limit: 10 });
     const rows = d['先例'] || [];
+    // 存下召回结果供深读用——深读要把这几条的正文交给 AI 精读
+    lastCrossRulings = rows;
+    lastCrossQuery = q;
     box.innerHTML = rows.length
       ? `<div class="info-bar">语义匹配 ${rows.length} 条（按相似度排序）</div>`
+        + (aiEnabled ? `<div style="margin:8px 0;"><button class="btn-primary" id="btnDeepread" onclick="doCrossDeepread()"
+             title="拉前几条的正文，AI 读后指出哪条货物最像并逐字摘录 CBP 原文">🔍 深读正文（AI 读全文 + 摘录原文）</button>
+             <span class="hint" style="margin:0 0 0 8px;">召回找到候选，深读读正文确认哪条真的像</span></div>` : '')
+        + `<div id="deepreadResult"></div>`
         + rows.map(crossRulingRow).join('')
         + `<div class="hint" style="margin-top:8px;">${esc(d['提示'] || '')}</div>`
       : `<div class="info-bar">未找到语义相近的裁定。${esc(d['提示'] || '')}</div>`;
@@ -2299,6 +2306,65 @@ async function doCrossSemantic() {
   } finally {
     btn.disabled = false;
   }
+}
+
+/* ---------- 裁定正文深读（三期：AI 读正文 + 逐字摘录 CBP 原文） ----------
+   召回（语义/在线）只找到"名字像"的候选，深读拉这几条的正文让 AI 精读，
+   指出哪条货物真的像并摘录决定性原文。AI 只定位+摘录，不生成归类意见；
+   摘录经后端原文校验，未逐字命中的标「引用存疑」。 */
+let lastCrossRulings = [];
+let lastCrossQuery = '';
+
+async function doCrossDeepread() {
+  if (!lastCrossRulings.length) return;
+  const btn = document.getElementById('btnDeepread');
+  const box = document.getElementById('deepreadResult');
+  btn.disabled = true;
+  box.innerHTML = '<div class="info-bar">AI 深读中……拉正文 + 精读（本地大模型，可能需十几秒）</div>';
+  try {
+    const d = await apiPost('/api/cross/deepread',
+      { query: lastCrossQuery, rulings: lastCrossRulings });
+    box.innerHTML = renderDeepread(d);
+  } catch (e) {
+    box.innerHTML = `<div class="error-bar show">深读失败：${esc(e.message)}。候选列表不受影响，可点裁定号看原文。</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderDeepread(d) {
+  if (d['error']) {
+    return `<div class="error-bar show">${esc(d['error'])}</div>`;
+  }
+  const picks = d['精读'] || [];
+  const relTag = { high: ['最相似', 'hit'], medium: ['较相似', 'warn'], low: ['不太像', 'na'] };
+  let h = `<div class="fold" open><summary><span class="fold-tag alert">AI 深读</span>`
+        + `<span>${esc(d['综述'] || '')}</span></summary><div class="fold-body">`;
+  picks.forEach(p => {
+    const rt = relTag[p['相似度']] || ['—', 'na'];
+    h += `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+      <a href="${esc(p['链接'])}" target="_blank" rel="noopener" style="font-weight:600;">${esc(p['裁定号'])}</a>
+      <span class="tag ${rt[1]}">${rt[0]}</span>
+      <span style="color:var(--muted);">${esc(p['说明'])}</span>`;
+    if (p['原文摘录']) {
+      // 摘录是 CBP 原话，等宽字体 + 引用样式；未核对的显著标红警示
+      h += `<blockquote style="margin:6px 0 0;padding:6px 10px;border-left:3px solid ${p['摘录已核对'] ? 'var(--miss)' : 'var(--hit)'};background:var(--surface-2);font-family:var(--font-mono);font-size:12px;">
+        ${esc(p['原文摘录'])}
+        <div style="margin-top:4px;font-family:var(--font-ui);">${
+          p['摘录已核对']
+            ? '<span style="color:var(--miss);">✓ 已核对：逐字出自该裁定正文</span>'
+            : '<span style="color:var(--hit);font-weight:600;">⚠ 引用存疑：未在正文中逐字命中，请点裁定号核对原文</span>'
+        }</div></blockquote>`;
+    }
+    h += `</div>`;
+  });
+  const unread = d['未读'] || [];
+  if (unread.length) {
+    h += `<div class="hint" style="margin-top:8px;">未能读取正文的 ${unread.length} 条（`
+       + unread.map(u => esc(u['裁定号'])).join('、') + `）：正文暂不可读，可点裁定号看原文。</div>`;
+  }
+  h += `<div class="hint" style="margin-top:6px;">${esc(d['免责'] || '')}</div>`;
+  return h + `</div></details>`;
 }
 
 function renderCrossPrecedents(d) {
