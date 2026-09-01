@@ -552,6 +552,95 @@ def code_precedents(codes, limit=20, db_path=None, alive_codes=None):
             "数据截至": meta.get("last_sync", ""), "提示": " ".join(tips)}
 
 
+def semantic_precedents(query, codes=None, limit=10, db_path=None,
+                        alive_codes=None, _embed=None):
+    """
+    语义找先例（二期）：中文/英文商品描述 → 向量检索裁定 subject。
+
+    与 code_precedents（编码精确反查）和 precedents（在线关键词）互补：
+    这里解决的是"入口是模糊描述"——「羊毛大衣」不需要先翻成 wool coat。
+    查询侧加 instruct 前缀、文档侧存纯文本，与选型基准的做法一致；
+    嵌入模型/维度以 meta 里索引时记录的为准，查询必须用同一个模型。
+
+    codes 只用于标「命中候选」，不过滤——语义检索的价值恰恰在发现候选外的判法。
+    _embed 参数供测试注入假嵌入器。
+
+    返回 {"先例","检索词","数据截至","提示"}；失败一律 {"error": ...}。
+    """
+    query = (query or "").strip()
+    if not query:
+        return {"error": "请输入商品描述"}
+    db_path = db_path or DB_PATH
+    if not db_available(db_path):
+        return {"error": "本地裁定库未构建，请运行 python scripts/cross_sync.py"}
+    try:
+        import sqlite3
+
+        import sqlite_vec
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+    except Exception as e:
+        return {"error": f"语义索引不可用（sqlite-vec）：{e}"}
+
+    try:
+        try:
+            meta = dict(conn.execute("SELECT key, value FROM meta"))
+            model = meta.get("embed_model")
+            dims = int(meta.get("embed_dims") or 0)
+            n_indexed = int(meta.get("embed_count") or 0)
+            if not model or not n_indexed:
+                return {"error": "语义索引未构建，请运行 python scripts/cross_embed.py"}
+
+            # 查询嵌入（instruct 前缀）。默认走 ollama，测试注入 _embed
+            import struct as _struct
+
+            import cross_embed as _ce
+            if _embed is None:
+                _embed = lambda texts: _ce.embed_batch(texts, model=model)  # noqa: E731
+            qv = _ce._truncate_norm(_embed([_ce.QUERY_INSTRUCT + query])[0], dims)
+            rows = conn.execute(
+                f"SELECT r.number, v.distance FROM ("
+                f"  SELECT rowid, distance FROM vec_subjects "
+                f"  WHERE emb MATCH ? ORDER BY distance LIMIT ?) v "
+                f"JOIN rulings r ON r.rowid = v.rowid",
+                (_struct.pack(f"{dims}f", *qv), int(limit) * 3)).fetchall()
+
+            items = []
+            if rows:
+                order = {n: i for i, (n, _) in enumerate(rows)}
+                ph = ",".join("?" * len(rows))
+                for row in conn.execute(
+                        f"SELECT {_RULING_COLS} FROM rulings "
+                        f"WHERE number IN ({ph})", [n for n, _ in rows]):
+                    it = _norm_ruling(_row_to_raw(row))
+                    it["命中候选"] = match_codes(it, codes or [])
+                    items.append(it)
+                items.sort(key=lambda r: order.get(r["裁定号"], 1 << 30))
+        finally:
+            conn.close()
+    except Exception as e:
+        # ollama 离线、向量表损坏等一律降级——语义检索是锦上添花
+        return {"error": f"语义检索失败：{e}"}
+
+    # 失效沉底，组内保持相似度序（稳定排序）；无编码的裁定（原产地/估价类）
+    # 对归类场景噪音居多，往后放但不删——语义近邻本身就是信息
+    items.sort(key=lambda r: (r["状态"] != "现行", not r["编码"]))
+    items = items[:limit]
+
+    tips = [f"按语义相似检索（{model}，索引 {n_indexed} 条，"
+            f"数据截至 {meta.get('last_sync', '未知')}）。"]
+    if _flag_dead_codes(items, alive_codes):
+        tips.append(_DEAD_CODE_TIP)
+    if any(r["状态"] != "现行" for r in items):
+        tips.append("含已撤销/修改的裁定（已标注），撤销件不可作为归类依据。")
+    tips.append("引用前须读裁定全文的事实描述段，确认货物可比；"
+                "裁定仅对申请人的该笔交易具法律约束力，不构成保护伞。")
+    return {"先例": items, "检索词": query,
+            "数据截至": meta.get("last_sync", ""), "提示": " ".join(tips)}
+
+
 def precedent_counts(codes, db_path=None):
     """
     批量取 8 位码的先例数（code8_counts 预聚合表的键查），给搜索结果表的

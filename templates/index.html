@@ -2116,8 +2116,11 @@ function renderCompare(data) {
       <div id="crossLocal"></div>
       <div class="inline-form">
         <input type="text" id="crossTerm" class="grow" value="${esc(crossDefaultTerm(items))}"
-               placeholder="英文品名，如 lithium ion battery">
-        <button class="btn-primary" id="btnCross" onclick="doCrossPrecedents()">在线检索 CROSS</button>
+               placeholder="商品描述（语义检索支持中文；在线检索需英文）">
+        <button class="btn-primary" id="btnCrossSem" onclick="doCrossSemantic()"
+                title="本地向量索引，中文描述可直接匹配英文裁定">语义检索</button>
+        <button class="btn-export" id="btnCross" onclick="doCrossPrecedents()"
+                title="rulings.cbp.gov 在线关键词检索（英文）">在线检索</button>
       </div>
       <div id="crossResult"></div>
     </div>`;
@@ -2212,6 +2215,35 @@ async function loadCrossLocal(codes) {
     h += `<div class="hint" style="margin:6px 0 10px;">${esc(d['提示'] || '')}</div>`;
   }
   box.innerHTML = h;
+}
+
+/* 语义检索（本地向量索引 + ollama 查询嵌入）。索引未建/ollama 离线时后端
+   返回 {error}，这里如实显示原因——语义检索是显式点击的功能，不同于
+   crossLocal 的静默增强，用户点了就要知道为什么没结果 */
+async function doCrossSemantic() {
+  const q = document.getElementById('crossTerm').value.trim();
+  const box = document.getElementById('crossResult');
+  if (!q) {
+    box.innerHTML = '<div class="error-bar show">请输入商品描述</div>';
+    return;
+  }
+  const btn = document.getElementById('btnCrossSem');
+  btn.disabled = true;
+  box.innerHTML = '<div class="info-bar">语义检索中……（本地索引 + 查询嵌入）</div>';
+  try {
+    const codes = currentCmpItems.map(it => String(it['编码']));
+    const d = await apiPost('/api/cross/semantic', { query: q, codes, limit: 10 });
+    const rows = d['先例'] || [];
+    box.innerHTML = rows.length
+      ? `<div class="info-bar">语义匹配 ${rows.length} 条（按相似度排序）</div>`
+        + rows.map(crossRulingRow).join('')
+        + `<div class="hint" style="margin-top:8px;">${esc(d['提示'] || '')}</div>`
+      : `<div class="info-bar">未找到语义相近的裁定。${esc(d['提示'] || '')}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="error-bar show">语义检索失败：${esc(e.message)}。可改用「在线检索」（英文关键词）。</div>`;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderCrossPrecedents(d) {

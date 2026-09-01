@@ -640,6 +640,16 @@ class TestCrossLocalAPI(unittest.TestCase):
         self.assertEqual(
             self.client.post("/api/cross/local", json={"codes": []}).status_code, 400)
 
+    def test_semantic_endpoint_degrades_without_index(self):
+        """语义索引未建 → {error} 而非 5xx；空描述 → 400"""
+        r = self.client.post("/api/cross/semantic",
+                             json={"query": "锂电池", "codes": []})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("error", r.json())
+        self.assertEqual(
+            self.client.post("/api/cross/semantic",
+                             json={"query": "  "}).status_code, 400)
+
 
 class TestSearchSpecialChapters(unittest.TestCase):
     """搜索默认剔除 98/99 章：它们不是可归类的进口编码"""

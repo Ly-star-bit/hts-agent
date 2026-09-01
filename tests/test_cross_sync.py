@@ -280,5 +280,102 @@ class TestCodePrecedents(SyncTestCase):
         self.assertFalse(st2["可用"])
 
 
+def fake_embedder(dim=1024):
+    """确定性假嵌入器：按文本里出现的锚词给方向，让相似度可预言。
+    battery 类文本 → e1 方向，coat 类 → e2，其余 → e3；查询同理。"""
+    def _embed(texts):
+        out = []
+        for t in texts:
+            t = t.lower()
+            v = [0.0] * dim
+            if "batter" in t or "锂电池" in t:
+                v[1] = 1.0
+            elif "coat" in t or "大衣" in t:
+                v[2] = 1.0
+            else:
+                v[3] = 1.0
+            out.append(v)
+        return out
+    return _embed
+
+
+class TestEmbedAndSemantic(SyncTestCase):
+    """语义索引构建（cross_embed）与检索（cross.semantic_precedents），不联网"""
+
+    def _build_with_embeddings(self):
+        import cross_embed
+        self.serve({"2023-03-01": [
+            raw("BAT1", "8507.60.0020", subject="lithium-ion battery pack"),
+            raw("BAT2", "8506.50.0000", subject="primary lithium battery"),
+            raw("COAT", "6201.40.35", subject="wool coat classification"),
+            raw("MISC", "3926.90.9989", subject="plastic clip"),
+        ]})
+        self.sync()
+        self._orig_embed = cross_embed.embed_batch
+        cross_embed.embed_batch = lambda texts, **kw: fake_embedder()(texts)
+        self.addCleanup(lambda: setattr(cross_embed, "embed_batch", self._orig_embed))
+        return cross_embed.sync_embeddings(db_path=self.db, log=lambda *a: None)
+
+    def test_embed_then_semantic_search(self):
+        r = self._build_with_embeddings()
+        self.assertEqual(r["新嵌入"], 4)
+        got = cross.semantic_precedents("锂电池", codes=["8507.60.00"],
+                                        db_path=self.db,
+                                        _embed=fake_embedder())
+        names = [x["裁定号"] for x in got["先例"]]
+        # battery 方向的两条必须排最前；coat/misc 是正交向量，垫底
+        self.assertEqual(set(names[:2]), {"BAT1", "BAT2"})
+        by = {x["裁定号"]: x for x in got["先例"]}
+        self.assertEqual(by["BAT1"]["命中候选"], ["8507.60.00"])
+        self.assertEqual(by["BAT2"]["命中候选"], [])
+
+    def test_incremental_embeds_only_new(self):
+        import cross_embed
+        self._build_with_embeddings()
+        self.serve({"2023-03-01": [
+            raw("NEW1", "8507.60.0020", subject="another battery")]})
+        self.sync()
+        r2 = cross_embed.sync_embeddings(db_path=self.db, log=lambda *a: None)
+        self.assertEqual(r2["新嵌入"], 1, "只嵌新增，不重嵌已有")
+        self.assertEqual(r2["索引总数"], 5)
+
+    def test_model_change_requires_rebuild(self):
+        """混两种模型的向量空间是纯粹的错误：距离不可比，结果看着正常实际是乱的"""
+        import cross_embed
+        self._build_with_embeddings()
+        old = cross_embed.EMBED_MODEL
+        cross_embed.EMBED_MODEL = "another-model:1b"
+        try:
+            with self.assertRaises(SystemExit):
+                cross_embed.sync_embeddings(db_path=self.db, log=lambda *a: None)
+            r = cross_embed.sync_embeddings(db_path=self.db, rebuild=True,
+                                            log=lambda *a: None)
+            self.assertEqual(r["新嵌入"], 4, "--rebuild 后全量重嵌")
+        finally:
+            cross_embed.EMBED_MODEL = old
+
+    def test_semantic_without_index_degrades(self):
+        self.serve({"2023-03-01": [raw("A", "8507.60.0020")]})
+        self.sync()
+        got = cross.semantic_precedents("锂电池", db_path=self.db,
+                                        _embed=fake_embedder())
+        self.assertIn("error", got)
+        self.assertIn("cross_embed", got["error"])
+
+    def test_semantic_embedder_failure_degrades(self):
+        """ollama 离线：语义检索是锦上添花，必须降级不炸"""
+        self._build_with_embeddings()
+        def _boom(texts):
+            raise RuntimeError("ollama down")
+        got = cross.semantic_precedents("锂电池", db_path=self.db, _embed=_boom)
+        self.assertIn("error", got)
+
+    def test_truncate_norm(self):
+        import cross_embed
+        v = cross_embed._truncate_norm([3.0, 4.0] + [9.9] * 100, dims=2)
+        self.assertEqual(len(v), 2)
+        self.assertAlmostEqual(sum(x * x for x in v), 1.0, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()

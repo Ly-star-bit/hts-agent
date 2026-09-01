@@ -559,6 +559,29 @@ def api_cross_local(req: CrossLocalRequest):
     return cross.code_precedents(req.codes, limit=req.limit, alive_codes=alive)
 
 
+class CrossSemanticRequest(BaseModel):
+    query: str = Field(default="", description="商品描述（中英文皆可，语义匹配）")
+    codes: list = Field(default_factory=list, description="候选编码，仅用于标命中，不过滤")
+    limit: int = Field(default=10, ge=1, le=30)
+
+
+@app.post("/api/cross/semantic")
+def api_cross_semantic(req: CrossSemanticRequest):
+    """
+    语义找先例：中文描述直接检索英文裁定（本地向量索引 + ollama 查询嵌入）。
+    索引未构建 / ollama 离线一律 {error} 降级，与其余 cross 接口同约定。
+    """
+    if not (req.query or "").strip():
+        raise HTTPException(status_code=400, detail="请输入商品描述")
+    try:
+        import cross
+    except Exception as e:
+        return {"error": f"CROSS 模块加载失败：{e}"}
+    alive = set(get_db()["rates_8"].keys())
+    return cross.semantic_precedents(req.query.strip(), req.codes,
+                                     limit=req.limit, alive_codes=alive)
+
+
 @app.post("/api/estimate")
 def api_estimate(req: EstimateRequest):
     """成本估算：按编码批量计算总税负（基础 + 301 + 附加税）"""
