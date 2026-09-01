@@ -285,11 +285,18 @@ def test_connection(provider=None):
 
 # ---------- 本地召回 ----------
 
-def _recall_candidates(db, keywords, limit=40):
-    """根据英文关键词在本地税率库召回候选 8 位子目"""
+def _recall_candidates(db, keywords, limit=40, unit_value=None, origin="CN"):
+    """
+    根据英文关键词在本地税率库召回候选 8 位子目。
+
+    排序固定 relevance：这批行是要送进精排的候选池，按相关度取前 limit 条最合理。
+    unit_value / origin 只影响 rate.search 补的总税负列（每种排序都会补），
+    不影响召回顺序——但这些行会与本地行同表展示，口径必须跟着调用方走。
+    """
     import rate
 
-    rows = rate.search(db, " ".join(keywords), limit=limit, sort="relevance")
+    rows = rate.search(db, " ".join(keywords), limit=limit, sort="relevance",
+                       unit_value=unit_value, origin=origin)
     return rows
 
 
@@ -504,7 +511,8 @@ def classify_product(db, description, top_n=3, origin="CN"):
 
 # ---------- 搜索页的 AI 增强（与「税率搜索」合并的入口） ----------
 
-def assist_search(db, keyword, top_n=3, origin="CN", limit=40, sort="relevance"):
+def assist_search(db, keyword, top_n=3, origin="CN", limit=40, sort="relevance",
+                  unit_value=None):
     """
     在「税率搜索」已出本地结果的基础上，用 AI 补召回 + 精排。
 
@@ -528,10 +536,15 @@ def assist_search(db, keyword, top_n=3, origin="CN", limit=40, sort="relevance")
     if not keywords:
         return {"error": "AI 未能从该描述中提取检索词"}
 
-    local_rows = rate.search(db, keyword, limit=limit, sort=sort)
+    # origin / unit_value 决定总税负列怎么算。新增候选要和本地行同表并列、
+    # 还要一起排序，两边必须用同一口径，否则表里会出现越南原产的行按中国
+    # 口径加了 301 的情况——数字并排放着，看不出是两套算法。
+    local_rows = rate.search(db, keyword, limit=limit, sort=sort,
+                             unit_value=unit_value, origin=origin)
     local_codes = {re.sub(r"\D", "", str(r["编码"])) for r in local_rows}
 
-    ai_rows = _recall_candidates(db, keywords, limit=limit)
+    ai_rows = _recall_candidates(db, keywords, limit=limit,
+                                 unit_value=unit_value, origin=origin)
     new_rows = [r for r in ai_rows
                 if re.sub(r"\D", "", str(r["编码"])) not in local_codes]
 

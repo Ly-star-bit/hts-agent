@@ -185,6 +185,62 @@ class TestAssistSearchMerge(unittest.TestCase):
         self.assertLessEqual(r["精排"][0]["confidence"], 1.0)
 
 
+class TestAssistSearchCalcParams(unittest.TestCase):
+    """
+    新增候选与本地行渲染在同一张表、还要一起排序，两批行的总税负必须同口径。
+
+    回归：assist_search 收下了 origin 却从没往 rate.search 传，unit_value
+    连形参都没有（靠 app.py 事后补算，且漏掉了 origin 与「总税负数值」）。
+    症状是选「越南」时 AI 补进来的行照中国口径加了 301——两个数字并排摆着，
+    看不出它们不是同一套算法算出来的，比报错更难发现。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def setUp(self):
+        self._orig = ai.get_provider
+        # 「watch」召回的一批里既有原产地敏感、也有从量税（需单位货值折算）的编码，
+        # 与查询词「锂电池」的本地结果完全不重叠，因此整批都会成为新增候选
+        ai.get_provider = lambda: FakeProvider(keywords=["watch"])
+
+    def tearDown(self):
+        ai.get_provider = self._orig
+
+    def _new_rows(self, **kw):
+        r = ai.assist_search(self.db, "锂电池", **kw)
+        self.assertNotIn("error", r)
+        self.assertTrue(r["新增候选"], "前置条件：watch 应带来本地搜不到的候选")
+        return r["新增候选"]
+
+    def test_origin_reaches_new_rows(self):
+        rows = self._new_rows(origin="VN")
+        differs = 0
+        for row in rows:
+            cn = rate.calc_total(self.db, row["编码"], origin="CN")["总税负估算"]
+            vn = rate.calc_total(self.db, row["编码"], origin="VN")["总税负估算"]
+            self.assertEqual(row["总税负估算"], vn,
+                             f"{row['编码']} 未按越南口径计算（越南不适用中国 301）")
+            differs += cn != vn
+        self.assertTrue(differs, "前置条件：这批候选里应有中越口径不同的编码，否则测不出问题")
+
+    def test_unit_value_reaches_new_rows(self):
+        rows = self._new_rows(unit_value=10.0)
+        differs = 0
+        for row in rows:
+            with_uv = rate.calc_total(self.db, row["编码"], unit_value=10.0)["总税负估算"]
+            self.assertEqual(row["总税负估算"], with_uv,
+                             f"{row['编码']} 的从量税未按单位货值折算")
+            differs += with_uv != rate.calc_total(self.db, row["编码"])["总税负估算"]
+        self.assertTrue(differs, "前置条件：这批候选里应有从量税编码，否则测不出问题")
+
+    def test_new_rows_carry_total_num(self):
+        """前端并表后要在客户端按总税负重排，缺这一列的行会被当成"折算不出"排到最后"""
+        for row in self._new_rows():
+            self.assertIn("总税负数值", row)
+
+
 class ListProvider:
     """analyze_list 用：两轮 chat_json（出词 / 精排）+ 一次 chat（汇总报告）"""
 

@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 import core
 import criteria
+import rate
 
 
 class TestExtract(unittest.TestCase):
@@ -105,6 +106,34 @@ class TestCompare(unittest.TestCase):
         b = criteria.compare(self.db, ["62014035", "62014040"])
         self.assertEqual([i["编码"] for i in a["候选"]],
                          [i["编码"] for i in b["候选"]])
+
+    def test_origin_applies_to_totals(self):
+        """
+        回归：总税负原先在 app.py 里事后补算且写死中国口径，
+        对比页没有原产地概念——选了越南的货，卡片上照样加 25% 的 301，
+        而这几个数字正是"选哪个码"的直接依据。
+        """
+        codes = ["3926.20.60", "6201.40.35"]
+        cn = criteria.compare(self.db, codes, origin="CN")
+        vn = criteria.compare(self.db, codes, origin="VN")
+        for c, v in zip(cn["候选"], vn["候选"]):
+            self.assertEqual(v["总税负估算"],
+                             rate.calc_total(self.db, v["编码"], origin="VN")["总税负估算"])
+            self.assertNotEqual(c["总税负估算"], v["总税负估算"],
+                                f"{v['编码']}：中越口径应当不同，否则这个用例测不出问题")
+            self.assertEqual(v["原产地"], "越南")
+
+    def test_unit_value_applies_to_totals(self):
+        """从量税候选：不给单位货值折算不出百分比，给了就该折算出来"""
+        code = "9101.11.40"   # 51¢ each + 6.25% ... 复合税，不给货值折算不出
+        without = criteria.compare(self.db, [code, "6201.40.35"])
+        with_uv = criteria.compare(self.db, [code, "6201.40.35"], unit_value=10.0)
+        self.assertIn("需人工", without["候选"][0]["总税负估算"])
+        self.assertEqual(with_uv["候选"][0]["总税负估算"],
+                         rate.calc_total(self.db, code, unit_value=10.0)["总税负估算"])
+        self.assertNotEqual(without["候选"][0]["总税负估算"],
+                            with_uv["候选"][0]["总税负估算"],
+                            "前置条件：该编码应对单位货值敏感，否则用例无效")
 
 
 class TestQueryIntegration(unittest.TestCase):

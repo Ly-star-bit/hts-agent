@@ -274,6 +274,29 @@ class TestTaxReversal(unittest.TestCase):
         d = criteria.detect_dispute(self.db, [row("8507.60.00", 3.4), row("8506.50.00", 2.7)])
         self.assertAlmostEqual(d["基础税差"], 0.7, places=2)
 
+    def test_origin_applies_to_totals(self):
+        """
+        回归：分歧面板的总税负原先写死中国口径，而它和下方结果表是并排看的。
+        选越南时，表里的行不含 301、面板里的却含——同一个编码两个数字。
+        """
+        rows = [row("8507.60.00", 3.4), row("8506.50.00", 2.7)]
+        cn = criteria.detect_dispute(self.db, rows, origin="CN")
+        vn = criteria.detect_dispute(self.db, rows, origin="VN")
+        for c, v in zip(cn["分组"], vn["分组"]):
+            self.assertEqual(v["总税负估算"],
+                             rate.calc_total(self.db, v["编码"], origin="VN")["总税负估算"])
+            self.assertNotEqual(c["总税负数值"], v["总税负数值"],
+                                f"{v['编码']}：中越口径应当不同，否则用例测不出问题")
+
+    def test_unit_value_makes_specific_duty_comparable(self):
+        """给了单位货值，原先"无法比较"的复合税候选就该参与税差比较"""
+        rows = rate.search(self.db, "wool coat", limit=60, sort="relevance")
+        without = criteria.detect_dispute(self.db, rows)
+        with_uv = criteria.detect_dispute(self.db, rows, unit_value=50.0)
+        self.assertTrue(without["无法比较"], "前置条件：该查询应含折算不出的候选")
+        self.assertLess(len(with_uv["无法比较"]), len(without["无法比较"]),
+                        "填了单位货值后，复合税候选应能折算成百分比")
+
 
 class TestUncomparable(unittest.TestCase):
     """从量税/复合税折算不出百分比时必须说出来"""

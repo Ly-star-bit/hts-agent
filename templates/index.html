@@ -1812,7 +1812,7 @@ function searchRow(r) {
 }
 
 /* ---------- AI 补充分析（搜索页内，不跳 tab） ----------
-   两段式：本地结果已经渲染出来了，这里只做增量——补召回的行追加进同一张表，
+   两段式：本地结果已经渲染出来了，这里只做增量——补召回的行并进同一张表，
    精排结论单独成块。AI 失败时本地结果原样保留，不清空、不打断。 */
 async function doSearchAssist() {
   const kw = document.getElementById('searchKeyword').value.trim();
@@ -1823,22 +1823,38 @@ async function doSearchAssist() {
   btn.disabled = true;
   box.innerHTML = `<div class="info-bar">AI 分析中……正在改写检索词并在候选中论证</div>`;
   try {
-    const body = { keyword: kw, sort: 'relevance', limit: 40 };
+    // 排序与原产地必须跟着页面上的选择走。此前 sort 写死 relevance、origin
+    // 根本没传：选了「总税负最低优先」再点这个按钮，补进来的行是按相关度排的；
+    // 选了越南，补进来的行仍按中国口径算 301。
+    const body = {
+      keyword: kw,
+      sort: document.getElementById('searchSort').value,
+      origin: document.getElementById('searchOrigin').value,
+      limit: 40
+    };
     const uv = parseFloat(document.getElementById('searchUnitValue').value);
     if (uv) body.unit_value = uv;
     // 后端把"AI 未配置/调用失败"作为 {error} 返回而非 5xx，apiPost 会把它转成异常，
     // 统一落到下面的 catch —— 那里只显示提示、不动已渲染的本地结果
     const d = await apiPost('/api/search/ai', body);
-    const added = d['新增候选'] || [];
-    const tbody = document.getElementById('searchBody');
-    added.forEach(r => {
-      currentSearchRows.push(r);
-      tbody.appendChild(searchRow(r));
+    // 服务端只跟"本次本地检索结果"去重，不知道表里已有上一轮补进来的 AI 行，
+    // 所以连点两次会把同一批行再返回一遍。去重只能放在这里。
+    const seen = new Set(currentSearchRows.map(r => normCode(r['编码'])));
+    const added = [];
+    (d['新增候选'] || []).forEach(r => {
+      const c = normCode(r['编码']);
+      if (seen.has(c)) return;
+      seen.add(c);
+      added.push(r);
     });
+    if (added.length) mergeSearchRows(added);
     box.innerHTML = renderAssist(d, added.length);
     syncCmpButton();
+    // 按「来源」实算，不用 length 相减：连点两次时 added 为 0，相减会把上一轮
+    // 补进来的 AI 行算成本地行
+    const aiCount = currentSearchRows.filter(r => r['来源'] === 'AI').length;
     document.getElementById('searchResultCount').textContent =
-      `本地 ${currentSearchRows.length - added.length} 条 + AI 补充 ${added.length} 条`;
+      `本地 ${currentSearchRows.length - aiCount} 条 + AI 补充 ${aiCount} 条`;
   } catch (e) {
     box.innerHTML = `<div class="error-bar show">AI 补充分析失败：${esc(e.message)}
       。下方为本地税则库检索结果，不受影响。</div>`;
@@ -1846,6 +1862,50 @@ async function doSearchAssist() {
     btn.classList.remove('loading');
     btn.disabled = false;
   }
+}
+
+function normCode(c) {
+  return String(c == null ? '' : c).replace(/\D/g, '');
+}
+
+/* 把 AI 补召回的行并进表里并按当前排序重排整表。
+   此前是 tbody.appendChild 直接追加、不重排：选了「总税负最低优先」时，
+   本地行按总税负排好，AI 行按相关度堆在末尾——全表最低的那条可能躺在倒数第三行，
+   而这页给出的承诺就是"按成本挑编码"。排序失效比排错更难发现。 */
+function mergeSearchRows(added) {
+  // 勾选状态只存在 DOM 里，重排要重建 <tr>，先存后恢复
+  const picked = new Set(cmpPicked());
+  currentSearchRows = sortSearchRows(currentSearchRows.concat(added));
+  const tbody = document.getElementById('searchBody');
+  tbody.innerHTML = '';
+  currentSearchRows.forEach(r => tbody.appendChild(searchRow(r)));
+  if (picked.size) {
+    tbody.querySelectorAll('.cmp-pick').forEach(b => { b.checked = picked.has(b.value); });
+  }
+}
+
+/* 客户端重排，键与 rate.search 的服务端排序一一对应（含"折算不出的排最后"
+   和以编码打破平局），否则并表后同一个下拉选项会给出两种顺序。 */
+function sortSearchRows(rows) {
+  const mode = document.getElementById('searchSort').value;
+  // 相关度是「用户原词」与「AI 改写词」两次不同检索各自的得分，不同源、不可比，
+  // 硬排会造出一个看着有序其实无意义的名次。该模式下保持本地在前、AI 在后。
+  if (mode === 'relevance') return rows;
+  const key = mode === 'total_asc' ? '总税负数值'
+            : (mode === 'tax_asc' || mode === 'tax_desc') ? '等效从价数值'
+            : null;   // code_asc 直接落到下面的编码比较
+  const desc = mode === 'tax_desc';
+  const copy = rows.slice();
+  copy.sort((a, b) => {
+    if (key) {
+      const av = typeof a[key] === 'number' ? a[key] : null;
+      const bv = typeof b[key] === 'number' ? b[key] : null;
+      if ((av === null) !== (bv === null)) return av === null ? 1 : -1;
+      if (av !== null && av !== bv) return desc ? bv - av : av - bv;
+    }
+    return String(a['编码']).localeCompare(String(b['编码']));
+  });
+  return copy;
 }
 
 function renderAssist(d, addedCount) {
@@ -1933,7 +1993,12 @@ function toggleAllCmp(src) {
 async function doCompareCodes(codes) {
   if (!codes || codes.length < 2) return;
   try {
-    renderCompare(await apiPost('/api/compare', { codes }));
+    // 原产地与单位货值跟着搜索页当前选择走：对比卡片上的总税负是"选哪个码"的
+    // 直接依据，若它按中国口径算而用户查的是越南货，那几个数字就是错的
+    const body = { codes, origin: document.getElementById('searchOrigin').value };
+    const uv = parseFloat(document.getElementById('searchUnitValue').value);
+    if (uv) body.unit_value = uv;
+    renderCompare(await apiPost('/api/compare', body));
   } catch (e) {
     alert('对比失败：' + e.message);
   }
@@ -1981,6 +2046,12 @@ function renderCompare(data) {
   const spread = vals.length >= 2 ? (Math.max(...vals) - Math.min(...vals)).toFixed(1) : null;
 
   let html = '';
+  // 总税负按哪个原产地算必须写在脸上：同一组候选换个原产地，谁便宜可能就反过来了
+  const org = (items[0] || {})['原产地'];
+  if (org) {
+    html += `<div class="hint" style="margin:0 0 8px;">总税负按原产地
+      <b>${esc(org)}</b> 计算（跟随搜索页的原产地选择）</div>`;
+  }
   if (data['跨章']) {
     html += `<div class="error-bar show" style="margin-top:0;">⚠ ${esc(data['分歧提示'])}</div>`;
   }

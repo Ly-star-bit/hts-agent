@@ -396,7 +396,8 @@ def api_search(req: SearchRequest):
         # 一物多号自动识别：分歧应该由结果自己报出来，而不是等用户先意识到
         # "我这可能有多个码"再去手动勾选对比
         import criteria
-        dispute = criteria.detect_dispute(db, rows)
+        dispute = criteria.detect_dispute(db, rows, unit_value=req.unit_value,
+                                          origin=req.origin)
         return {"results": rows, "count": len(rows), "keyword": req.keyword,
                 "检索词": _expanded if applied else "",
                 "同义词映射": applied, "未识别": leftover,
@@ -412,6 +413,9 @@ def api_search(req: SearchRequest):
 
 class CompareRequest(BaseModel):
     codes: list = Field(default_factory=list, description="待比较的候选 HTS 编码（2 个以上）")
+    # 对比卡片里的总税负要与搜索页当前选择同口径，否则选了越南却按中国算 301
+    unit_value: Optional[float] = Field(default=None, description="单位货值 USD，用于折算从量税")
+    origin: str = Field(default="CN", description="原产地")
 
 
 class SearchAssistRequest(BaseModel):
@@ -436,23 +440,23 @@ def api_search_assist(req: SearchAssistRequest):
     import traceback
     try:
         import ai
-        import rate
+        import rate  # noqa: F401 —— 预检：assist_search 内部依赖它，在这里导入
+                     # 才能把模块级故障报成"AI 模块加载失败"而非"AI 分析异常"
     except Exception as e:
         return {"error": f"AI 模块加载失败：{e}"}
 
     db = get_db()
     try:
+        # origin / unit_value 必须一路传到 assist_search 里的 rate.search：
+        # 新增候选与本地行同表并列展示、还要一起排序，两边的总税负口径必须一致。
+        # 此前 origin 只是形参、单位货值靠这里事后补算（且漏掉了 origin 与
+        # 总税负数值），越南原产的 AI 行会照中国口径算出 +25% 的 301。
         result = ai.assist_search(db, req.keyword.strip(), origin=req.origin,
-                                  limit=req.limit, sort=req.sort)
+                                  limit=req.limit, sort=req.sort,
+                                  unit_value=req.unit_value)
     except Exception as e:
         traceback.print_exc()
         return {"error": f"AI 分析异常：{e}"}
-    # 新增候选要和本地结果同列，否则前端表格列数对不上
-    if req.unit_value and result.get("新增候选"):
-        for r in result["新增候选"]:
-            total = rate.calc_total(db, re.sub(r"\D", "", r["编码"]), unit_value=req.unit_value)
-            r["总税负估算"] = total["总税负估算"]
-            r["301加征数值"] = total["301加征数值"]
     return result
 
 
@@ -465,16 +469,13 @@ def api_compare(req: CompareRequest):
     if len(req.codes or []) < 2:
         raise HTTPException(status_code=400, detail="请至少提供 2 个候选编码")
     import criteria
-    import rate
 
     db = get_db()
-    result = criteria.compare(db, req.codes)
-    # 补上各候选的等效从价与总税负，让税率差额直接可见
+    # 等效从价 / 总税负 / 301判定 由 criteria.compare 一并算出（同口径），
+    # 这里只补证据清单
+    result = criteria.compare(db, req.codes, unit_value=req.unit_value,
+                              origin=req.origin)
     for it in result["候选"]:
-        t = rate.calc_total(db, it["编码"])
-        it["等效从价"] = t["基础等效从价"]
-        it["总税负估算"] = t["总税负估算"]
-        it["301判定"] = t["301判定"]
         it["证据清单"] = criteria.evidence_list(it["判定条件"])
     result["提示"] = ("各候选判定条件不同，需按 GRI 与商品实际特征论证；"
                      "正式归类以 CBP 裁定为准。")

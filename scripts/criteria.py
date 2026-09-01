@@ -148,13 +148,17 @@ def evidence_list(criteria):
     return out
 
 
-def compare(db, codes):
+def compare(db, codes, unit_value=None, origin="CN"):
     """
     并列比较多个候选编码的判定条件，用于归类分歧场景。
 
     返回 {候选: [...], 跨章: bool, 章列表: [...], 分歧提示: str}。
     跨章说明候选落在完全不同的商品大类上（如塑料雨衣 39 章 vs 梭织夹克 62 章），
     这是典型的归类争议信号——两者税率常相差十几个百分点，且论证方向完全不同。
+
+    税负口径（unit_value / origin）在这里算，不留给调用方事后补：这几个数字
+    是"选哪个码"的直接依据，一旦它们和用户在搜索页选的原产地不是一回事，
+    对比卡片就会拿中国口径的 301 去论证一批越南货。
     """
     import rate
 
@@ -162,12 +166,17 @@ def compare(db, codes):
     for c in codes:
         c8 = re.sub(r"\D", "", str(c))[:8]
         info = (db.get("rates_8") or {}).get(c8) or {}
+        t = rate.calc_total(db, c8, unit_value=unit_value, origin=origin) or {}
         items.append({
             "编码": c8,
             "章": c8[:2],
             "完整品名": rate.full_desc(db, c8),
             "一般税率": info.get("general", ""),
             "判定条件": extract(db, c8),
+            "等效从价": t.get("基础等效从价", ""),
+            "总税负估算": t.get("总税负估算", ""),
+            "301判定": t.get("301判定", ""),
+            "原产地": t.get("原产地", ""),
         })
     chapters = sorted({i["章"] for i in items if i["章"]})
     cross = len(chapters) > 1
@@ -292,7 +301,7 @@ def _pct_num(text):
     return float(m.group()) if m else None
 
 
-def detect_dispute(db, rows, top_k=DISPUTE_TOP_K):
+def detect_dispute(db, rows, top_k=DISPUTE_TOP_K, unit_value=None, origin="CN"):
     """
     从搜索结果里自动识别"一物多号"，不需要用户先勾选。
 
@@ -300,6 +309,10 @@ def detect_dispute(db, rows, top_k=DISPUTE_TOP_K):
     参数细分（羊毛含量 36% 上下、尺寸档次），要的是继续问参数；**跨品目**
     才是真正的归类分歧（塑料雨衣 3926 vs 梭织夹克 6201），两边的论证方向
     和所需证据完全不同。
+
+    unit_value / origin 必须与产出 rows 的那次 rate.search 一致：分歧面板里的
+    总税负与下方结果表是并排看的，口径一旦不同，"税负反转"会拿中国口径的
+    总税负去比越南口径的基础税率，得出一个凭空的结论。
 
     返回 {有分歧, 跨章, 章列表, 分组, 基础税差, 税负反转, 无法比较, 提示}。
     无分歧时 有分歧=False，前端不显示——避免每次搜索都弹一条警告。
@@ -333,7 +346,7 @@ def detect_dispute(db, rows, top_k=DISPUTE_TOP_K):
         g = groups[h4]
         r = g["代表"]
         code8 = re.sub(r"\D", "", str(r.get("编码", "")))[:8]
-        total = rate.calc_total(db, code8) or {}
+        total = rate.calc_total(db, code8, unit_value=unit_value, origin=origin) or {}
         base_n = r.get("等效从价数值")
         total_n = _pct_num(total.get("总税负估算"))
         if total_n is None:
