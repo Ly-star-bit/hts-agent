@@ -989,7 +989,27 @@ def deepread_precedents(query, rulings, provider=None, fetch=None, max_docs=6,
     }
 
 
+# 标点归一：模型（尤其中文底座）爱把 ASCII 直引号/连字符"规范化"成 Unicode
+# 弯引号、长短破折号。若不抹平，一句逐字正确的摘录会因为一个弯引号被判"引用存疑"
+# 标红——校验功能反噬，砸的正是自己的招牌。归一到 ASCII 后再比对。
+_QUOTE_MAP = {
+    "“": '"', "”": '"', "„": '"', "″": '"',   # 弯/低双引号
+    "‘": "'", "’": "'", "‚": "'", "′": "'",   # 弯单引号/撇号
+    "–": "-", "—": "-", "―": "-", "−": "-",   # en/em dash、减号
+    " ": " ",                                                # 不间断空格
+}
+_PUNCT_RE = None
+
+
 def _norm_ws(s):
-    """whitespace 归一：换行/多空格压成单空格、去首尾，供原文子串校验"""
+    """
+    校验用归一：换行/多空格压成单空格、去首尾、转小写，并把 Unicode 弯引号/
+    破折号抹平成 ASCII。目的是让"逐字但标点被模型改写"的摘录仍能匹配原文，
+    同时不放松到"语义相近"——只归一确定等价的标点，不动任何实词。
+    """
+    global _PUNCT_RE
     import re as _re
-    return _re.sub(r"\s+", " ", str(s or "")).strip().lower()
+    if _PUNCT_RE is None:
+        _PUNCT_RE = _re.compile("|".join(map(_re.escape, _QUOTE_MAP)))
+    text = _PUNCT_RE.sub(lambda m: _QUOTE_MAP[m.group()], str(s or ""))
+    return _re.sub(r"\s+", " ", text).strip().lower()

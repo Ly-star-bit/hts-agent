@@ -2317,13 +2317,17 @@ let lastCrossQuery = '';
 
 async function doCrossDeepread() {
   if (!lastCrossRulings.length) return;
+  // 点击时对召回结果拍快照：深读要跑十几秒，其间用户若再搜一次会覆盖全局
+  // lastCrossRulings/Query，导致深读读的是新候选、展示却对着旧列表。用局部
+  // 快照锁死"这次深读读的就是当时看到的那批"
+  const rulings = lastCrossRulings.slice();
+  const query = lastCrossQuery;
   const btn = document.getElementById('btnDeepread');
   const box = document.getElementById('deepreadResult');
   btn.disabled = true;
   box.innerHTML = '<div class="info-bar">AI 深读中……拉正文 + 精读（本地大模型，可能需十几秒）</div>';
   try {
-    const d = await apiPost('/api/cross/deepread',
-      { query: lastCrossQuery, rulings: lastCrossRulings });
+    const d = await apiPost('/api/cross/deepread', { query, rulings });
     box.innerHTML = renderDeepread(d);
   } catch (e) {
     box.innerHTML = `<div class="error-bar show">深读失败：${esc(e.message)}。候选列表不受影响，可点裁定号看原文。</div>`;
@@ -2347,11 +2351,14 @@ function renderDeepread(d) {
       <span class="tag ${rt[1]}">${rt[0]}</span>
       <span style="color:var(--muted);">${esc(p['说明'])}</span>`;
     if (p['原文摘录']) {
-      // 摘录是 CBP 原话，等宽字体 + 引用样式；未核对的显著标红警示
-      h += `<blockquote style="margin:6px 0 0;padding:6px 10px;border-left:3px solid ${p['摘录已核对'] ? 'var(--miss)' : 'var(--hit)'};background:var(--surface-2);font-family:var(--font-mono);font-size:12px;">
+      // 摘录是 CBP 原话，等宽字体 + 引用样式；未核对的显著标红警示。
+      // !! 强制布尔：后端本应回 JSON true/false，但若中间层把它序列化成字符串
+      // "false"（truthy），会误显示为已核对——引用可信度不能赌数据类型
+      const ok = !!p['摘录已核对'];
+      h += `<blockquote style="margin:6px 0 0;padding:6px 10px;border-left:3px solid ${ok ? 'var(--miss)' : 'var(--hit)'};background:var(--surface-2);font-family:var(--font-mono);font-size:12px;">
         ${esc(p['原文摘录'])}
         <div style="margin-top:4px;font-family:var(--font-ui);">${
-          p['摘录已核对']
+          ok
             ? '<span style="color:var(--miss);">✓ 已核对：逐字出自该裁定正文</span>'
             : '<span style="color:var(--hit);font-weight:600;">⚠ 引用存疑：未在正文中逐字命中，请点裁定号核对原文</span>'
         }</div></blockquote>`;

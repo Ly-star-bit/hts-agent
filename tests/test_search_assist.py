@@ -467,6 +467,36 @@ class TestDeepread(unittest.TestCase):
             fetch=self._fetch({"N286124": _FAKE_DOC.replace(". ", ".\n  ")}))
         self.assertTrue(r["精读"][0]["摘录已核对"])
 
+    def test_curly_quotes_and_dashes_still_verify(self):
+        """
+        回归（审查发现）：模型（尤其中文底座 qwen）爱把 ASCII 直引号/连字符
+        改写成 Unicode 弯引号/破折号。若不抹平，一句逐字正确的摘录会因一个弯引号
+        被判"引用存疑"标红——校验功能反噬自己。归一标点后应仍通过。
+        """
+        doc = ('This ruling covers the "battery pack". The applicable subheading '
+               'for the non-rechargeable lithium cells will be 8506.50.0000, HTSUS. '
+               'Padding padding padding to clear the length threshold. ' * 3)
+        prov = DeepreadProvider(picks=[{
+            "index": 0, "relevance": "high",
+            # 弯引号 + en-dash，内容与正文逐字一致
+            "quote": 'This ruling covers the “battery pack”. The applicable subheading '
+                     'for the non–rechargeable lithium cells will be 8506.50.0000, HTSUS.'}])
+        r = ai.deepread_precedents(
+            "锂电池", self._rulings("N286124"),
+            provider=prov, fetch=self._fetch({"N286124": doc}))
+        self.assertTrue(r["精读"][0]["摘录已核对"],
+                        "弯引号/破折号变体的逐字摘录应通过校验")
+
+    def test_punct_norm_does_not_relax_to_semantic(self):
+        """标点归一不能放松成语义匹配——编造的句子仍须判存疑"""
+        prov = DeepreadProvider(picks=[{
+            "index": 0, "relevance": "high",
+            "quote": "classified under 9999.99.9999 per this ruling"}])
+        r = ai.deepread_precedents(
+            "锂电池", self._rulings("N286124"),
+            provider=prov, fetch=self._fetch({"N286124": _FAKE_DOC}))
+        self.assertFalse(r["精读"][0]["摘录已核对"])
+
     def test_unreadable_ruling_goes_to_unread_not_faked(self):
         """正文拉不到的裁定归入'未读'并保留链接，绝不假装读过"""
         prov = DeepreadProvider(picks=[])
