@@ -287,6 +287,15 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading .spinner { display: inline-block; }
+  /* 按钮 loading 态：伪元素画转圈 + 文字保留，任何按钮加 .loading 即生效（setLoading）。
+     此前依赖按钮内的 <span class="spinner">，但没有一个按钮带这个 span，加了 class 也看不见。 */
+  button.loading { position: relative; pointer-events: none; cursor: progress; }
+  button.loading:disabled { opacity: .85; cursor: progress; }
+  button.loading::after {
+    content: ''; display: inline-block; width: 13px; height: 13px; margin-left: 8px;
+    vertical-align: -2px; border: 2px solid currentColor; border-top-color: transparent;
+    border-radius: 50%; animation: spin .7s linear infinite;
+  }
 
   /* 行内表单 */
   .inline-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -714,7 +723,7 @@
           <input type="checkbox" id="mcFlip301" style="width:16px;height:16px;"> FLIP 301 强迫劳动关税（2026-07-24 生效）
         </label>
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">关闭后查询 / 估算 / 税率搜索不含该项加征、总税负不叠加；301 命中判定与 9903 子目等基本信息仍显示。</div>
-        <button class="btn-primary" onclick="saveMeasuresConfig()">保存</button>
+        <button class="btn-primary" id="btnMcSave" onclick="saveMeasuresConfig()">保存</button>
         <span id="mcMsg" style="font-size:12px;color:var(--muted);margin-left:10px;"></span>
       </div>
       <div class="inline-form" style="margin-bottom:12px;">
@@ -931,8 +940,8 @@
         </div>
         <div class="inline-form" style="margin-top:10px;">
           <input type="password" id="cfgApiKey" class="grow" placeholder="api_key（留空保持不变）">
-          <button class="btn-primary" onclick="saveAiConfig()">保存</button>
-          <button class="btn-ghost" onclick="testAiConfig()">测试连接</button>
+          <button class="btn-primary" id="btnCfgSave" onclick="saveAiConfig()">保存</button>
+          <button class="btn-ghost" id="btnCfgTest" onclick="testAiConfig()">测试连接</button>
         </div>
         <div id="cfgMsg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
       </div>
@@ -1116,6 +1125,8 @@ async function saveMeasuresConfig() {
   const msg = document.getElementById('mcMsg');
   msg.textContent = '保存中...';
   msg.style.color = 'var(--muted)';
+  const btn = document.getElementById('btnMcSave');
+  setLoading(btn, true);
   try {
     const r = await fetch('/api/measures/config', {
       method: 'POST',
@@ -1132,6 +1143,8 @@ async function saveMeasuresConfig() {
   } catch (e) {
     msg.textContent = '保存失败：' + e.message;
     msg.style.color = 'var(--hit)';
+  } finally {
+    setLoading(btn, false);
   }
 }
 
@@ -1166,6 +1179,8 @@ async function saveAiConfig() {
     model: document.getElementById('cfgModel').value.trim(),
     api_key: document.getElementById('cfgApiKey').value.trim() || '__KEEP__',
   };
+  const btn = document.getElementById('btnCfgSave');
+  setLoading(btn, true);
   try {
     const r = await fetch('/api/ai/config', {
       method: 'POST',
@@ -1185,6 +1200,8 @@ async function saveAiConfig() {
   } catch (e) {
     msg.textContent = '保存失败：' + e.message;
     msg.style.color = 'var(--hit)';
+  } finally {
+    setLoading(btn, false);
   }
 }
 
@@ -1192,6 +1209,8 @@ async function testAiConfig() {
   const msg = document.getElementById('cfgMsg');
   msg.textContent = '测试连接中（发最小请求验证）...';
   msg.style.color = 'var(--muted)';
+  const btn = document.getElementById('btnCfgTest');
+  setLoading(btn, true);
   try {
     const r = await fetch('/api/ai/test', { method: 'POST' });
     const d = await r.json();
@@ -1205,6 +1224,8 @@ async function testAiConfig() {
   } catch (e) {
     msg.textContent = '测试失败：' + e.message;
     msg.style.color = 'var(--hit)';
+  } finally {
+    setLoading(btn, false);
   }
 }
 
@@ -1243,8 +1264,7 @@ async function doQuery() {
     err.classList.add('show');
     return;
   }
-  btn.classList.add('loading');
-  btn.disabled = true;
+  setLoading(btn, true);
 
   try {
     const origin = document.getElementById('queryOrigin').value || 'CN';
@@ -1271,8 +1291,7 @@ async function doQuery() {
     err.textContent = '查询失败：' + e.message;
     err.classList.add('show');
   } finally {
-    btn.classList.remove('loading');
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -1550,7 +1569,7 @@ async function doExport(fmt) {
   const rows = visibleResults();
   if (!rows.length) return;
   const btn = fmt === 'xlsx' ? document.getElementById('btnExport') : document.getElementById('btnExportCsv');
-  btn.disabled = true;
+  setLoading(btn, true);
   // 导出前把「来源」结构化字段转为可读文本摘要，避免 Excel/CSV 出现 Python repr
   const exportRows = rows.map(r => {
     const o = { ...r };
@@ -1582,7 +1601,7 @@ async function doExport(fmt) {
   } catch (e) {
     alert('导出失败：' + e.message);
   } finally {
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -1664,12 +1683,49 @@ function detailMsg(data) {
   if (d) return JSON.stringify(d);
   return '';
 }
+/* 按钮 loading 态统一入口：转圈 + 禁用 + aria-busy，成对调用（try/finally）。
+   所有会发请求的按钮都走这里，免得有的转圈有的只是变灰、有的什么都不显示。 */
+function setLoading(btn, on) {
+  if (!btn) return;
+  if (on) {
+    btn.classList.add('loading');
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+  } else {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+  }
+}
+
+/* 客户端超时。fetch 本身没有超时：服务端卡住（模型不响应、外网裁定库无回应）
+   或代理/隧道半路断掉时，请求会无限挂起，按钮就永远停在 loading——finally 里的
+   恢复逻辑等不到那一天。按端点分档：AI 与深读要跑本地大模型给足 5 分钟；
+   CROSS 在线检索走外网给 2 分钟；其余本地计算 1 分钟足够。 */
+function apiTimeoutMs(path) {
+  if (path.startsWith('/api/ai/') || path === '/api/search/ai' || path === '/api/cross/deepread') return 300000;
+  if (path.startsWith('/api/cross/')) return 120000;
+  return 60000;
+}
+
 async function apiPost(path, body) {
-  const resp = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+  const ctl = new AbortController();
+  const ms = apiTimeoutMs(path);
+  const timer = setTimeout(() => ctl.abort(), ms);
+  let resp;
+  try {
+    resp = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctl.signal
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(`请求超时（${Math.round(ms / 1000)} 秒无响应）。服务端可能仍在处理，请稍后重试`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   let data = {};
   try { data = await resp.json(); } catch (e) { /* 非 JSON 响应 */ }
   if (!resp.ok) throw new Error(detailMsg(data) || ('HTTP ' + resp.status + ' ' + resp.statusText));
@@ -1687,8 +1743,7 @@ async function doSearch() {
     err.classList.add('show');
     return;
   }
-  btn.classList.add('loading');
-  btn.disabled = true;
+  setLoading(btn, true);
   try {
     const body = {
       keyword: kw,
@@ -1707,8 +1762,7 @@ async function doSearch() {
     err.textContent = '搜索失败：' + e.message;
     err.classList.add('show');
   } finally {
-    btn.classList.remove('loading');
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -1851,7 +1905,7 @@ function renderDispute(d) {
   });
   h += `</div>
     <div class="actions" style="margin-top:10px;">
-      <button class="btn-primary" onclick='doCompareCodes(${esc(JSON.stringify(codes))})'>
+      <button class="btn-primary" onclick='doCompareCodes(${esc(JSON.stringify(codes))}, this)'>
         详细对比这 ${codes.length} 个（判定条件 + 证据清单）
       </button>
       <span class="hint" style="margin:0;">也可在下方结果表勾选任意候选自行组合</span>
@@ -1899,8 +1953,7 @@ async function doSearchAssist() {
   if (!kw) return;
   const btn = document.getElementById('btnSearchAi');
   const box = document.getElementById('aiAssistBox');
-  btn.classList.add('loading');
-  btn.disabled = true;
+  setLoading(btn, true);
   box.innerHTML = `<div class="info-bar">AI 分析中……正在改写检索词并在候选中论证</div>`;
   try {
     // 排序与原产地必须跟着页面上的选择走。此前 sort 写死 relevance、origin
@@ -1939,8 +1992,7 @@ async function doSearchAssist() {
     box.innerHTML = `<div class="error-bar show">AI 补充分析失败：${esc(e.message)}
       。下方为本地税则库检索结果，不受影响。</div>`;
   } finally {
-    btn.classList.remove('loading');
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -2070,8 +2122,9 @@ function toggleAllCmp(src) {
 
 /* 三个入口（自动分歧 / 表格勾选 / 手动输入）走同一条路，
    免得三处各写一遍 fetch 又各自漂移 */
-async function doCompareCodes(codes) {
+async function doCompareCodes(codes, btn) {
   if (!codes || codes.length < 2) return;
+  setLoading(btn, true);
   try {
     // 原产地与单位货值跟着搜索页当前选择走：对比卡片上的总税负是"选哪个码"的
     // 直接依据，若它按中国口径算而用户查的是越南货，那几个数字就是错的
@@ -2081,6 +2134,8 @@ async function doCompareCodes(codes) {
     renderCompare(await apiPost('/api/compare', body));
   } catch (e) {
     alert('对比失败：' + e.message);
+  } finally {
+    setLoading(btn, false);
   }
 }
 
@@ -2088,12 +2143,11 @@ async function doCompare() {
   const codes = cmpPicked();
   if (codes.length < 2) return;
   const btn = document.getElementById('btnCompare');
-  btn.classList.add('loading');
-  btn.disabled = true;
+  setLoading(btn, true);
   try {
     await doCompareCodes(codes);
   } finally {
-    btn.classList.remove('loading');
+    setLoading(btn, false);
     syncCmpButton();
   }
 }
@@ -2110,11 +2164,15 @@ async function doCompareManual() {
     err.classList.add('show');
     return;
   }
+  const btn = document.getElementById('btnCompareManual');
+  setLoading(btn, true);
   try {
     renderCompare(await apiPost('/api/compare', { codes }));
   } catch (e) {
     err.textContent = '对比失败：' + e.message;
     err.classList.add('show');
+  } finally {
+    setLoading(btn, false);
   }
 }
 
@@ -2227,7 +2285,7 @@ async function doCrossPrecedents() {
     return;
   }
   const btn = document.getElementById('btnCross');
-  btn.disabled = true;
+  setLoading(btn, true);
   box.innerHTML = '<div class="info-bar">正在查询 rulings.cbp.gov ……</div>';
   try {
     const codes = currentCmpItems.map(it => String(it['编码']));
@@ -2237,7 +2295,7 @@ async function doCrossPrecedents() {
     // 外网服务，失败是常态之一：只影响本块，对比结果原样保留
     box.innerHTML = `<div class="error-bar show">先例查询失败：${esc(e.message)}。本地对比结果不受影响，可稍后重试或直接访问 rulings.cbp.gov</div>`;
   } finally {
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -2300,7 +2358,7 @@ async function doCrossSemantic() {
     return;
   }
   const btn = document.getElementById('btnCrossSem');
-  btn.disabled = true;
+  setLoading(btn, true);
   box.innerHTML = '<div class="info-bar">语义检索中……（本地索引 + 查询嵌入）</div>';
   try {
     const codes = currentCmpItems.map(it => String(it['编码']));
@@ -2321,7 +2379,7 @@ async function doCrossSemantic() {
   } catch (e) {
     box.innerHTML = `<div class="error-bar show">语义检索失败：${esc(e.message)}。可改用「在线检索」（英文关键词）。</div>`;
   } finally {
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -2341,7 +2399,7 @@ async function doCrossDeepread() {
   const query = lastCrossQuery;
   const btn = document.getElementById('btnDeepread');
   const box = document.getElementById('deepreadResult');
-  btn.disabled = true;
+  setLoading(btn, true);
   box.innerHTML = '<div class="info-bar">AI 深读中……拉正文 + 精读（本地大模型，可能需十几秒）</div>';
   try {
     const d = await apiPost('/api/cross/deepread', { query, rulings });
@@ -2349,7 +2407,7 @@ async function doCrossDeepread() {
   } catch (e) {
     box.innerHTML = `<div class="error-bar show">深读失败：${esc(e.message)}。候选列表不受影响，可点裁定号看原文。</div>`;
   } finally {
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -2433,8 +2491,7 @@ async function doEstimate() {
     err.classList.add('show');
     return;
   }
-  btn.classList.add('loading');
-  btn.disabled = true;
+  setLoading(btn, true);
   try {
     const body = { text, origin: document.getElementById('estOrigin').value || 'CN' };
     const unitValue = parseFloat(document.getElementById('estUnitValue').value);
@@ -2447,8 +2504,7 @@ async function doEstimate() {
     err.textContent = '估算失败：' + e.message;
     err.classList.add('show');
   } finally {
-    btn.classList.remove('loading');
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -2483,7 +2539,7 @@ async function exportGeneric(kind) {
   if (!rows || !rows.length) return;
   const btn = document.getElementById(
     { search: 'btnSearchExport', est: 'btnEstExport', list: 'btnListExport' }[kind]);
-  btn.disabled = true;
+  setLoading(btn, true);
   try {
     const resp = await fetch('/api/export', {
       method: 'POST',
@@ -2503,7 +2559,7 @@ async function exportGeneric(kind) {
   } catch (e) {
     alert('导出失败：' + e.message);
   } finally {
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 
@@ -2533,8 +2589,7 @@ async function doAnalyzeList() {
     err.classList.add('show');
     return;
   }
-  btn.classList.add('loading');
-  btn.disabled = true;
+  setLoading(btn, true);
   try {
     const data = await apiPost('/api/ai/analyze', {
       items: names.map(name => ({ name })),
@@ -2546,8 +2601,7 @@ async function doAnalyzeList() {
     err.textContent = '批量归类失败：' + e.message;
     err.classList.add('show');
   } finally {
-    btn.classList.remove('loading');
-    btn.disabled = false;
+    setLoading(btn, false);
   }
 }
 

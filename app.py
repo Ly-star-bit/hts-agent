@@ -347,6 +347,7 @@ class AIConfigRequest(BaseModel):
     api_key: str = Field(default=None, description="传 '__KEEP__' 表示保留原值")
     temperature: float = Field(default=None)
     timeout: float = Field(default=None)
+    think: bool = Field(default=None, description="仅 ollama：思考模式，默认关（qwen3 开着每次多烧几百 token）")
 
 
 class MeasuresConfigRequest(BaseModel):
@@ -390,7 +391,7 @@ def api_ai_save_config(req: AIConfigRequest):
     import ai
 
     updates = {}
-    for field in ("provider", "base_url", "model", "api_key", "temperature", "timeout"):
+    for field in ("provider", "base_url", "model", "api_key", "temperature", "timeout", "think"):
         v = getattr(req, field)
         if v is not None:
             updates[field] = v

@@ -53,9 +53,16 @@ class BaseProvider:
 class OllamaProvider(BaseProvider):
     """本地 Ollama 服务（默认 http://127.0.0.1:11434）"""
 
-    def __init__(self, model="qwen2.5:7b", base_url="http://127.0.0.1:11434", temperature=0.2, timeout=120):
+    def __init__(self, model="qwen2.5:7b", base_url="http://127.0.0.1:11434", temperature=0.2, timeout=120,
+                 think=False):
         super().__init__(model, temperature, timeout)
         self.base_url = base_url.rstrip("/")
+        # 思考模式默认关。qwen3 这类模型默认先吐几百 token 的隐藏推理再给答案，
+        # 本项目的每次调用都是"按格式出 JSON"，推理链只烧时间：实测同一提示
+        # think 开 3.8s / 关 0.2s（eval 290 → 9 token），两轮调用的搜索辅助
+        # 27s → 秒级。页面上"按钮一直转"的根源就是它。
+        # Ollama 对不支持思考的模型也接受 think=false（0.31 实测不报错）。
+        self.think = bool(think)
 
     def chat(self, messages):
         try:
@@ -65,6 +72,7 @@ class OllamaProvider(BaseProvider):
                     "model": self.model,
                     "messages": messages,
                     "stream": False,
+                    "think": self.think,
                     "options": {"temperature": self.temperature},
                 },
                 timeout=self.timeout,
@@ -155,6 +163,7 @@ def get_provider():
                     base_url=cfg.get("base_url") or "http://127.0.0.1:11434",
                     temperature=cfg.get("temperature", 0.2),
                     timeout=cfg.get("timeout", 120),
+                    think=cfg.get("think", False),
                 )
             elif kind == "openai_compat":
                 missing = [k for k in ("base_url", "api_key", "model") if not cfg.get(k)]
@@ -205,6 +214,7 @@ DEFAULT_CONFIG = {
     "model": "",
     "temperature": 0.2,
     "timeout": 60,
+    "think": False,      # 仅 ollama：思考模式（qwen3 等），默认关，见 OllamaProvider
 }
 
 
@@ -257,6 +267,8 @@ def save_config(updates):
                 v = float(v)
             except (TypeError, ValueError):
                 continue
+        elif k == "think":
+            v = v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
         else:
             v = str(v).strip() if v else ""
         cfg[k] = v

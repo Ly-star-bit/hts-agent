@@ -374,3 +374,60 @@ class TestAIOriginPlumbing(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOllamaThink(unittest.TestCase):
+    """
+    Ollama 思考模式默认关：qwen3 开着每次先吐几百 token 隐藏推理，
+    两轮调用的搜索辅助要 27s——"按钮一直转"的根源。请求体里必须显式带 think。
+    """
+
+    def _capture(self, provider):
+        import httpx
+        sent = {}
+
+        class _Resp:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"message": {"content": '{"ok": 1}'}}
+
+        def fake_post(url, json=None, timeout=None):
+            sent["url"], sent["json"] = url, json
+            return _Resp()
+
+        orig = httpx.post
+        httpx.post = fake_post
+        try:
+            out = provider.chat([{"role": "user", "content": "hi"}])
+        finally:
+            httpx.post = orig
+        return out, sent
+
+    def test_think_default_off(self):
+        out, sent = self._capture(ai.OllamaProvider(model="qwen3:8b"))
+        self.assertEqual(out, '{"ok": 1}')
+        self.assertIs(sent["json"]["think"], False)
+        self.assertTrue(sent["url"].endswith("/api/chat"))
+
+    def test_think_opt_in(self):
+        _, sent = self._capture(ai.OllamaProvider(model="qwen3:8b", think=True))
+        self.assertIs(sent["json"]["think"], True)
+
+    def test_config_think_parsed_and_passed(self):
+        import tempfile
+        orig = ai.CONFIG_FILE
+        ai.CONFIG_FILE = os.path.join(tempfile.mkdtemp(), "ai_config.json")
+        try:
+            ai.save_config({"provider": "ollama", "model": "qwen3:8b", "think": "true"})
+            self.assertIs(ai.load_config()["think"], True)
+            ai.save_config({"think": False})
+            self.assertIs(ai.load_config()["think"], False)
+            ai.reset_provider_cache()
+            p = ai.get_provider()
+            self.assertIsInstance(p, ai.OllamaProvider)
+            self.assertIs(p.think, False)
+        finally:
+            ai.CONFIG_FILE = orig
+            ai.reset_provider_cache()

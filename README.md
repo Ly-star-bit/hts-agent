@@ -369,7 +369,9 @@ api_key 仅保存在本地 `ai_config.json`，界面只显示掩码、绝不回�
 ```
 
 - `"provider": null` —— 不启用（默认）
-- `"provider": "ollama"` —— 本地模型（`base_url` 默认 `http://127.0.0.1:11434`，`model` 如 `qwen2.5:7b`），完全离线
+- `"provider": "ollama"` —— 本地模型（`base_url` 默认 `http://127.0.0.1:11434`，`model` 如 `qwen2.5:7b`），完全离线。
+  可选 `"think": false`（默认）：qwen3 等模型的**思考模式**默认关——本项目每次调用都是按格式出 JSON，
+  隐藏推理链只烧时间（实测同一提示开 3.8s / 关 0.2s，搜索页 AI 辅助 27s → 秒级）；要开设 `true`
 - `"provider": "openai_compat"` —— 任何 OpenAI 兼容 API：OpenAI 官方（如上例）、DeepSeek（`https://api.deepseek.com/v1` + `deepseek-chat`）、通义千问（`https://dashscope.aliyuncs.com/compatible-mode/v1` + `qwen-plus`）、自建中转站（改 `base_url`）等
 
 **AI 归类流程**：LLM 提取关键词 → 本地税则库召回候选 → LLM 精排 → 本地引擎校验 301 与税负。
