@@ -1507,13 +1507,27 @@ async function showSourceFiles() {
     const d = await r.json();
     let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">全部税负判定均来自以下官方源文件（本地离线数据，构建于 ${esc(d.meta.built_at || '未知')}）。</div>
       <div style="margin-bottom:12px;font-size:13px;"><a href="https://hts.usitc.gov/" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:underline;">🌐 USITC 官方在线 HTS 查询（hts.usitc.gov）</a> <span style="color:var(--muted);font-size:12px;">— 可直接按编码搜索最新税率</span></div>`;
+    const rc = d.remote_check;
+    if (rc) {
+      const n = (rc.updated || []).length, ne = (rc.errors || []).length;
+      const tone = n ? 'var(--hit)' : (ne ? 'var(--muted)' : 'var(--ok, #2e7d32)');
+      const msg = n ? `⚠ ${n} 个官方源有新版本，本地数据可能已过期` : (ne ? `检查未完成（${ne} 个源探测失败）` : '✓ 全部与官方当前版本一致');
+      html += `<div style="margin:-4px 0 12px;font-size:12px;color:${tone};">官方更新检查（${esc(rc.checked_at)}）：${msg}${n ? ' — 终端执行 <code>python scripts/check_sources.py --apply --rebuild</code> 更新' : ''}</div>`;
+    }
     (d.files || []).forEach(f => {
+      const s = rc && rc.sources ? rc.sources[f.key] : null;
+      let remote = '';
+      if (s) {
+        if (s.error) remote = `<span style="color:var(--muted);">远端探测失败：${esc(s.error)}</span>`;
+        else if (s.updated) remote = `<span style="color:var(--hit);">⚠ 官方已更新：${esc(s.remote_version || '')}${s.remote_last_updated ? '（Last Updated ' + esc(s.remote_last_updated) + '）' : ''}</span>`;
+        else remote = `<span style="color:var(--ok, #2e7d32);">✓ 与官方一致</span><span style="color:var(--muted);">（远端 ${esc(s.remote_version || '-')}${s.remote_last_updated ? '，Last Updated ' + esc(s.remote_last_updated) : ''}）</span>`;
+      }
       html += `
         <div class="src-file-item">
           <div>
             <div class="f-name">${esc(f.label)}<span style="font-weight:400;color:var(--muted);">（${esc(f.path)}）</span></div>
             <div class="f-desc">${esc(f.desc)}</div>
-            <div class="f-desc">${f.exists ? (f.size / 1048576).toFixed(1) + ' MB' : '⚠ 文件缺失'}</div>
+            <div class="f-desc">${f.exists ? (f.size / 1048576).toFixed(1) + ' MB' : '⚠ 文件缺失'}${remote ? ' ｜ ' + remote : ''}</div>
           </div>
           ${f.exists && f.mime === 'application/pdf' ? `<button class="f-open" onclick="window.open('/api/source/pdf/${esc(f.key)}', '_blank')">打开 PDF</button>` : ''}
         </div>`;

@@ -55,6 +55,7 @@ hts_agent/
 │   ├── cross_sync.py              # 一期：CROSS 元数据镜像同步 → data/cross.db（建议每晚 cron）
 │   ├── cross_embed.py             # 二期：裁定 subject 语义索引（qwen3-embedding + sqlite-vec）
 │   ├── db_diff.py                 # ★ 数据库版本对比与变动追踪
+│   ├── check_sources.py           # 三份官方源文件更新检测/下载（launchd 每日探测，见「数据更新方法」）
 │   └── query_301.py               # 命令行版查询工具
 ├── data/
 │   ├── sec301_db.json             # 构建产物（不入 git，需先跑 build_db.py 生成）：合并查询数据库
@@ -69,6 +70,7 @@ hts_agent/
 │   ├── test_ai.py                 # AI 层测试（假 Provider）
 │   ├── test_app.py                # Web API 集成测试
 │   ├── test_cross.py              # CROSS 裁定检索测试（网络全程 mock，不联网）
+│   ├── test_check_sources.py      # 源文件更新检测测试（三家服务器 mock，不联网）
 │   └── test_measures.py           # 多措施测试：301 flip/越南轨道/FLIP 301/措施开关配置/中国回归
 ├── .cache/cross/                  # CROSS 查询缓存（不入 git，可随时删除）
 └── output/                        # 命令行查询结果输出目录（不入 git）
@@ -418,12 +420,36 @@ AI 结果仅供参考，正式报关归类以 CBP 裁定为准，请人工复核
 
 ## 数据更新方法
 
-官方数据每月都可能调整，更新三步：
+官方数据每月都可能调整。三份源文件的官方地址（2026-09 实测）：
 
-1. 到 USITC 官网导出最新全量税率表，替换 `htsdata.csv`（列格式需保持一致）
-2. 到 USTR 官网（Section 301 → China）下载最新 China Tariffs 清单，替换 PDF
-3. 重新运行 `python scripts/build_db.py`
+| 本地文件 | 官方地址 | 版本探针 |
+|---|---|---|
+| `htsdata.csv` | [USITC 全量导出](https://hts.usitc.gov/reststop/exportList?from=0100&to=9999&format=CSV&styles=false) | [`/reststop/currentRelease`](https://hts.usitc.gov/reststop/currentRelease) → `{"name":"2026HTSRev17"}` |
+| `China Tariffs_*.pdf` | [USITC 托管的 China Tariffs](https://hts.usitc.gov/reststop/file?release=currentRelease&filename=China+Tariffs)（**不在 USTR 站上**） | 响应头 `Content-Disposition` 文件名带 Rev 号；首页有 "Last Updated" |
+| `FLIP 301 ... FINAL.pdf` | [USTR 最终行动 FRN](https://ustr.gov/sites/default/files/files/Press/Releases/2026/FLIP%20301%20Investigation%20Final%20Action%20FRN%207-23-26%20FINAL.pdf) | `ETag` / `Last-Modified` |
 
+### 自动检测：`scripts/check_sources.py`
+
+```bash
+python scripts/check_sources.py                   # 探测三份文件是否有新版本，打印报告；有更新退出码 3
+python scripts/check_sources.py --apply --rebuild # 下载覆盖（旧文件备份到 output/sources_backup/<时间>/）并重建数据库
+python scripts/check_sources.py --json            # 机器可读
+```
+
+- **判"有没有更新"只看内容哈希**：USITC 每次发版都把 China Tariffs 改名（Rev15→Rev17）但内容常一字不变，
+  按名判会误报；CSV 导出的换行符会漂，哈希前抹平。版本号 / ETag 只用来省流量（没变就不重下 4MB）。
+- 比对对象是**本地文件本身**，手动替换过文件也不会错判。
+- htsdata 有更新时报告**行级差异样例**（新增/删除了哪些编码），`--apply` 前先看一眼改的是什么。
+- 本地 `China Tariffs_2026HTSRev15.pdf` **文件名不随远端改**（`build_db.py` / `app.py` 按名引用），
+  远端版本号记在 `data/.sources_state.json`，Web「📄 查看数据来源」弹窗展示每份文件"与官方一致 / 官方已更新"。
+- **局限**：FLIP FRN 的 URL 指向 7-23-26 这一份通知，USTR 若发布**新的**修改通知是新 URL，脚本探测不到，
+  需人工关注 [USTR 新闻页](https://ustr.gov/about/policy-offices/press-office/press-releases)（报告里有提醒）。
+
+**定时**：已配 `launchd`（`~/Library/LaunchAgents/com.hts-agent.check-sources.plist`）每天 08:30 跑
+`check_sources.py --notify`——有更新弹 macOS 通知，报告追加到 `output/check_sources.log`；
+**只检查不自动覆盖**，覆盖+重建要人看着做（`--apply --rebuild`），重建后到「数据变动」核对变动清单。
+
+手动更新（不用脚本）：下载上表三个地址替换对应文件 → `python scripts/build_db.py`。
 重建时自动与上一版本对比，生成**数据变动清单**（Web 端「数据变动」可查看），
 方便你第一时间发现"客户常查的商品税率变了"。
 

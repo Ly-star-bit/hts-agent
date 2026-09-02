@@ -45,6 +45,8 @@ output/
 data/sec301_db.json
 data/.db_fingerprint.json
 data/.db_changes.json
+# scripts/check_sources.py 最近一次官方源更新探测结果（本机状态，不入 git）
+data/.sources_state.json
 
 # CROSS 裁定库本地镜像（69MB，scripts/cross_sync.py 随时可重建）
 data/cross.db

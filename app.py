@@ -135,7 +135,35 @@ def api_source_list():
             "flip_frn_pdf": meta.get("flip_frn_pdf", ""),
             "built_at": meta.get("built_at", ""),
         },
+        "remote_check": _remote_check_summary(),
     }
+
+
+def _remote_check_summary():
+    """
+    scripts/check_sources.py 最近一次对官方服务器的探测结果（data/.sources_state.json）。
+    页面只读不探测——探测要联网、要几十秒，属于 launchd 定时任务，不该挂在弹窗上。
+    从未跑过 → None，前端不显示这一块。
+    """
+    try:
+        import check_sources
+        state = check_sources.load_state()
+    except Exception:
+        return None
+    if not state.get("checked_at"):
+        return None
+    per = {}
+    for key, s in (state.get("sources") or {}).items():
+        per[key] = {
+            "remote_version": s.get("remote_version", ""),
+            "remote_last_updated": s.get("remote_last_updated", ""),
+            "updated": bool(s.get("updated")),
+            "applied": bool(s.get("applied")),
+            "checked_at": s.get("checked_at", ""),
+            "error": s.get("last_error", "") if s.get("last_error_at", "") > s.get("checked_at", "") else "",
+        }
+    return {"checked_at": state["checked_at"], "updated": state.get("updated", []),
+            "errors": state.get("errors", []), "sources": per}
 
 
 @app.get("/api/source/pdf/{key}")
