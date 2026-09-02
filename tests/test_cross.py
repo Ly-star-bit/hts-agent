@@ -436,3 +436,38 @@ class TestCache(CrossTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRulingTextViewer(unittest.TestCase):
+    """站内看正文：裁定号补库别/年份（ruling_meta）+ 压成一行的正文切回小节（split_ruling_sections）"""
+
+    def test_split_sections_strips_ole_junk_and_finds_holding(self):
+        text = ("bjbjZ Q\\!( HQ H192478 December 27, 2016 CLA-2 OT:RR:CTF:TCM H192478 GA CATEGORY: Classification "
+                "TARIFF NO.: 8506.50.00 Mr. Lee Dear Mr. Lee: This letter concerns NY N093423. FACTS: The PowerCap "
+                "is a battery. ISSUE: Whether it is 8506 or 8507. LAW AND ANALYSIS: GRI 1 applies. "
+                "HOLDING: By application of GRI 1, the PowerCap is classified in 8506.50.00. Sincerely, Joanne")
+        secs = cross.split_ruling_sections(text)
+        self.assertTrue(secs[0]["内容"].startswith("HQ H192478"))      # 二进制残留剥掉
+        titles = [s["标题"] for s in secs]
+        for t in ("CATEGORY", "TARIFF NO.", "FACTS", "ISSUE", "LAW AND ANALYSIS", "HOLDING", "Sincerely,"):
+            self.assertIn(t, titles, t)
+        hold = next(s for s in secs if s["标题"] == "HOLDING")
+        self.assertIn("8506.50.00", hold["内容"])
+        self.assertNotIn("Sincerely", hold["内容"])
+
+    def test_split_sections_empty(self):
+        self.assertEqual(cross.split_ruling_sections(""), [])
+        self.assertEqual(cross.split_ruling_sections(None), [])
+
+    def test_ruling_meta_from_mirror(self):
+        import sqlite3
+        import tempfile
+        d = tempfile.mkdtemp()
+        db = os.path.join(d, "cross.db")
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE rulings (number TEXT PRIMARY KEY, date TEXT, collection TEXT)")
+        con.execute("INSERT INTO rulings VALUES ('N359156', '2026-03-09', 'ny')")
+        con.commit(); con.close()
+        self.assertEqual(cross.ruling_meta("N359156", db_path=db), ("ny", "2026-03-09"))
+        self.assertIsNone(cross.ruling_meta("NOPE", db_path=db))
+        self.assertIsNone(cross.ruling_meta("N359156", db_path=os.path.join(d, "missing.db")))

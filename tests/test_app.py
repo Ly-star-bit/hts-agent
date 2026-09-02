@@ -722,3 +722,53 @@ class TestExportInjection(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCrossTextViewer(unittest.TestCase):
+    """站内看裁定正文：正文抓取整体替换，不联网。境内点官网链接打不开，这条路必须能独立工作"""
+
+    def setUp(self):
+        import cross
+        from fastapi.testclient import TestClient
+        self.client = TestClient(app_mod.app)
+        self._cross = cross
+        self._fetch, self._meta = cross.fetch_ruling_text, cross.ruling_meta
+
+    def tearDown(self):
+        self._cross.fetch_ruling_text, self._cross.ruling_meta = self._fetch, self._meta
+
+    def test_text_with_params(self):
+        self._cross.fetch_ruling_text = lambda n, c, d, use_cache=True: (
+            f"NY {n} March 9, 2026 Dear Sir: The battery. HOLDING: 8507.60.00 applies. Sincerely, X"
+            if (n, c, d[:4]) == ("N359156", "ny", "2026") else None)
+        r = self.client.get("/api/cross/text/N359156", params={"collection": "NY", "date": "2026-03-09"})
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual(d["裁定号"], "N359156")
+        self.assertEqual(d["库别"], "NY")
+        self.assertTrue(d["链接"].endswith("/ruling/N359156"))
+        self.assertIn("/api/getdoc/ny/2026/N359156.doc", d["全文链接"])
+        self.assertIn("HOLDING", [p["标题"] for p in d["段落"]])
+
+    def test_meta_from_mirror_when_params_missing(self):
+        self._cross.ruling_meta = lambda n, db_path=None: ("hq", "2016-12-27") if n == "H192478" else None
+        self._cross.fetch_ruling_text = lambda n, c, d, use_cache=True: f"HQ {n} text HOLDING: ok"
+        d = self.client.get("/api/cross/text/H192478").json()
+        self.assertEqual(d["库别"], "HQ")
+        self.assertEqual(d["日期"], "2016-12-27")
+
+    def test_unknown_ruling_degrades_with_link(self):
+        self._cross.ruling_meta = lambda n, db_path=None: None
+        d = self.client.get("/api/cross/text/X000000").json()
+        self.assertIn("error", d)
+        self.assertTrue(d["链接"].endswith("/ruling/X000000"))
+
+    def test_fetch_failure_degrades_with_link(self):
+        self._cross.fetch_ruling_text = lambda n, c, d, use_cache=True: None
+        d = self.client.get("/api/cross/text/N1", params={"collection": "ny", "date": "2026-01-01"}).json()
+        self.assertIn("error", d)
+        self.assertIn("链接", d)
+
+    def test_bad_number_rejected(self):
+        r = self.client.get("/api/cross/text/%2E%2E", params={"collection": "ny", "date": "2026"})
+        self.assertEqual(r.status_code, 400)

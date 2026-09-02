@@ -759,6 +759,68 @@ def fetch_ruling_text(number, collection, date, use_cache=True):
     return text
 
 
+def ruling_meta(number, db_path=None):
+    """
+    裁定号 → (库别, 日期)，从本地镜像取。拉正文要知道 hq/ny 与年份（getdoc 路径按这两个分目录），
+    调用方手上若只有裁定号（比如用户从别处粘的），靠这里补。镜像没建/没这条 → None。
+    """
+    number = str(number or "").strip()
+    if not number or not db_available(db_path):
+        return None
+    try:
+        con = _open_ro(db_path or DB_PATH)
+        try:
+            row = con.execute("SELECT collection, date FROM rulings WHERE number = ?", (number,)).fetchone()
+        finally:
+            con.close()
+    except Exception:
+        return None
+    if not row or not row[0] or not row[1]:
+        return None
+    return str(row[0]).lower(), str(row[1])[:10]
+
+
+# 裁定正文里的固定小节标题（HQ 结构最完整：FACTS / ISSUE / LAW AND ANALYSIS / HOLDING；
+# NY 信函体只有 Dear … / Sincerely）。正文来自 .doc 抽取，段落早就被压成一行——
+# 站内阅读时按这些标题切回段落，HOLDING 能一眼找到。
+_SECTION_HEADS = ("FACTS:", "ISSUE:", "ISSUES:", "LAW AND ANALYSIS:", "ANALYSIS:", "HOLDING:",
+                  "EFFECT ON OTHER RULINGS:", "Re:", "RE:", "Sincerely,", "TARIFF NO.:", "CATEGORY:")
+# 这些只是段落起点，不是小节标题（"Dear Ms. Ratto:" 拆成 [Dear] + "Ms. Ratto:" 读着别扭）：换段但正文原样保留
+_SOFT_HEADS = ("Dear ", "This ruling is being issued", "A copy of this ruling letter")
+_SECTION_RE = re.compile("(" + "|".join(re.escape(h) for h in _SECTION_HEADS + _SOFT_HEADS) + ")")
+
+
+def split_ruling_sections(text):
+    """
+    纯文本正文 → [{'标题', '内容'}, ...]。标题为 '' 表示开头的信头/杂项。
+    OLE2 抽取会在开头带 'bjbj…' 之类的二进制残留，剥掉到裁定号首次出现处。
+    """
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not text:
+        return []
+    m = re.search(r"\b(HQ|NY)\s+[A-Z]\d{5,6}\b", text)
+    if m and m.start() < 200:
+        text = text[m.start():]
+    # 尾部同样有 Word 域码残留（"PAGE \* MERGEFORMAT hVWD {dP9!…"），从域码起截掉
+    m = re.search(r"\bPAGE\s*\\\*\s*MERGEFORMAT", text)
+    if m:
+        text = text[:m.start()].rstrip()
+    parts = _SECTION_RE.split(text)
+    out, title = [], ""
+    buf = parts[0].strip()
+    for i in range(1, len(parts), 2):
+        if buf:
+            out.append({"标题": title, "内容": buf})
+        head, rest = parts[i], parts[i + 1].strip() if i + 1 < len(parts) else ""
+        if head in _SOFT_HEADS:
+            title, buf = "", re.sub(r"\s+", " ", head + " " + rest).strip()
+        else:
+            title, buf = head.strip().rstrip(":"), rest
+    if buf or title:
+        out.append({"标题": title, "内容": buf})
+    return out
+
+
 # ---------- 命令行自查 ----------
 
 def _main(argv):

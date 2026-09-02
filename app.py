@@ -635,6 +635,35 @@ def api_cross_deepread(req: CrossDeepreadRequest):
     return ai.deepread_precedents(req.query.strip(), req.rulings)
 
 
+@app.get("/api/cross/text/{number}")
+def api_cross_text(number: str, collection: str = "", date: str = ""):
+    """
+    站内查看裁定正文。rulings.cbp.gov 在境内直连经常打不开（用户点裁定号"没有反应"），
+    而正文本来就由服务端拉取并永久缓存（深读用的同一份）——这里把它直接给到页面。
+    collection / date 优先用调用方传的（先例行里有），没传则从本地镜像补；都没有 → error。
+    """
+    import cross
+    number = re.sub(r"[^A-Za-z0-9]", "", number or "")[:16]
+    if not number:
+        raise HTTPException(status_code=400, detail="裁定号无效")
+    collection = (collection or "").strip().lower()
+    date = (date or "").strip()
+    if not (collection and date[:4].isdigit()):
+        meta = cross.ruling_meta(number)
+        if meta:
+            collection, date = meta
+    if not (collection and date[:4].isdigit()):
+        return {"error": f"缺少裁定 {number} 的库别/年份，无法定位正文", "链接": cross.RULING_URL.format(number=number)}
+    text = cross.fetch_ruling_text(number, collection, date)
+    if not text:
+        return {"error": "正文拉取失败（CBP 服务无响应或文件不可解析），可稍后重试或打开官网链接",
+                "链接": cross.RULING_URL.format(number=number)}
+    return {"裁定号": number, "库别": collection.upper(), "日期": date,
+            "链接": cross.RULING_URL.format(number=number),
+            "全文链接": f"{cross.BASE_URL}/api/getdoc/{collection}/{date[:4]}/{number}.doc",
+            "正文": text, "段落": cross.split_ruling_sections(text)}
+
+
 @app.post("/api/estimate")
 def api_estimate(req: EstimateRequest):
     """成本估算：按编码批量计算总税负（基础 + 301 + 附加税）"""

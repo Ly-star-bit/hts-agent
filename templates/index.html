@@ -2304,7 +2304,9 @@ async function doCrossPrecedents() {
 function crossRulingRow(r) {
   const bad = r['状态'] !== '现行';
   return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
-    <a href="${esc(r['链接'])}" target="_blank" rel="noopener" style="font-weight:600;">${esc(r['裁定号'])}</a>
+    <a href="javascript:void(0)" onclick="viewRulingText('${esc(r['裁定号'])}', '${esc(r['来源'])}', '${esc(r['日期'])}', '${esc(r['链接'])}')"
+       title="站内查看裁定正文（服务端拉取，境内直连 CBP 打不开也能看）" style="font-weight:600;">${esc(r['裁定号'])}</a>
+    <a href="${esc(r['链接'])}" target="_blank" rel="noopener" title="在 rulings.cbp.gov 打开（境内直连可能无法访问）" style="font-size:11px;color:var(--muted);margin-right:4px;">官网 ↗</a>
     <span style="color:var(--muted);">${esc(r['日期'])}</span>
     <span class="tag ${r['来源'] === 'HQ' ? 'warn' : ''}" title="HQ（总部）层级高于 NY，可撤销 NY 的裁定">${esc(r['来源'])}</span>
     ${bad ? `<span class="tag hit">${esc(r['状态'])}</span>` : ''}
@@ -2323,6 +2325,40 @@ function crossRulingRow(r) {
     ${bad ? `<div style="color:var(--hit);font-size:12px;">⚠ ${esc(r['状态说明'])}</div>` : ''}
     ${r['版本提示'] ? `<div style="color:var(--muted);font-size:12px;">⚠ ${esc(r['版本提示'])}</div>` : ''}
   </div>`;
+}
+
+/* 站内查看裁定正文。rulings.cbp.gov 是美国政府站，境内直连常常打不开（点了"没反应"），
+   而正文由服务端拉取并永久缓存（深读用的同一份），直接在弹窗里给出，HOLDING 段高亮。 */
+async function viewRulingText(number, source, date, url) {
+  openSrcModal(`裁定 ${number}`, `<div class="info-bar">正在拉取正文……（首次需从 CBP 下载，几秒钟）</div>`);
+  const body = document.getElementById('srcModalBody');
+  try {
+    const q = new URLSearchParams({ collection: (source || '').toLowerCase(), date: date || '' });
+    const resp = await fetch(`/api/cross/text/${encodeURIComponent(number)}?${q}`);
+    const d = await resp.json();
+    if (!resp.ok) throw new Error(detailMsg(d) || ('HTTP ' + resp.status));
+    if (d.error) {
+      body.innerHTML = `<div class="error-bar show">${esc(d.error)}</div>
+        <div style="margin-top:8px;"><a href="${esc(d['链接'] || url)}" target="_blank" rel="noopener">在 rulings.cbp.gov 打开 ↗</a></div>`;
+      return;
+    }
+    const secs = (d['段落'] || []).map(p => {
+      const t = p['标题'] || '';
+      const hold = /^HOLDING/i.test(t);
+      return `<div style="margin:10px 0;${hold ? 'padding:8px 10px;border-left:3px solid var(--primary);background:var(--gray-bg);border-radius:6px;' : ''}">
+        ${t ? `<div style="font-weight:600;margin-bottom:3px;">${esc(t)}</div>` : ''}
+        <div style="white-space:pre-wrap;line-height:1.6;font-size:13px;">${esc(p['内容'])}</div></div>`;
+    }).join('');
+    body.innerHTML = `
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+        ${esc(d['库别'])} · ${esc(d['日期'])} ｜ <a href="${esc(d['链接'])}" target="_blank" rel="noopener">官网页面 ↗</a>
+        ｜ <a href="${esc(d['全文链接'])}" target="_blank" rel="noopener">下载原始 .doc ↗</a>
+        <br>正文由服务端从 CBP 拉取并缓存，段落按裁定固定小节切分；排版以官网为准。</div>
+      ${secs || `<div style="white-space:pre-wrap;line-height:1.6;font-size:13px;">${esc(d['正文'])}</div>`}`;
+  } catch (e) {
+    body.innerHTML = `<div class="error-bar show">正文加载失败：${esc(e.message)}</div>
+      <div style="margin-top:8px;"><a href="${esc(url)}" target="_blank" rel="noopener">在 rulings.cbp.gov 打开 ↗</a></div>`;
+  }
 }
 
 /* 本地镜像自动反查：完整计数 + 前几条。库未建时静默不渲染 */
@@ -2422,7 +2458,9 @@ function renderDeepread(d) {
   picks.forEach(p => {
     const rt = relTag[p['相似度']] || ['—', 'na'];
     h += `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
-      <a href="${esc(p['链接'])}" target="_blank" rel="noopener" style="font-weight:600;">${esc(p['裁定号'])}</a>
+      <a href="javascript:void(0)" onclick="viewRulingText('${esc(p['裁定号'])}', '${esc(p['来源'] || '')}', '${esc(p['日期'] || '')}', '${esc(p['链接'])}')"
+         title="站内查看裁定正文" style="font-weight:600;">${esc(p['裁定号'])}</a>
+      <a href="${esc(p['链接'])}" target="_blank" rel="noopener" title="在 rulings.cbp.gov 打开（境内直连可能无法访问）" style="font-size:11px;color:var(--muted);">官网 ↗</a>
       <span class="tag ${rt[1]}">${rt[0]}</span>
       <span style="color:var(--muted);">${esc(p['说明'])}</span>`;
     if (p['原文摘录']) {
