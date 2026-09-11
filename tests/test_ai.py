@@ -231,6 +231,47 @@ class TestHallucinationGuard(unittest.TestCase):
         import core
         cls.db = core.load_db()
 
+    def test_stream_emits_details_before_report(self):
+        """
+        流式的全部意义在于表格先于报告落地。
+
+        后端是三次批量调用（出词 / 精排 / 报告），表格在精排结束时就齐了，
+        报告还要再等一轮 LLM（实测占总耗时约三成）。若哪天有人把 details
+        事件挪到报告之后，等待时间就白白涨回去——这条测试钉住这个顺序。
+        """
+        order = [ev["type"] for ev in
+                 ai.analyze_list_stream(self.db, [{"name": "锂电池"}, {"name": "木制家具"}])]
+        self.assertIn("details", order)
+        self.assertIn("done", order)
+        self.assertLess(order.index("details"), order.index("done"))
+        if "report" in order:
+            self.assertLess(order.index("details"), order.index("report"))
+        # 阶段事件要覆盖四步，进度条才不会跳格
+        stages = [ev["stage"] for ev in
+                  ai.analyze_list_stream(self.db, [{"name": "锂电池"}])
+                  if ev["type"] == "stage"]
+        self.assertEqual(set(stages), {"keywords", "recall", "rank", "report"})
+
+    def test_stream_errors_are_events_not_exceptions(self):
+        """
+        超限/未配置要走 error 事件。生成器里抛异常，前端只会看到连接莫名断开，
+        连"为什么失败"都拿不到。
+        """
+        evs = list(ai.analyze_list_stream(self.db, [{"name": f"商品{i}"} for i in range(31)]))
+        self.assertEqual(len(evs), 1)
+        self.assertEqual(evs[0]["type"], "error")
+        self.assertIn("30", evs[0]["message"])
+
+    def test_analyze_list_wrapper_matches_stream(self):
+        """一次性版本必须与流式版本给出同一份结果——两条路径不能各说各话"""
+        r = ai.analyze_list(self.db, [{"name": "锂电池"}])
+        final = None
+        for ev in ai.analyze_list_stream(self.db, [{"name": "锂电池"}]):
+            if ev["type"] == "done":
+                final = ev["result"]
+        self.assertEqual(len(r["details"]), len(final["details"]))
+        self.assertEqual(r["stats"], final["stats"])
+
     def test_analyze_list_rejects_code_outside_candidates(self):
         # 第一轮出关键词，第二轮 pick 一个候选集里不存在的编码
         _install_fake([

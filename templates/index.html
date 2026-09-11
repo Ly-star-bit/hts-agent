@@ -813,6 +813,26 @@
   }
   tr.est-total td.num { font-size: 14px; }
 
+  /* 清单归类的阶段进度：十几秒的等待里，一个转圈只说明"还活着"，
+     说不出还要等什么。四格对应后端真实的四步，走到哪格就亮哪格。 */
+  .list-progress { margin-top: 12px; }
+  .list-progress .pbar {
+    height: 5px; border-radius: 3px; background: var(--track); overflow: hidden;
+  }
+  .list-progress .pbar i {
+    display: block; height: 100%; background: var(--primary);
+    box-shadow: var(--glow-primary); transition: width .35s ease;
+  }
+  .list-progress .psteps {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+  }
+  .list-progress .pstep { font-size: 11.5px; color: var(--muted); }
+  .list-progress .pstep.done { color: var(--miss); }
+  .list-progress .pstep.done::before { content: '✓ '; }
+  .list-progress .pstep.active { color: var(--primary); font-weight: 700; }
+  .list-progress .psep { color: var(--border-strong); font-size: 11px; }
+  .list-progress .ptext { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
   /* 底部 */
   footer { color: var(--muted); font-size: 12px; margin-top: 24px; text-align: center; line-height: 1.8; }
 
@@ -1432,6 +1452,7 @@
         <span class="hint" style="margin:0;">每行都要 AI 归类 + 本地查税，30 行约需十几秒</span>
       </div>
       <div class="error-bar" id="listError"></div>
+      <div id="listProgress" class="list-progress" style="display:none;"></div>
     </div>
 
     <div class="card tips-card">
@@ -3299,6 +3320,33 @@ async function exportGeneric(kind) {
 
 let currentListRows = [];
 
+// 阶段进度条。后端是三次批量 LLM 调用（出词 / 精排 / 报告）+ 一轮本地召回，
+// **不是逐行调 AI**，所以这里绝不做"一行行冒出来"的假动画——
+// 显示的每一格都对应后端真实走到的那一步，只有召回那一格的计数是逐行动的。
+const LIST_STAGES = [
+  { key: 'keywords', label: '出检索词' },
+  { key: 'recall',   label: '本地召回' },
+  { key: 'rank',     label: 'AI 精排定码' },
+  { key: 'report',   label: '写汇总报告' },
+];
+
+function renderListProgress(stage, done, total, text) {
+  const at = LIST_STAGES.findIndex(s => s.key === stage);
+  const box = document.getElementById('listProgress');
+  box.style.display = 'block';
+  const steps = LIST_STAGES.map((s, i) => {
+    const cls = i < at ? 'done' : (i === at ? 'active' : '');
+    const cnt = (s.key === 'recall' && i === at && total) ? ` ${done}/${total}` : '';
+    return `<span class="pstep ${cls}">${esc(s.label)}${cnt}</span>`;
+  }).join('<span class="psep">›</span>');
+  // 进度按"走到第几步"算，召回那步再按行数细分，条子才不会长时间不动
+  const frac = at < 0 ? 0
+    : (at + (s => s)(stage === 'recall' && total ? done / total : 0.5)) / LIST_STAGES.length;
+  box.innerHTML = `<div class="pbar"><i style="width:${Math.round(frac * 100)}%"></i></div>
+    <div class="psteps">${steps}</div>
+    <div class="ptext">${esc(text || '')}</div>`;
+}
+
 async function doAnalyzeList() {
   const btn = document.getElementById('btnAnalyzeList');
   const err = document.getElementById('listError');
@@ -3316,14 +3364,55 @@ async function doAnalyzeList() {
     return;
   }
   setLoading(btn, true);
+  document.getElementById('listReport').innerHTML = '';
+  renderListProgress('keywords', 0, names.length, '正在连接 AI 服务');
   try {
-    const data = await apiPost('/api/ai/analyze', {
-      items: names.map(name => ({ name })),
-      origin: document.getElementById('listOrigin').value
+    // SSE 要 POST 大段文本，EventSource 只能 GET，所以走 fetch + ReadableStream。
+    const resp = await fetch('/api/ai/analyze/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: names.map(name => ({ name })),
+        origin: document.getElementById('listOrigin').value,
+      }),
     });
-    currentListRows = data.details || [];
-    renderList(data);
+    if (!resp.ok) {
+      let d = {}; try { d = await resp.json(); } catch (e) { /* 非 JSON 错误体 */ }
+      throw new Error(d.detail || `HTTP ${resp.status}`);
+    }
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', gotDetails = false;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      // SSE 一帧以空行结束；半帧要留在缓冲里等下一块，否则 JSON.parse 会炸
+      let sep;
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const frame = buf.slice(0, sep).trim();
+        buf = buf.slice(sep + 2);
+        if (!frame.startsWith('data:')) continue;
+        let ev;
+        try { ev = JSON.parse(frame.slice(5)); } catch (e) { continue; }
+        if (ev.type === 'stage') {
+          renderListProgress(ev.stage, ev.done, ev.total, ev.text);
+        } else if (ev.type === 'details') {
+          // 表格先落地：后端此刻已算完，剩下的只是报告那一轮 LLM（实测约占 30% 等待）
+          gotDetails = true;
+          currentListRows = ev.details || [];
+          renderList({ details: ev.details, stats: ev.stats, report: '' });
+        } else if (ev.type === 'report') {
+          renderListReport(ev.report);
+        } else if (ev.type === 'error') {
+          throw new Error(ev.message || 'AI 分析失败');
+        }
+      }
+    }
+    if (!gotDetails) throw new Error('服务端未返回归类结果');
+    document.getElementById('listProgress').style.display = 'none';
   } catch (e) {
+    document.getElementById('listProgress').style.display = 'none';
     err.textContent = '批量归类失败：' + e.message;
     err.classList.add('show');
   } finally {
@@ -3404,13 +3493,23 @@ function renderList(data) {
     body.appendChild(tr);
   });
 
-  document.getElementById('listReport').innerHTML = data.report
-    ? `<div class="info-bar" style="margin-top:14px;"><b>AI 汇总分析</b>
-        <div class="md-body" style="margin-top:6px;">${renderMD(data.report)}</div>
-        <div class="hd" style="margin-top:8px;">
-          报告由 AI 依据上表生成，表内的税率、301 判定、总税负均来自本地官方税则库。</div></div>`
-    : '';
+  renderListReport(data.report);
   document.getElementById('listResultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 报告单独渲染：流式下表格先到、报告后到，两者不能再绑在一次渲染里。
+// 报告还没来时留一条占位，否则表格底下空一块，看着像报告没了。
+function renderListReport(report) {
+  const el = document.getElementById('listReport');
+  if (!report) {
+    el.innerHTML = `<div class="info-bar" style="margin-top:14px;color:var(--muted);">
+      <b>AI 汇总分析</b> 正在生成，上表已可直接使用…</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="info-bar" style="margin-top:14px;"><b>AI 汇总分析</b>
+    <div class="md-body" style="margin-top:6px;">${renderMD(report)}</div>
+    <div class="hd" style="margin-top:8px;">
+      报告由 AI 依据上表生成，表内的税率、301 判定、总税负均来自本地官方税则库。</div></div>`;
 }
 
 // 简易 Markdown 渲染（仅支持常用语法，避免引入依赖）

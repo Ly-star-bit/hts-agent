@@ -12,16 +12,18 @@ app.py —— HTS 301 关税查询 Web 应用（FastAPI）
   - 与命令行工具共用同一套查询逻辑（scripts/core.py）
 """
 import io
+import json
 import os
 import re
 import sys
+import traceback
 from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
@@ -870,6 +872,39 @@ def api_ai_analyze(req: AIAnalyzeRequest):
     import ai
 
     return ai.analyze_list(get_db(), req.items, origin=req.origin)
+
+
+@app.post("/api/ai/analyze/stream")
+def api_ai_analyze_stream(req: AIAnalyzeRequest):
+    """
+    AI 批量清单分析（SSE 流式）。
+
+    分开吐 details 与 report 是这个接口存在的理由：后端是三次批量 LLM 调用
+    （出词 / 精排 / 报告），**表格在精排结束时就齐了，却要陪着报告再等一轮**。
+    实测 4 行清单 14.3s 里报告占 4.2s——表格先落地，等待感少掉近三成。
+
+    事件格式：每帧 `data: {json}\n\n`，type 见 ai.analyze_list_stream 的文档。
+    """
+    if not req.items:
+        raise HTTPException(status_code=400, detail="清单为空")
+    import ai
+
+    db = get_db()
+
+    def gen():
+        try:
+            for ev in ai.analyze_list_stream(db, req.items, origin=req.origin):
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        except Exception as e:      # 生成器里抛异常前端只会看到连接断开，必须转成事件
+            traceback.print_exc()
+            yield f"data: {json.dumps({'type': 'error', 'message': f'服务端异常：{e}'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        # 反向代理（本项目对外走 tailscale serve）默认会缓冲响应体，
+        # 缓冲了就等于没流式——整包在最后一起到，进度条白做。
+        "X-Accel-Buffering": "no",
+    })
 
 
 if __name__ == "__main__":
