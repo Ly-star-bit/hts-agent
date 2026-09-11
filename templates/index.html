@@ -797,6 +797,22 @@
   .code-stack .code { display: block; }
   .code-meta { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
 
+  /* 表格内的可编辑单元格：数量与单价是用户一行行敲进去的，
+     框要看得出能改，又不能喧宾夺主盖过旁边的金额 */
+  .cell-in {
+    width: 100%; height: 28px; padding: 0 8px; font-size: 13px; font-family: inherit;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-2); color: var(--text); outline: none;
+  }
+  .cell-in:focus { border-color: var(--primary); background: var(--surface); box-shadow: var(--focus-ring); }
+  .cell-in::placeholder { color: var(--muted); opacity: .6; }
+  td.num { text-align: right; font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; }
+  tr.est-total td {
+    background: var(--primary-bg); border-top: 2px solid var(--primary);
+    font-weight: 700; font-size: 13px; padding: 10px 12px;
+  }
+  tr.est-total td.num { font-size: 14px; }
+
   /* 底部 */
   footer { color: var(--muted); font-size: 12px; margin-top: 24px; text-align: center; line-height: 1.8; }
 
@@ -1271,51 +1287,90 @@
 
   <!-- ============ Tab 3：成本估算 ============ -->
   <div class="tab-panel" id="tab-estimate">
+   <div class="grid-2">
     <div class="card">
-      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h5"/></svg></span> 总税负成本估算</h2>
-      <div class="card-sub">基础税率 + 301 + FLIP 301 + 附加税，一次算到综合税负</div>
+      <h2>
+        <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h5"/></svg></span>
+        总税负成本估算
+      </h2>
+      <div class="card-sub">粘贴编码或导入底单，逐行填数量与单价，算到实际税费金额</div>
       <details class="rule-note">
-        <summary>💡 从量税怎么折算</summary>
+        <summary>💡 单价为什么要逐行填</summary>
         <div class="rule-body">
-          <b>从价税</b>（如 3.4%）直接相加即可。<b>从量税</b>（如 1¢/kg）本身不是百分比，
-          必须知道<b>单位货值</b>才能折成等效从价——不填就只能标"需人工"。<br>
-          复合税（从价 + 从量）两部分同时列出。分部件计税的复杂税率无法折算。<br>
+          <b>从价税</b>（如 3.4%）直接相加即可，填不填单价都算得出。<br>
+          <b>从量税</b>（如 0.9¢/只）本身不是百分比，要除以<b>单位货值</b>才能折成等效从价——
+          而马按头、电池按公斤，"每单位多少钱"根本不是一回事。<b>全表共用一个单价，
+          等于拿电池的公斤价去折算马的头价</b>，算出来的数是错的，所以单价按行填。<br>
+          <b>数量要按表里的「计量单位」数</b>：那一列是官方税则的计量单位（kg / No. / doz.），
+          税就是按它征的。按"件"填一个按 kg 计税的商品，钱会全错。<br>
+          复合税（从价 + 从量）两部分同时折算；分部件计税的复杂税率无法折算，标"需人工"。
           估算仅供参考，正式申报以海关裁定为准。
         </div>
       </details>
-      <textarea id="estCodes" placeholder="粘贴 HTS 编码，多个用逗号/换行分隔：&#10;8507.60.00&#10;0101.21.00"></textarea>
+      <textarea id="estCodes" placeholder="粘贴 HTS 编码，多个用逗号/换行分隔：&#10;8507.60.00&#10;0105.11.00"></textarea>
+      <div class="quick-tags" style="margin-top:10px;">
+        <span class="qt-label">或</span>
+        <button type="button" onclick="document.getElementById('estFile').click()">📄 导入申报底单</button>
+        <button type="button" onclick="window.location='/api/estimate/template'">⬇ 下载模板</button>
+        <span class="qt-label">支持 xlsx / csv，自动认「编码 / 数量 / 单价」列</span>
+      </div>
+      <input type="file" id="estFile" accept=".xlsx,.xls,.csv">
       <div class="inline-form" style="margin-top:12px;">
         <span class="label">原产地：</span>
-        <select id="estOrigin" class="narrow">
+        <select id="estOrigin" class="narrow" onchange="doEstimate()">
           <option value="CN">中国（含 301）</option>
           <option value="VN">越南（MFN，无 301）</option>
           <option value="OTHER">其他国家（MFN，无 301）</option>
         </select>
-        <span class="label">单位货值 USD：</span>
-        <input type="number" id="estUnitValue" class="narrow" placeholder="如 5.0（美元/公斤或美元/件）">
-        <button class="btn-primary" id="btnEstimate" onclick="doEstimate()">估算总税负</button>
+        <button class="btn-primary" id="btnEstimate" onclick="parseEstCodes()">生成申报清单</button>
       </div>
       <div class="error-bar" id="estError"></div>
     </div>
+
+    <div class="card tips-card">
+      <h2>
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+        金额怎么看
+      </h2>
+      <ul>
+        <li><b>货值 = 数量 × 单价</b>，<b>预估税费 = 货值 × 综合税负%</b>。改动数量或单价会自动重算，不用再点按钮。</li>
+        <li><b>「计量单位」是官方税则的单位</b>，不是你的包装单位。按它数数量，税才对得上。</li>
+        <li><b>标「需折算」的行</b>是从量税缺单价——填上单价才出得来。它<b>不会</b>按 0 混进合计。</li>
+        <li><b>合计会注明漏了几行</b>：给一个看着完整、实际漏了几行需人工的总数，比不给更危险。</li>
+        <li>底单列名不标准也能导（税则号列 / 申报数量 / 成交单价都认得），认不出的行会单独列出来。</li>
+      </ul>
+    </div>
+   </div>
+
     <div class="card" id="estResultCard" style="display:none;">
-      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></span> 估算结果 <span id="estResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <h2>
+        <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></span>
+        申报清单与税费
+        <span id="estResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
+      </h2>
+      <div id="estNotes"></div>
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:10%"><col style="width:7%"><col style="width:14%">
-            <col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:7%"><col style="width:26%">
+            <col style="width:11%"><col style="width:17%"><col style="width:8%">
+            <col style="width:9%"><col style="width:9%"><col style="width:10%">
+            <col style="width:12%"><col style="width:11%"><col style="width:9%"><col style="width:4%">
           </colgroup>
           <thead>
             <tr>
-              <th>输入编码</th><th>税率类型</th><th>一般税率</th>
-              <th>基础等效从价</th><th>301加征</th><th>FLIP301</th><th>总税负估算</th><th>原产地</th><th>备注</th>
+              <th>编码</th><th>商品描述</th>
+              <th title="官方税则的计量单位，数量请按此单位填">计量单位</th>
+              <th>数量</th><th>单价 USD</th><th>货值 USD</th>
+              <th>综合税负</th><th>预估税费 USD</th><th>税率构成</th><th></th>
             </tr>
           </thead>
           <tbody id="estBody"></tbody>
+          <tfoot id="estFoot"></tfoot>
         </table>
       </div>
       <div class="actions">
         <button class="btn-export" id="btnEstExport" onclick="exportGeneric('est')">导出 CSV</button>
+        <span class="hint" style="margin:0;">改数量或单价即自动重算；从量税缺单价的行不计入合计</span>
       </div>
     </div>
   </div>
@@ -1727,6 +1782,12 @@ document.getElementById('searchKeyword').addEventListener('keydown', e => {
 });
 document.getElementById('cmpCodes').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); doCompareManual(); }
+});
+
+// 估算页的底单导入
+document.getElementById('estFile').addEventListener('change', e => {
+  importEstFile(e.target.files[0]);
+  e.target.value = '';          // 清空，否则连续导入同一个文件不触发 change
 });
 
 const dz = document.getElementById('dropzone');
@@ -3046,59 +3107,157 @@ function coreFmt(c) {
 }
 
 /* ================= 成本估算 ================= */
-async function doEstimate() {
-  const btn = document.getElementById('btnEstimate');
-  const text = document.getElementById('estCodes').value.trim();
+/* ---------- 成本估算：可编辑的申报清单 ----------
+   估算不再是"一次性算完就完"：从量税要按行填单价才算得出，而单价是用户一行行
+   敲进来的，所以清单本身要能改。estItems 是清单（用户编辑的那份），
+   currentEstRows 是算完回来的那份，表格按 estItems 的行序渲染、用 estRows 补数值。 */
+let estItems = [];
+
+function estErr(msg) {
   const err = document.getElementById('estError');
-  err.classList.remove('show');
-  if (!text) {
-    err.textContent = '请输入 HTS 编码';
-    err.classList.add('show');
+  err.textContent = msg || '';
+  err.classList.toggle('show', !!msg);
+}
+
+// 粘贴的编码 → 清单行。已在清单里的编码保留用户填过的数量与单价，
+// 否则每改一次文本框，前面辛苦填的数字就全没了。
+function parseEstCodes() {
+  const text = document.getElementById('estCodes').value.trim();
+  if (!text) { estErr('请输入 HTS 编码，或导入申报底单'); return; }
+  // 分隔符只认点和连字符，**不能**把 \s 放进来：那会让"8507.60.00\n0105.11.00"
+  // 里的换行被当成编码内的分隔符，两行粘成一个 10 位码，三行输入只出两行。
+  const codes = (text.match(/\b\d{4}[.\-]?\d{2}[.\-]?\d{2}(?:[.\-]?\d{2})?\b/g) || [])
+    .map(c => c.replace(/\D/g, '')).filter(c => c.length === 8 || c.length === 10);
+  if (!codes.length) { estErr('未解析到 HTS 编码（需 8 位或 10 位，如 8507.60.00）'); return; }
+  const prev = new Map(estItems.map(it => [String(it.code).replace(/\D/g, ''), it]));
+  estItems = codes.map(c => prev.get(c) || { code: c, qty: null, unit_value: null });
+  estErr('');
+  doEstimate();
+}
+
+async function importEstFile(file) {
+  if (!file) return;
+  estErr('');
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const resp = await fetch('/api/estimate/import', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || '导入失败');
+    estItems = data.items;
+    document.getElementById('estCodes').value =
+      data.items.map(i => coreFmt(i.code)).join('\n');
+    const cols = data.matched_columns || {};
+    // 认了哪几列必须说出来：认错列会让整张表的钱都错，而用户是看不见解析过程的
+    let note = `<div class="info-bar">已从 <b>${esc(data.source)}</b> 导入 ${data.count} 行`
+      + `｜认列：编码=<b>${esc(cols.code || '—')}</b>`
+      + `，数量=<b>${esc(cols.qty || '未找到')}</b>`
+      + `，单价=<b>${esc(cols.unit_value || '未找到')}</b></div>`;
+    if (data.skipped_count) {
+      note += `<div class="error-bar show">⚠ ${data.skipped_count} 行未解析到编码，已跳过：`
+        + data.skipped.map(esc).join('、') + '</div>';
+    }
+    window._estImportNote = note;
+    doEstimate();
+  } catch (e) {
+    estErr('导入失败：' + e.message);
+  }
+}
+
+let estTimer = null;
+// 改一个数字就发一次请求太吵，但本地算一行只要 0.04ms，300ms 防抖足够了
+function scheduleEstimate() {
+  clearTimeout(estTimer);
+  estTimer = setTimeout(doEstimate, 300);
+}
+
+function setEstCell(idx, field, value) {
+  if (!estItems[idx]) return;
+  const v = parseFloat(String(value).replace(/,/g, ''));
+  estItems[idx][field] = (isFinite(v) && v > 0) ? v : null;
+  scheduleEstimate();
+}
+
+function removeEstRow(idx) {
+  estItems.splice(idx, 1);
+  if (!estItems.length) {
+    document.getElementById('estResultCard').style.display = 'none';
+    currentEstRows = [];
     return;
   }
+  doEstimate();
+}
+
+async function doEstimate() {
+  if (!estItems.length) return;
+  const btn = document.getElementById('btnEstimate');
   setLoading(btn, true);
   try {
-    const body = { text, origin: document.getElementById('estOrigin').value || 'CN' };
-    const unitValue = parseFloat(document.getElementById('estUnitValue').value);
-    if (unitValue) body.unit_value = unitValue;  // 空值省略，避免 null 触发校验错误
-    const data = await apiPost('/api/estimate', body);
-    if (!Array.isArray(data.results)) throw new Error('服务端响应缺少 results 字段：' + JSON.stringify(data).slice(0, 120));
+    const data = await apiPost('/api/estimate', {
+      items: estItems,
+      origin: document.getElementById('estOrigin').value || 'CN',
+    });
+    if (!Array.isArray(data.results)) throw new Error('服务端响应缺少 results 字段');
     currentEstRows = data.results;
     renderEstimate(data);
   } catch (e) {
-    err.textContent = '估算失败：' + e.message;
-    err.classList.add('show');
+    estErr('估算失败：' + e.message);
   } finally {
     setLoading(btn, false);
   }
 }
 
+const money = v => (v === null || v === undefined)
+  ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function renderEstimate(data) {
   const card = document.getElementById('estResultCard');
   card.style.display = 'block';
+  const s = data.summary || {};
   document.getElementById('estResultInfo').textContent =
-    data.unit_value ? `单位货值 $${data.unit_value}/单位（从量税已按此折算）` : '未提供单位货值（从量税显示"需折算"）';
+    `${s.行数 || 0} 行，其中 ${s.计价行数 || 0} 行已计价`;
+  document.getElementById('estNotes').innerHTML = window._estImportNote || '';
+  window._estImportNote = '';
+
   const body = document.getElementById('estBody');
-  body.innerHTML = '';
-  data.results.forEach(r => {
-    const tr = document.createElement('tr');
-    if (isHit(r)) tr.className = 'row-hit';
-    tr.innerHTML = `
+  body.innerHTML = data.results.map((r, i) => {
+    const hit = isHit(r) ? ' class="row-hit"' : '';
+    // 税率构成拆开写，用户要能看出这笔钱是哪几项加出来的
+    const parts = [`基础 ${esc(r['基础等效从价'])}`];
+    if (r['301加征'] && r['301加征'] !== '0%') parts.push(`301 ${esc(r['301加征'])}`);
+    if (r['FLIP 301加征']) parts.push(`FLIP ${esc(r['FLIP 301加征'])}`);
+    const pctTxt = r['总税负数值'] === null
+      ? `<span style="color:var(--warn)">需折算</span>` : `${r['总税负数值']}%`;
+    return `<tr${hit}>
       <td class="code" data-full="${esc(r['输入编码'])}">${esc(r['输入编码'])}</td>
-      <td>${esc(r['税率类型'])}</td>
-      <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
-      <td>${esc(r['基础等效从价'])}</td>
-      <td class="add-pct" data-full="${esc(r['301加征'] || '')}">${esc(r['301加征'] || '—')}</td>
-      <td class="add-pct${String(r['FLIP 301加征'] || '').includes('范围存疑') ? ' scope-suspect' : ''}" data-full="${esc(r['FLIP 301加征'] || '')}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
-      <td><b style="color:var(--primary-dark)">${esc(r['总税负估算'])}</b></td>
-      <td>${esc(r['原产地'] || '')}</td>
-      <td class="note" data-full="${esc(r['备注'])}"><div class="note-in">${esc(r['备注'])}</div></td>`;
-    body.appendChild(tr);
-  });
-  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      <td class="desc" data-full="${esc(r['商品描述'] || '')}"><div class="note-in">${esc(r['商品描述'] || '')}</div></td>
+      <td style="font-size:12px;color:var(--muted);">${esc(r['计量单位'] || '—')}</td>
+      <td><input type="number" class="cell-in" value="${r['数量'] ?? ''}" placeholder="数量"
+                 oninput="setEstCell(${i}, 'qty', this.value)"></td>
+      <td><input type="number" class="cell-in" value="${r['单位货值'] ?? ''}" placeholder="单价"
+                 oninput="setEstCell(${i}, 'unit_value', this.value)"></td>
+      <td class="num">${money(r['货值'])}</td>
+      <td><b style="color:var(--primary-dark)">${pctTxt}</b></td>
+      <td class="num"><b>${money(r['预估税费'])}</b></td>
+      <td style="font-size:11.5px;color:var(--muted);line-height:1.4;">${parts.join('<br>')}</td>
+      <td><button class="src-btn" title="删除本行" onclick="removeEstRow(${i})">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  // 合计只累加算得出的行，并把漏掉的几行写在标签里——
+  // 一个看着完整、实际少算几行的总数，比不给总数更危险。
+  const foot = document.getElementById('estFoot');
+  const missing = (s.需人工行数 || 0) + (s.未填行数 || 0);
+  foot.innerHTML = `<tr class="est-total">
+    <td colspan="5">合计${missing ? `（不含 ${missing} 行）` : ''}</td>
+    <td class="num">${money(s.货值合计)}</td>
+    <td><b>${s.综合税负 != null ? s.综合税负 + '%' : '—'}</b></td>
+    <td class="num"><b>${money(s.税费合计)}</b></td>
+    <td colspan="2">${missing
+      ? `<span style="color:var(--warn);font-size:11.5px;">${esc(s.说明 || '')}</span>` : ''}</td>
+  </tr>`;
 }
 
-/* ================= 通用导出（搜索/估算） ================= */
 async function exportGeneric(kind) {
   const rows = { search: currentSearchRows, est: currentEstRows, list: currentListRows,
                  changes: currentChangeRows }[kind];

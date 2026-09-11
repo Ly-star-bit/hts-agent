@@ -101,6 +101,14 @@ SOURCE_FILES = {
         "mime": "application/pdf",
         "desc": "FLIP 301 强迫劳动关税：60 经济体税率表 + ANNEX II 豁免清单（含范围限制）",
     },
+    # 上一版加了 301 排除判定，但只把 ch99 补进了 /api/info，没进这份清单——
+    # 于是"数据来源"弹窗里少了一份实际参与判定的官方文件。
+    "ch99_pdf": {
+        "path": "Chapter 99_2026HTSRev18.pdf",
+        "label": "HTS 第 99 章全文",
+        "mime": "application/pdf",
+        "desc": "301 排除清单（U.S. note 20）条目正文与页码",
+    },
 }
 
 
@@ -319,9 +327,15 @@ class SearchRequest(BaseModel):
 
 
 class EstimateRequest(BaseModel):
-    text: str = Field(default="", description="包含 HTS 编码的文本（与 codes 二选一）")
-    codes: list = Field(default_factory=list, description="HTS 编码列表（与 text 二选一）")
-    unit_value: Optional[float] = Field(default=None, description="单位货值 USD，折算从量税（可选）")
+    text: str = Field(default="", description="包含 HTS 编码的文本（与 codes / items 三选一）")
+    codes: list = Field(default_factory=list, description="HTS 编码列表（与 text / items 三选一）")
+    # items 是逐行估算的入口：每行自带单价与数量。
+    # 单位货值只用来折算从量税——马按头、电池按公斤，"每单位多少钱"根本不是一回事，
+    # 全表共用一个单价等于拿电池的公斤价去折算马的头价。text / codes + 全局
+    # unit_value 的老用法保留不动（命令行与既有调用方还在用）。
+    items: list = Field(default_factory=list,
+                        description="逐行估算：[{'code': 编码, 'qty': 数量, 'unit_value': 单位货值}]")
+    unit_value: Optional[float] = Field(default=None, description="单位货值 USD，折算从量税（items 未给时作为全行默认）")
     origin: Optional[str] = Field(default="CN", description="原产地：CN（中国，默认）/ VN（越南）/ 其他国家代码")
 
 
@@ -677,6 +691,17 @@ def api_estimate(req: EstimateRequest):
         import rate
 
         db = get_db()
+        if req.items:
+            # 逐行：每行用自己的单价折算，并算出该行货值与预估税费
+            items = [dict(it) if isinstance(it, dict) else {"code": it} for it in req.items]
+            for it in items:
+                if it.get("unit_value") in (None, "") and req.unit_value:
+                    it["unit_value"] = req.unit_value    # 未逐行填时沿用全局值
+            out = rate.estimate_lines(db, items, origin=req.origin)
+            if not out["rows"]:
+                raise HTTPException(status_code=400, detail="未解析到任何 HTS 编码")
+            return {"results": out["rows"], "count": len(out["rows"]),
+                    "summary": out["summary"], "origin": req.origin}
         codes = req.codes or []
         if req.text and not codes:
             codes = core.extract_codes(req.text)
@@ -689,6 +714,111 @@ def api_estimate(req: EstimateRequest):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"估算服务端异常：{e}")
+
+
+# 导入表头匹配：关务手里的底单列名五花八门（编码/HTS/税号/Code…），
+# 认死一个列名等于逼用户改表。用正则各认一组同义写法，认不到再报错说清楚缺哪列。
+# 实测：报关底单的编码列常写作「税则号列」，只认"税号"两个连着的字会整表导不进；
+# 而"序号"里也有个"号"，所以不能放宽到裸的"号"字。
+_IMPORT_COLS = {
+    "code": re.compile(r"(编\s*码|编\s*号|税\s*则\s*号|税\s*号|商\s*品\s*码|hts|code)", re.I),
+    "qty": re.compile(r"(数\s*量|件\s*数|qty|quantity|pcs)", re.I),
+    "unit_value": re.compile(r"(单\s*价|单位货值|货\s*值|单\s*值|unit.?value|price)", re.I),
+}
+
+
+def _match_import_cols(columns):
+    """表头 → {字段: 列名}。同一列被多个字段匹中时，先到先得。"""
+    taken, out = set(), {}
+    for field, pat in _IMPORT_COLS.items():
+        for col in columns:
+            if col in taken:
+                continue
+            if pat.search(str(col)):
+                out[field] = col
+                taken.add(col)
+                break
+    return out
+
+
+@app.post("/api/estimate/import")
+async def api_estimate_import(file: UploadFile = File(...)):
+    """
+    导入申报底单（xlsx/csv）→ 逐行估算的 items。
+
+    只解析不计算：解析结果回前端填进表格，用户核对改动后再点估算。
+    直接算完返回等于把"我们认成了什么"藏起来——列认错了也看不出来。
+    """
+    filename = file.filename or "未命名文件"
+    content = await file.read()
+    if len(content) > MAX_UPLOAD:
+        raise HTTPException(status_code=400, detail=f"文件超过 {MAX_UPLOAD // 1048576}MB 限制")
+    ext = os.path.splitext(filename)[1].lower()
+    try:
+        if ext in (".xlsx", ".xls"):
+            df = pd.read_excel(io.BytesIO(content), sheet_name=0, dtype=str)
+        elif ext == ".csv":
+            df = pd.read_csv(io.StringIO(content.decode("utf-8-sig", errors="replace")), dtype=str)
+        else:
+            raise HTTPException(status_code=400, detail="仅支持 .xlsx / .xls / .csv")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"文件解析失败：{e}")
+
+    cols = _match_import_cols(list(df.columns))
+    if "code" not in cols:
+        raise HTTPException(
+            status_code=400,
+            detail=f"没找到编码列。表头需含「编码 / 税号 / HTS / code」其中之一，"
+                   f"当前表头：{'、'.join(str(c) for c in list(df.columns)[:8])}")
+
+    db = get_db()
+    items, skipped = [], []
+    for _, row in df.iterrows():
+        raw = str(row.get(cols["code"]) or "").strip()
+        if not raw or raw.lower() == "nan":
+            continue
+        codes = core.extract_codes(raw)
+        if not codes:
+            skipped.append(raw[:40])
+            continue
+
+        def _num(field):
+            if field not in cols:
+                return None
+            v = str(row.get(cols[field]) or "").strip().replace(",", "")
+            try:
+                f = float(v)
+            except ValueError:
+                return None
+            return f if f > 0 else None
+
+        items.append({"code": codes[0], "qty": _num("qty"), "unit_value": _num("unit_value")})
+
+    if not items:
+        raise HTTPException(status_code=400, detail=f"文件 {filename} 中未解析到 HTS 编码")
+    return {"items": items, "count": len(items), "source": filename,
+            "matched_columns": {k: str(v) for k, v in cols.items()},
+            # 认不出的行要回报：静默丢行会让导出的清单比底单少几条，且没人发现
+            "skipped": skipped[:20], "skipped_count": len(skipped)}
+
+
+@app.get("/api/estimate/template")
+def api_estimate_template():
+    """下载逐行估算的导入模板（3 列 + 两行示例）"""
+    rows = [
+        {"HTS编码": "8507.60.00", "数量": 1000, "单位货值USD": 20},
+        {"HTS编码": "0105.11.00", "数量": 500, "单位货值USD": 2},
+    ]
+    buf = io.BytesIO()
+    pd.DataFrame(_defuse_rows(rows)).to_excel(buf, index=False, sheet_name="申报清单")
+    buf.seek(0)
+    fname = "hts_估算导入模板.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}"})
 
 
 @app.get("/api/changes")

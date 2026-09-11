@@ -155,6 +155,117 @@ class TestCalcTotal(unittest.TestCase):
         self.assertIn("%", r["总税负估算"])
 
 
+class TestEstimateLines(unittest.TestCase):
+    """逐行估算：每行自带单价与数量，算出实际税费"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_units_of(self):
+        # 单位写在 10 位统计行上，8 位要能继承到
+        self.assertIn("No.", rate.units_of(self.db, "01051100"))   # 活鸡按只
+        self.assertIn("kg", rate.units_of(self.db, "85076000"))    # 锂电池按公斤
+        # 带点的写法与 10 位写法都要认
+        self.assertEqual(rate.units_of(self.db, "0105.11.00"),
+                         rate.units_of(self.db, "01051100"))
+
+    def test_percent_row_duty_matches_value_times_rate(self):
+        """纯从价行：税费 = 货值 × 总税负%"""
+        out = rate.estimate_lines(
+            self.db, [{"code": "8507.60.00", "qty": 100, "unit_value": 20}], origin="CN")
+        r = out["rows"][0]
+        self.assertEqual(r["货值"], 2000.0)
+        self.assertAlmostEqual(r["预估税费"], round(2000.0 * r["总税负数值"] / 100, 2), places=2)
+        self.assertEqual(out["summary"]["需人工行数"], 0)
+
+    def test_specific_row_cross_check_against_duty_per_unit(self):
+        """
+        从量税行的交叉验算：0105.11.00 是 0.9¢/只。
+
+        先用等效从价算出税费，再直接用"每只税额 × 只数"算一遍——两者必须对得上。
+        只验"货值 × 百分比"等于自己算的百分比是循环论证，证明不了折算本身没错。
+        """
+        qty, uv = 500, 2.0
+        out = rate.estimate_lines(
+            self.db, [{"code": "01051100", "qty": qty, "unit_value": uv}], origin="CN")
+        r = out["rows"][0]
+        self.assertEqual(r["税率类型"], "从量")
+        p = rate.parse_rate(r["一般税率"])
+        base_duty_per_unit = sum(x["usd"] for x in p["specific"])   # 0.009 美元/只
+        base_duty = base_duty_per_unit * qty
+        # 预估税费里还含 301/FLIP 加征，减掉后应等于按只数直接算的基础从量税
+        add_pct = r["301加征数值"] + r["FLIP 301加征数值"]
+        add_duty = r["货值"] * add_pct / 100.0
+        self.assertAlmostEqual(r["预估税费"] - add_duty, base_duty, places=2)
+
+    def test_specific_without_unit_value_is_pending_not_zero(self):
+        """从量税缺单价时不能当 0 混进合计——要在合计说明里点名"""
+        out = rate.estimate_lines(
+            self.db, [{"code": "01051100", "qty": 500}], origin="CN")
+        r = out["rows"][0]
+        self.assertIsNone(r["预估税费"])
+        self.assertIsNone(r["货值"])
+        s = out["summary"]
+        self.assertEqual(s["税费合计"], 0)
+        # 关键：这一行必须被点名，否则合计会显示成一个看着完整的数字
+        self.assertEqual(s["未填行数"], 1)
+        self.assertIn("未填", s["说明"])
+
+    def test_every_row_is_accounted_for(self):
+        """任何一行都必须落进 计价/需人工/未填 三者之一，不能凭空消失"""
+        out = rate.estimate_lines(self.db, [
+            {"code": "8507.60.00", "qty": 10, "unit_value": 20},   # 可计价
+            {"code": "01051100", "qty": 500},                      # 缺单价
+            {"code": "6204.69.45"},                                # 什么都没填
+        ], origin="CN")
+        s = out["summary"]
+        self.assertEqual(s["行数"], 3)
+        self.assertEqual(s["计价行数"] + s["需人工行数"] + s["未填行数"], s["行数"])
+
+    def test_per_row_unit_value_is_independent(self):
+        """
+        同一批里两行用各自的单价折算，互不影响——这正是全局单价做不到的事。
+        活鸡按只 2 美元 与 按只 0.5 美元，等效从价必须不同。
+        """
+        out = rate.estimate_lines(self.db, [
+            {"code": "01051100", "qty": 10, "unit_value": 2.0},
+            {"code": "01051100", "qty": 10, "unit_value": 0.5},
+        ], origin="CN")
+        a, b = out["rows"]
+        self.assertNotEqual(a["总税负数值"], b["总税负数值"])
+        self.assertGreater(b["总税负数值"], a["总税负数值"])   # 单价越低，等效从价越高
+
+    def test_summary_excludes_pending_rows(self):
+        """合计只累加算得出的行，并报出漏了几行"""
+        out = rate.estimate_lines(self.db, [
+            {"code": "8507.60.00", "qty": 10, "unit_value": 20},
+            {"code": "0101.21.00", "qty": 1, "unit_value": 5000},
+        ], origin="CN")
+        s = out["summary"]
+        self.assertEqual(s["行数"], 2)
+        self.assertEqual(s["计价行数"] + s["需人工行数"], 2)
+        if s["需人工行数"]:
+            self.assertIn("需人工", s["说明"])
+
+    def test_blank_and_zero_inputs_are_ignored(self):
+        """空串 / 0 / 负数一律当没填，不能被 float('') 炸掉或当成有效单价"""
+        out = rate.estimate_lines(self.db, [
+            {"code": "8507.60.00", "qty": "", "unit_value": 0},
+            {"code": "8507.60.00", "qty": -5, "unit_value": "abc"},
+        ], origin="CN")
+        for r in out["rows"]:
+            self.assertIsNone(r["数量"])
+            self.assertIsNone(r["单位货值"])
+            self.assertIsNone(r["货值"])
+
+    def test_plain_string_items_accepted(self):
+        """只给编码字符串也要能用——粘贴一列编码是最常见的起手式"""
+        out = rate.estimate_lines(self.db, ["8507.60.00", "6204.69.45"], origin="CN")
+        self.assertEqual(len(out["rows"]), 2)
+        self.assertEqual(out["summary"]["计价行数"], 0)
+
+
 class TestSearch(unittest.TestCase):
     """关键词搜索与排序"""
 

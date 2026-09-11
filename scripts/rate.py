@@ -293,6 +293,110 @@ def _fmt_av(av):
 
 # ---------- 关键词搜索 ----------
 
+# ---------- 逐行估算（数量 × 单价 → 实际税费） ----------
+
+def units_of(db, code):
+    """
+    该编码的计量单位，如 ['No.', 'kg']。
+
+    官方把单位写在 10 位统计行上，8 位行基本是空的（6857 条里 6839 条空），
+    所以 8 位的单位是 build_db 从子目继承来的。10 位先查自己（只存了与父级
+    不同的那些），查不到回落到 8 位前缀。
+    """
+    c = re.sub(r"\D", "", str(code or ""))
+    raw = ""
+    if len(c) >= 10:
+        raw = (db.get("units_10") or {}).get(c[:10], "")
+    if not raw:
+        raw = (db.get("units_8") or {}).get(c[:8], "")
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw)
+    except Exception:
+        return [raw]
+    return [str(x).strip() for x in v if str(x).strip()]
+
+
+def estimate_lines(db, items, origin="CN"):
+    """
+    逐行估算：每行自带单位货值与数量，算出该行货值与预估税费，最后汇总。
+
+    items: [{"code": 编码, "unit_value": 单位货值 USD|None, "qty": 数量|None}]
+
+    **为什么单价要逐行给**：单位货值只用来折算从量税——马按头、电池按公斤，
+    两者的"每单位多少钱"根本不是一回事。全表共用一个单价，等于拿电池的
+    公斤价去折算马的头价，算出来的等效从价是错的。
+
+    **数量的单位必须和单价一致**：从量税折算走的是 每单位税额 ÷ 单位货值，
+    所以 unit_value 是"每 ‹税则计量单位› 多少美元"；qty 也必须按同一个单位数，
+    货值 = qty × unit_value 才成立。计量单位随行返回（计量单位 字段），
+    界面要显示出来，否则用户按"件"填了一个按 kg 计税的商品，钱就全错了。
+
+    返回 {"rows": [...], "summary": {...}}。summary 里的合计只累加能算出来的行，
+    并单独报出有几行需人工——给一个看起来完整、实际漏了几行的总数比不给更危险。
+    """
+    rows = []
+    for it in (items or []):
+        if isinstance(it, str):
+            it = {"code": it}
+        code = str((it or {}).get("code") or "").strip()
+        if not code:
+            continue
+        uv = _pos_num((it or {}).get("unit_value"))
+        qty = _pos_num((it or {}).get("qty"))
+        r = calc_total(db, code, unit_value=uv, origin=origin)
+        r["计量单位"] = " / ".join(units_of(db, code)) or "—"
+        r["数量"] = qty
+        r["单位货值"] = uv
+        total_pct = _total_num(r.get("总税负估算"))
+        line_value = round(qty * uv, 2) if (qty is not None and uv is not None) else None
+        r["货值"] = line_value
+        r["预估税费"] = (round(line_value * total_pct / 100.0, 2)
+                     if (line_value is not None and total_pct is not None) else None)
+        r["总税负数值"] = total_pct
+        rows.append(r)
+
+    priced = [r for r in rows if r["预估税费"] is not None]
+    # 合计漏掉的行分两种，原因不同、给用户的动作也不同，必须分开报：
+    #   需人工 —— 数量单价都填了，是税率本身折算不出来（复杂税、分部件计税），
+    #             用户再怎么填也没用，只能人工算。
+    #   未填   —— 数量或单价还空着，填上就有数。
+    # 早先只报了前者，于是"填了数量没填单价"的行被静默排除，
+    # 而合计仍显示成一个完整数字——正是最容易让人多报少报的那种漏。
+    pending = [r for r in rows if r["预估税费"] is None and r["货值"] is not None]
+    unfilled = [r for r in rows if r["货值"] is None]
+    value_sum = round(sum(r["货值"] for r in priced), 2)
+    duty_sum = round(sum(r["预估税费"] for r in priced), 2)
+    why = []
+    if pending:
+        why.append(f"{len(pending)} 行需人工（税率无法折算）")
+    if unfilled:
+        why.append(f"{len(unfilled)} 行未填数量或单价")
+    return {
+        "rows": rows,
+        "summary": {
+            "行数": len(rows),
+            "计价行数": len(priced),
+            "需人工行数": len(pending),
+            "未填行数": len(unfilled),
+            "货值合计": value_sum,
+            "税费合计": duty_sum,
+            "综合税负": (round(duty_sum / value_sum * 100.0, 2) if value_sum else None),
+            "说明": ("合计不含 " + "、".join(why)) if why else "",
+        },
+    }
+
+
+def _pos_num(v):
+    """把前端传来的空串 / None / 0 / 负数统一收成 None——它们对折算都无意义。"""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f > 0 else None
+
+
 _index_cache = None
 
 

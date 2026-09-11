@@ -361,9 +361,15 @@ class TestSourceAPI(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         data = r.json()
         keys = {f["key"] for f in data["files"]}
-        self.assertEqual(keys, {"htsdata", "ustr_pdf", "flip_frn"})
+        # ch99_pdf 是 301 排除判定的来源，也要列进"数据来源"弹窗——
+        # 参与判定的官方文件全部在册，是这个接口存在的意义
+        self.assertEqual(keys, {"htsdata", "ustr_pdf", "flip_frn", "ch99_pdf"})
         for f in data["files"]:
-            self.assertTrue(f["exists"], f"{f['key']} 源文件应存在")
+            # Chapter 99 PDF 有 13MB，按 .gitignore 不入库，新克隆的仓库里没有这份，
+            # 所以只要求接口如实报告存在与否，不要求文件一定在
+            if f["key"] != "ch99_pdf":
+                self.assertTrue(f["exists"], f"{f['key']} 源文件应存在")
+            self.assertIn("exists", f)
         self.assertIn("built_at", data["meta"])
 
     def test_source_pdf_inline(self):

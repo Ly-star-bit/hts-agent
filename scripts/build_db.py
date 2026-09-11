@@ -12,6 +12,7 @@ build_db.py —— 构建 301 关税本地查询数据库
 用法：python scripts/build_db.py
 """
 import csv
+from collections import Counter
 import json
 import os
 import re
@@ -57,6 +58,10 @@ def parse_hts_csv():
     add_duty = {}
     c99_rates = {}
     stack = []          # [(indent, desc)]，维护当前所在的层级路径
+    # 计量单位（Unit of Quantity）：8 位行上基本是空的（6857 条里 6839 条空），
+    # 单位写在 10 位统计行上。估算页要按数量算钱，必须告诉用户"这行该按什么计数"，
+    # 所以 8 位的单位从它的 10 位子目继承（取出现最多的那个）。
+    units_10, units_by_8 = {}, {}
     with open(HTS_CSV, encoding="utf-8-sig", newline="") as f:
         reader = csv.reader(f)
         next(reader)  # 跳过表头
@@ -83,6 +88,7 @@ def parse_hts_csv():
             if not raw:
                 continue        # 纯结构节点：已入栈供后代取用，本身无编码无税率
             n = norm(raw)
+            units = row[3].strip() if len(row) > 3 else ""
             general = row[4].strip() if len(row) > 4 else ""
             special = row[5].strip() if len(row) > 5 else ""
             col2 = row[6].strip() if len(row) > 6 else ""
@@ -93,8 +99,13 @@ def parse_hts_csv():
                 rates_8[n] = entry
                 if add:
                     add_duty.setdefault(n, add)
+                if units:
+                    units_10[n] = units      # 少数 8 位行自带单位（全表仅 18 条）
             elif len(n) == 10:
                 desc_10[n] = desc
+                if units:
+                    units_10[n] = units
+                    units_by_8.setdefault(n[:8], []).append(units)
                 if add:
                     add_duty.setdefault(n, add)
                 # 部分 8 位子目在官方文件中只以 10 位形式出现（如 0203.29.20.00），
@@ -110,7 +121,17 @@ def parse_hts_csv():
     node_idx = {s: i for i, s in enumerate(path_nodes)}
     for e in rates_8.values():
         e["path"] = [node_idx[d] for d in e["path"]]
-    return rates_8, desc_10, add_duty, c99_rates, path_nodes
+
+    # 8 位单位 = 子目下最常见的那个 10 位单位
+    units_8 = {}
+    for c8, lst in units_by_8.items():
+        units_8[c8] = Counter(lst).most_common(1)[0][0]
+    units_8.update({k: v for k, v in units_10.items() if len(k) == 8})
+    # 10 位只留"和 8 位父级不一致"的那些——同一子目下绝大多数 10 位单位相同，
+    # 全存一遍会给库白加几百 KB。查不到就回落到 8 位。
+    units_10 = {k: v for k, v in units_10.items()
+                if len(k) == 10 and units_8.get(k[:8]) != v}
+    return rates_8, desc_10, add_duty, c99_rates, path_nodes, units_8, units_10
 
 
 def parse_ustr_pdf():
@@ -236,7 +257,8 @@ def sanity_check(counts):
 def build():
     os.makedirs(DATA_DIR, exist_ok=True)
     print("① 解析 htsdata.csv ...")
-    rates_8, desc_10, add_duty, c99_rates, path_nodes = parse_hts_csv()
+    (rates_8, desc_10, add_duty, c99_rates, path_nodes,
+     units_8, units_10) = parse_hts_csv()
     print(f"   8位子目: {len(rates_8)} | 10位描述: {len(desc_10)} | 附加税行: {len(add_duty)} "
           f"| 9903子目: {len(c99_rates)} | 归类路径节点: {len(path_nodes)}")
 
@@ -294,6 +316,10 @@ def build():
         "rates_8": rates_8,          # norm8 -> 基础税率/描述（path 为 path_nodes 下标列表）
         "path_nodes": path_nodes,    # 归类路径节点字符串表（供 path 下标引用）
         "desc_10": desc_10,          # norm10 -> 具体描述
+        # 计量单位：估算页按数量算钱时要显示"这行按什么计数"（kg / No. / doz.）。
+        # 8 位由 10 位子目继承；units_10 只存与父级不同的那些，查不到即回落 8 位。
+        "units_8": units_8,
+        "units_10": units_10,
         "add_duty": add_duty,        # norm(8/10) -> 附加关税
         "sec301_map": sec301_map,    # norm8 -> norm(9903.xx)
         "sec301_map_10": sec301_map_10,        # norm10 -> norm(9903.xx)，10 位精确归属
