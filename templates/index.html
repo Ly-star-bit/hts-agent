@@ -303,15 +303,81 @@
     box-shadow: var(--shadow-card);
   }
   .card h2 { font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-  .card h2 .step {
-    width: 22px; height: 22px; border-radius: 50%;
-    background: var(--primary); color: var(--on-primary);
-    font-size: 12px; display: inline-flex; align-items: center; justify-content: center;
-    box-shadow: var(--glow-primary);
+  /* 卡片图标取代原来的蓝底序号「1」：每个页签其实只有一张输入卡，
+     标个 1 却没有 2、3，读者会一直等一个不存在的下一步。换成业务图标。 */
+  .card h2 .card-ico {
+    width: 26px; height: 26px; border-radius: 8px; flex: none;
+    background: var(--primary-bg); color: var(--primary);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: var(--glow);
   }
+  .card h2 .card-ico svg { width: 15px; height: 15px; }
   /* 标题下的一行灰字说明：此前这类说明散在各处用内联 style 写，
      字号从 11 到 13 不等；统一成卡片自己的副标题槽位 */
-  .card h2 + .card-sub { font-size: 12px; color: var(--muted); margin: -6px 0 12px 30px; }
+  /* 不写成 h2 + .card-sub：清单归类页的副标题和 h2 之间隔着一个配置面板，
+     相邻选择器匹配不到，副标题就退回正文字号、看着像第二个标题 */
+  .card-sub { font-size: 12px; color: var(--muted); margin: -6px 0 12px 34px; }
+
+  /* 规则说明折叠：原本每张卡顶上压着三四行小字讲匹配规则、AI 怎么召回、
+     从量税怎么折算。这些第一次读有用、之后每次都在挡路。折起来，
+     标题行只留一句话干什么，要看原理点开。 */
+  .rule-note { margin: -4px 0 12px 34px; }
+  .rule-note > summary {
+    display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+    font-size: 12px; color: var(--primary); list-style: none;
+    padding: 3px 10px; border-radius: 14px; background: var(--primary-bg);
+    border: 1px solid transparent; user-select: none;
+  }
+  .rule-note > summary::-webkit-details-marker { display: none; }
+  .rule-note > summary:hover { border-color: var(--primary); }
+  .rule-note[open] > summary { margin-bottom: 8px; }
+  .rule-note .rule-body {
+    font-size: 12.5px; color: var(--muted); line-height: 1.75;
+    border-left: 2px solid var(--border); padding: 2px 0 2px 12px;
+  }
+  .rule-note .rule-body b { color: var(--text); font-weight: 600; }
+
+  /* 大搜索框：关键词是这一页唯一的主输入，此前和排序/原产地/货值/按钮
+     五个控件平摊在一行里，职责完全不同的字段挤成同一个视觉重量。 */
+  .hero-search { display: flex; gap: 10px; align-items: stretch; }
+  .hero-search input[type="text"] {
+    flex: 1; min-width: 0; padding: 12px 16px; font-size: 15px;
+    border: 1.5px solid var(--border-strong); border-radius: 10px;
+    background: var(--surface); color: var(--text); outline: none; font-family: inherit;
+  }
+  .hero-search input[type="text"]:focus { border-color: var(--primary); box-shadow: var(--focus-ring); }
+  .hero-search .btn-primary { padding: 0 28px; font-size: 15px; border-radius: 10px; }
+
+  /* 常用词：新用户不知道该往框里填什么，给几个一点就走的真实例子 */
+  .quick-tags { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .quick-tags .qt-label { font-size: 12px; color: var(--muted); }
+  .quick-tags button {
+    font-family: inherit; font-size: 12px; padding: 4px 11px; border-radius: 14px;
+    background: var(--surface-2); color: var(--muted);
+    border: 1px solid var(--border); cursor: pointer;
+  }
+  .quick-tags button:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-bg); }
+
+  /* 次级筛选栏：和主搜索框拉开层级——灰底、小字、贴在下面 */
+  .filter-row {
+    display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+    margin-top: 12px; padding: 10px 12px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .filter-row .label { font-size: 12px; color: var(--muted); }
+  .filter-row select, .filter-row input { font-size: 13px; padding: 6px 10px; }
+
+  /* 卡内子页签：「关键词检索」与「多税号比对」是两条并列的路径，
+     后者原先是一行 ▶ 小字链接，基本没人点得到。 */
+  .subtabs { display: inline-flex; gap: 4px; padding: 3px; background: var(--track);
+             border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; }
+  .subtab {
+    border: 1px solid transparent; border-radius: 7px; background: none;
+    padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    color: var(--muted); font-family: inherit;
+  }
+  .subtab.active { background: var(--tab-active-bg); color: var(--tab-active-color); border-color: var(--border); }
+  .subpane { display: none; } .subpane.active { display: block; }
   .card .hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
   /* 卡片标题右侧的小动作按钮（⚙加征开关 / 核对来源之类），此前靠内联 style 压字号 */
   .btn-sm { margin-left: auto; padding: 5px 12px; font-size: 12px; }
@@ -429,6 +495,12 @@
   }
   .stat b { font-size: 18px; margin-left: 4px; }
   .stat.total b { color: var(--primary); }
+  /* 0 变动的指标弱化下去：七个数字一样重时，"这次到底改了什么"要一个个读过去 */
+  .stat.zero { opacity: .45; }
+  .stat.zero b { color: var(--muted); }
+  /* 变动总数是主指标，放大一档 */
+  .stat.total { background: var(--primary-bg); border-color: var(--primary); }
+  .stat.total b { font-size: 22px; }
   .stat.hit b { color: var(--hit); }
   .stat.miss b { color: var(--miss); }
 
@@ -798,10 +870,11 @@
   }
   [data-theme="wukong"] thead th { font-weight: 700; }
 
-  /* 步骤序号做成描金圆章 */
-  [data-theme="wukong"] .card h2 .step {
-    background: linear-gradient(150deg, #f3d68a, #d8a63f 55%, #9a7529);
-    font-family: var(--font-display); font-weight: 700;
+  /* 卡片图标做成描金方章 */
+  [data-theme="wukong"] .card h2 .card-ico {
+    background: linear-gradient(150deg, rgba(243,214,138,.22), rgba(216,166,63,.14));
+    border: 1px solid rgba(216,166,63,.45);
+    color: var(--primary-dark);
   }
 
   /* 表格外框做成"框中框" */
@@ -886,7 +959,7 @@
   <div class="tab-panel active" id="tab-query">
    <div class="grid-2">
     <div class="card">
-      <h2><span class="step">1</span> 输入 HTS 编码
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg></span> 输入 HTS 编码
         <button class="btn-ghost btn-sm" onclick="toggleMeasuresConfig()">⚙ 加征开关</button>
       </h2>
       <div class="card-sub">支持 8 位 / 10 位，空格、换行、逗号混排自动拆分去重</div>
@@ -952,7 +1025,7 @@
    </div>
 
     <div class="card" id="resultCard" style="display:none;">
-      <h2><span class="step">2</span> 查询结果 <span id="sourceInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></span> 查询结果 <span id="sourceInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
       <div class="error-bar" id="skippedBar"></div>
       <div class="stats" id="statsBar"></div>
       <div class="filter-bar" id="filterBar">
@@ -996,7 +1069,7 @@
 
     <!-- 历史记录 -->
     <div class="card" id="historyCard" style="display:none;">
-      <h2><span class="step">★</span> 最近查询 <button class="btn-ghost" style="padding:4px 12px;font-size:12px;" onclick="clearHistory()">清空</button></h2>
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span> 最近查询 <button class="btn-ghost" style="padding:4px 12px;font-size:12px;" onclick="clearHistory()">清空</button></h2>
       <div id="historyList" style="font-size:13px;"></div>
     </div>
   </div>
@@ -1004,43 +1077,77 @@
   <!-- ============ Tab 2：税率搜索 ============ -->
   <div class="tab-panel" id="tab-search">
     <div class="card">
-      <h2><span class="step">1</span> 税率搜索与归类</h2>
-      <p class="hint">输入英文关键词、编码或中文商品描述（lithium battery / 8507 / 锂电池）。
-        先出本地税则库的确定性结果；描述较复杂、词表覆盖不到时，可在结果区点「AI 补充分析」
-        —— AI 会把描述翻译成税则原文用词重新召回，并在候选中论证该选哪个。</p>
-      <div class="inline-form">
-        <input type="text" id="searchKeyword" class="grow" placeholder="输入英文关键词或 HTS 编码，支持多个词（AND 匹配）">
-        <select id="searchSort" class="narrow" title="排序方式">
-          <option value="relevance">相关度优先</option>
-          <option value="total_asc">总税负最低优先</option>
-          <option value="tax_asc">基础税率最低（不含 301）</option>
-          <option value="tax_desc">基础税率最高</option>
-          <option value="code_asc">编码升序</option>
-        </select>
-        <select id="searchOrigin" class="narrow" title="原产地（按总税负排序时用于计算 301/FLIP）">
-          <option value="CN">中国（含 301）</option>
-          <option value="VN">越南</option>
-          <option value="OTHER">其他国家</option>
-        </select>
-        <input type="number" id="searchUnitValue" class="narrow" placeholder="单位货值 USD（可选）" title="折算从量税用，如按公斤计重填每公斤货值">
-        <button class="btn-primary" id="btnSearch" onclick="doSearch()">搜索</button>
+      <h2>
+        <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+        税率搜索与归类
+      </h2>
+      <div class="card-sub">不知道税号时从这里入手：关键词、编码、中文品名都能查</div>
+
+      <!-- 两条并列路径：从零找税号 / 手上已有几个备选做比对。
+           后者原先是一行 ▶ 折叠小字，视觉上像个脚注，实际使用频率不低。 -->
+      <div class="subtabs" role="group" aria-label="检索方式">
+        <button type="button" class="subtab active" data-sub="kw" onclick="switchSubtab('kw')">关键词检索</button>
+        <button type="button" class="subtab" data-sub="cmp" onclick="switchSubtab('cmp')">多税号比对</button>
       </div>
-      <div class="error-bar" id="searchError"></div>
-      <!-- 手上已有备选税号时的直接入口。主路径是搜索后由结果自动报分歧
-           （见 #disputeBox），这里只是次要通道，所以折叠起来不占版面。 -->
-      <details style="margin-top:10px;">
-        <summary class="hint" style="cursor:pointer;margin:0;">已有备选税号？直接输入对比 →</summary>
-        <div class="inline-form" style="margin-top:10px;">
-          <input type="text" id="cmpCodes" class="grow"
+
+      <div class="subpane active" id="sub-kw">
+        <div class="hero-search">
+          <input type="text" id="searchKeyword" placeholder="输入英文关键词、HTS 编码或中文品名，支持多个词（AND 匹配）">
+          <button class="btn-primary" id="btnSearch" onclick="doSearch()">搜索</button>
+        </div>
+        <div class="quick-tags">
+          <span class="qt-label">常用：</span>
+          <button type="button" onclick="quickSearch('lithium battery')">锂电池</button>
+          <button type="button" onclick="quickSearch('8507')">8507 蓄电池</button>
+          <button type="button" onclick="quickSearch('保温杯')">保温杯</button>
+          <button type="button" onclick="quickSearch('jacket')">夹克</button>
+          <button type="button" onclick="quickSearch('音箱')">音箱</button>
+          <button type="button" onclick="quickSearch('太阳能电池')">太阳能电池</button>
+        </div>
+        <div class="filter-row">
+          <span class="label">排序</span>
+          <select id="searchSort" title="排序方式">
+            <option value="relevance">相关度优先</option>
+            <option value="total_asc">总税负最低优先</option>
+            <option value="tax_asc">基础税率最低（不含 301）</option>
+            <option value="tax_desc">基础税率最高</option>
+            <option value="code_asc">编码升序</option>
+          </select>
+          <span class="label">原产地</span>
+          <select id="searchOrigin" title="原产地（按总税负排序时用于计算 301/FLIP）">
+            <option value="CN">中国（含 301）</option>
+            <option value="VN">越南</option>
+            <option value="OTHER">其他国家</option>
+          </select>
+          <span class="label">单位货值 USD</span>
+          <input type="number" id="searchUnitValue" class="narrow" placeholder="可选" title="折算从量税用，如按公斤计重填每公斤货值">
+        </div>
+        <div class="error-bar" id="searchError"></div>
+      </div>
+
+      <div class="subpane" id="sub-cmp">
+        <div class="hero-search">
+          <input type="text" id="cmpCodes"
                  placeholder="输入 2 个以上备选编码，逗号分隔，如：3926.20.60, 6201.40.35">
           <button class="btn-primary" id="btnCompareManual" onclick="doCompareManual()">对比</button>
         </div>
+        <div class="card-sub" style="margin:10px 0 0 0;">逐条列出各编码的判定条件与所需证据，帮你定归哪个</div>
         <div class="error-bar" id="cmpError"></div>
+      </div>
+
+      <details class="rule-note" style="margin-left:0;">
+        <summary>💡 检索规则与 AI 补充分析</summary>
+        <div class="rule-body">
+          先出<b>本地税则库</b>的确定性结果——关键词按 AND 匹配官方英文品名，中文品名走同义词表转译。<br>
+          描述较复杂、词表覆盖不到时，在结果区点<b>「✨ AI 补充分析」</b>：AI 会把你的描述翻译成税则
+          原文用词重新召回，并在候选之间论证该选哪个、需要什么证据。<br>
+          <b>单位货值</b>只影响从量税（如 1¢/kg）的折算——不填，这类税率显示"需折算"而非具体百分比。
+        </div>
       </details>
     </div>
 
     <div class="card" id="searchResultCard" style="display:none;">
-      <h2><span class="step">2</span> 搜索结果 <span id="searchResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></span> 搜索结果 <span id="searchResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
         <button class="btn-ghost" id="btnSearchAi" style="margin-left:auto;padding:5px 14px;font-size:12px;display:none;"
                 onclick="doSearchAssist()" title="用 AI 把商品描述翻译成税则原文用词重新召回，并在候选中论证">
           ✨ AI 补充分析
@@ -1082,8 +1189,17 @@
   <!-- ============ Tab 3：成本估算 ============ -->
   <div class="tab-panel" id="tab-estimate">
     <div class="card">
-      <h2><span class="step">1</span> 总税负成本估算（基础 + 301 + 附加税）</h2>
-      <p class="hint">从量税（如 1¢/kg）需提供单位货值才能折算成百分比；复合税同时列出。估算仅供参考，正式申报以海关裁定为准。</p>
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h5"/></svg></span> 总税负成本估算</h2>
+      <div class="card-sub">基础税率 + 301 + FLIP 301 + 附加税，一次算到综合税负</div>
+      <details class="rule-note">
+        <summary>💡 从量税怎么折算</summary>
+        <div class="rule-body">
+          <b>从价税</b>（如 3.4%）直接相加即可。<b>从量税</b>（如 1¢/kg）本身不是百分比，
+          必须知道<b>单位货值</b>才能折成等效从价——不填就只能标"需人工"。<br>
+          复合税（从价 + 从量）两部分同时列出。分部件计税的复杂税率无法折算。<br>
+          估算仅供参考，正式申报以海关裁定为准。
+        </div>
+      </details>
       <textarea id="estCodes" placeholder="粘贴 HTS 编码，多个用逗号/换行分隔：&#10;8507.60.00&#10;0101.21.00"></textarea>
       <div class="inline-form" style="margin-top:12px;">
         <span class="label">原产地：</span>
@@ -1099,7 +1215,7 @@
       <div class="error-bar" id="estError"></div>
     </div>
     <div class="card" id="estResultCard" style="display:none;">
-      <h2><span class="step">2</span> 估算结果 <span id="estResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></span> 估算结果 <span id="estResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
       <div class="table-wrap">
         <table>
           <colgroup>
@@ -1124,7 +1240,7 @@
   <!-- ============ Tab 4：AI 助手 ============ -->
   <div class="tab-panel" id="tab-ai">
     <div class="card">
-      <h2><span class="step">1</span> 商品清单批量归类
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"/><path d="M18 15.5 19 18l2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1 1-2.5Z"/></svg></span> 商品清单批量归类
         <span id="aiStatus" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
         <button class="btn-ghost" style="margin-left:auto;padding:5px 14px;font-size:12px;" onclick="toggleAiConfig()">⚙ AI 服务配置</button>
       </h2>
@@ -1147,13 +1263,25 @@
         </div>
         <div id="cfgMsg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
       </div>
-      <p class="hint">客户发来一张只有中文品名的清单时用这里：每行一个品名，AI 逐行归类，
-        税率与 301 判定仍由本地税则库计算。<b>清单里已经有 HTS 编码的，用「编码查询」页</b>（不需要 AI，
-        还能追溯到官方数据行号）；<b>单个商品要定编码、要论证，用「搜索与归类」页</b>（有完整候选表、
-        分歧点对照、待确认属性）。AI 归类结果仅供参考，正式报关须人工复核。</p>
+      <div class="card-sub">客户发来一张只有中文品名的清单时用这里，AI 逐行出编码，税率仍由本地税则库算</div>
+      <details class="rule-note">
+        <summary>💡 什么时候该用这一页 / 怎么写才准</summary>
+        <div class="rule-body">
+          <b>清单里已经有 HTS 编码的，用「编码查询」页</b>——不需要 AI，还能追溯到官方数据行号。<br>
+          <b>单个商品要定编码、要论证，用「搜索与归类」页</b>——有完整候选表、分歧点对照、待确认属性。<br>
+          <b>写法决定准确率</b>：只写"马克杯"，AI 分不出陶瓷还是塑料，两者不同章、税率差一截。
+          带上<b>材质 / 规格 / 用途</b>再给它，例如"陶瓷马克杯（骨瓷、家用）"、
+          "便携式蓝牙音箱（内置锂电池）"。<br>
+          AI 归类结果仅供参考，正式报关须人工复核。
+        </div>
+      </details>
       <div id="listAiWarn"></div>
+      <div class="quick-tags" style="margin:0 0 8px;">
+        <span class="qt-label">每行一个品名，最多 30 行。建议带上材质 / 规格 / 用途：</span>
+        <button type="button" onclick="fillListSample()">填入示例</button>
+      </div>
       <textarea id="listInput" style="min-height:150px;"
-        placeholder="每行一个商品品名，最多 30 行：&#10;便携式蓝牙音箱&#10;陶瓷马克杯&#10;PU 涂层梭织连帽夹克&#10;不锈钢保温杯"></textarea>
+        placeholder="便携式蓝牙音箱（内置锂电池）&#10;陶瓷马克杯（骨瓷、家用）&#10;PU 涂层梭织连帽夹克（涤纶面料）&#10;不锈钢保温杯（双层真空、500ml）"></textarea>
       <div class="inline-form" style="margin-top:12px;">
         <span class="label">原产地：</span>
         <select id="listOrigin" class="narrow">
@@ -1168,7 +1296,7 @@
     </div>
 
     <div class="card" id="listResultCard" style="display:none;">
-      <h2><span class="step">2</span> 归类结果
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></span> 归类结果
         <span id="listResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
       </h2>
       <div id="listNotes"></div>
@@ -1198,8 +1326,8 @@
   <!-- ============ Tab 5：数据变动 ============ -->
   <div class="tab-panel" id="tab-changes">
     <div class="card">
-      <h2><span class="step">↻</span> 数据更新变动提醒</h2>
-      <p class="hint">每次官方数据更新并重建数据库（python scripts/build_db.py）后，此处显示与上一版本相比的变动清单，便于发现"你的商品税率变了"。</p>
+      <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></span> 数据更新变动提醒</h2>
+      <div class="card-sub">官方数据更新后，这里列出与上一版本的差异——第一时间发现"客户常查的商品税率变了"</div>
       <div id="changesBody"></div>
     </div>
   </div>
@@ -1281,7 +1409,10 @@ function refreshAiStatus() {
     .then(r => r.json())
     .then(d => {
       const el = document.getElementById('aiStatus');
-      el.textContent = d.enabled ? `✅ ${d.provider} / ${d.model}` : '⚠ ' + d.message;
+      // Provider 类名（OllamaProvider 之类）是实现细节，对用户无意义；
+      // 模型号保留——归类结论出问题时，第一个要问的就是"哪个模型给的"。
+      el.textContent = d.enabled ? `AI 引擎 ${d.model} ✓` : '⚠ ' + d.message;
+      el.title = d.enabled ? `${d.provider} / ${d.model}` : (d.message || '');
       if (!d.enabled) el.style.color = 'var(--warn)';
       else el.style.color = 'var(--miss)';
       aiEnabled = !!d.enabled;
@@ -1450,6 +1581,32 @@ const TAB_HINTS = {
   changes:  '官方数据更新后，这里列出与上一版的差异',
 };
 
+// 搜索页卡内子页签：关键词检索 / 多税号比对
+function switchSubtab(name) {
+  document.querySelectorAll('.subtab').forEach(b => b.classList.toggle('active', b.dataset.sub === name));
+  document.querySelectorAll('.subpane').forEach(p => p.classList.toggle('active', p.id === 'sub-' + name));
+  const f = document.getElementById(name === 'kw' ? 'searchKeyword' : 'cmpCodes');
+  if (f) f.focus();
+}
+
+// 常用词一点就走：新用户对着空搜索框不知道该填什么，给几个真跑得出结果的例子
+function quickSearch(kw) {
+  const el = document.getElementById('searchKeyword');
+  el.value = kw;
+  switchSubtab('kw');
+  doSearch();
+}
+
+// 清单归类的示例：故意带上材质/规格/用途，示范"这样写才准"
+function fillListSample() {
+  document.getElementById('listInput').value =
+    ['便携式蓝牙音箱（内置锂电池）',
+     '陶瓷马克杯（骨瓷、家用）',
+     'PU 涂层梭织连帽夹克（涤纶面料）',
+     '不锈钢保温杯（双层真空、500ml）'].join('\n');
+  document.getElementById('listInput').focus();
+}
+
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
@@ -1464,6 +1621,13 @@ document.getElementById('tabsHint').innerHTML = TAB_HINTS.query;
 // 只绑在输入框上，避免在结果表里误触发。
 document.getElementById('codesInput').addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); doQuery(); }
+});
+// 单行输入框回车即执行——搜索框和比对框都是敲完就想看结果，没人愿意再去点按钮
+document.getElementById('searchKeyword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+});
+document.getElementById('cmpCodes').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); doCompareManual(); }
 });
 
 const dz = document.getElementById('dropzone');
@@ -3011,14 +3175,18 @@ function loadChanges() {
       // 而那四个数本身就被 300 条上限腰斩过，两处都不完整。
       const total = d.total_changes != null ? d.total_changes
         : Object.values(s).reduce((a, b) => a + (b || 0), 0);
+      // 0 变动的指标弱化：七个数字一样重时，"这次到底改了什么"得一个个读过去
+      const z = n => (n ? '' : ' zero');
+      const cell = (label, n, extra = '') =>
+        `<div class="stat${z(n)}"${n && extra ? ` style="color:${extra}"` : ''}>${label}<b>${n || 0}</b></div>`;
       let html = `<div class="stats">
         <div class="stat total">变动总数<b>${total}</b></div>
-        <div class="stat">新增子目<b>${s.added || 0}</b></div>
-        <div class="stat">删除子目<b>${s.removed || 0}</b></div>
-        <div class="stat">税率变化<b>${s.rate_changed || 0}</b></div>
-        <div class="stat" style="color:var(--hit)">301 变化<b>${s.sec301_changed || 0}</b></div>
-        <div class="stat">附加税<b>${s.add_duty_changed || 0}</b></div>
-        <div class="stat" style="color:var(--warn)">措施数据<b>${s.measure_changed || 0}</b></div>
+        ${cell('新增子目', s.added)}
+        ${cell('删除子目', s.removed)}
+        ${cell('税率变化', s.rate_changed)}
+        ${cell('301 变化', s.sec301_changed, 'var(--hit)')}
+        ${cell('附加税', s.add_duty_changed)}
+        ${cell('措施数据', s.measure_changed, 'var(--warn)')}
       </div>`;
       if (d.built_at) html += `<div class="hint">最近更新：${esc(d.built_at)}</div>`;
       // 新纳入对比的类别：无历史快照可比，这次一定显示"无变动"，
