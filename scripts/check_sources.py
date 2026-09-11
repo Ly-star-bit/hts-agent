@@ -422,6 +422,46 @@ def format_report(result) -> str:
     return "\n".join(lines)
 
 
+def exclusion_expiry_warning(warn_days=14, today=None):
+    """
+    读 data/sec301_exclusions.json，看当前生效的 301 排除还有几天到期。
+
+    这个脚本由 launchd 每天跑，是唯一每天都会执行的东西——排除到期这件事
+    正该挂在这里。不走 core.exclusion_expiry 是因为那要加载 6.7MB 的数据库，
+    而这里只需要读一份 2MB 的 JSON 里的 notes 分区。
+
+    返回告警文本；不需要告警时返回 ""。
+    """
+    import datetime
+
+    path = os.path.join(BASE_DIR, "data", "sec301_exclusions.json")
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            notes = (json.load(f).get("notes") or {})
+    except Exception:
+        return ""
+    today = today or datetime.date.today().isoformat()
+    live = {c: n for c, n in notes.items()
+            if n.get("effective_to") and n.get("effective_from", "") <= today
+            and n["effective_to"] >= today}
+    if not live:
+        # 全过期了才是最该喊的：工具此刻可能正按失效的排除判 0%
+        any_dated = [n["effective_to"] for n in notes.values() if n.get("effective_to")]
+        if any_dated and max(any_dated) < today:
+            return (f"301 排除已全部过期（最后一个到 {max(any_dated)}）。"
+                    f"请重抓 Chapter 99 并重跑 extract_exclusions.py —— "
+                    f"否则查询会按已失效的排除判 0%，属少报方向。")
+        return ""
+    earliest = min(n["effective_to"] for n in live.values())
+    days = (datetime.date.fromisoformat(earliest)
+            - datetime.date.fromisoformat(today)).days
+    if days > warn_days:
+        return ""
+    tags = "、".join(sorted(c for c, n in live.items() if n["effective_to"] == earliest))
+    return (f"301 排除 {days} 天后到期（{tags} 至 {earliest}）。"
+            f"到期前请重抓 Chapter 99 并重跑 extract_exclusions.py。")
+
+
 def notify(title, message):
     """macOS 通知中心；非 macOS 或失败静默——通知只是锦上添花，日志才是记录。"""
     if sys.platform != "darwin":
@@ -454,12 +494,20 @@ def main(argv=None):
     result = check(keys, apply=a.apply, force=a.force)
     print(json.dumps(result, ensure_ascii=False, indent=2) if a.json else format_report(result))
 
+    # 排除到期与源文件有没有更新无关：官方不改版，排除照样会到期。
+    # 所以这条独立判断、独立告警，不放在 updated/errors 的分支里。
+    expiry_msg = exclusion_expiry_warning()
+    if expiry_msg:
+        print(f"\n⚠ {expiry_msg}")
+
     if a.notify:
         if result["updated"]:
             labels = "、".join(result["sources"][k]["label"] for k in result["updated"])
             notify("HTS 官方数据有更新", labels + ("（已下载）" if result["applied"] else ""))
         elif result["errors"]:
             notify("HTS 源文件检查失败", "、".join(result["errors"]))
+        if expiry_msg:
+            notify("HTS 301 排除即将到期", expiry_msg)
 
     if a.rebuild and result["applied"]:
         rc = rebuild(result["applied"])

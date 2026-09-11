@@ -225,11 +225,22 @@ def _sec301_lookup(db, code, code8):
 def flip_info(db, code8, c99, pct):
     """
     301 措施 flip 历史：同一编码此前的加征档位（带生效日期），当前值取实时判定（2026 现行税则）。
-    返回 (历史列表, 变化文本)。历史列表每项 {date, c99, pct, note}；无历史或当前未命中时为空。
+    返回 (历史列表, 变化文本)。历史列表每项 {date, c99, pct, note}。
+
+    **"没有数据"与"没有变化"必须分开说**：历史库目前是人工维护的存根，全库只
+    覆盖 3 个编码。此前两种情况都返回空字符串，界面上长得一模一样——而一片空白
+    看起来像"这个编码的档位从没变过"，不像"我们没有这个编码的历史"。
+    前者会让人放心地按当前档位报关，后者才是事实。
     """
     flips = (db.get("flip_301") or {}).get("flips", {})
     history = flips.get(code8) or []
-    if not history or not c99:
+    if not c99:
+        # 当前就没命中 301，谈不上档位变化
+        return [], ""
+    if not history:
+        # 不写进备注：命中 301 的 10,391 个编码里 10,388 个没有历史数据，
+        # 每行都挂一句会把备注列淹掉。改由 query_one 放进「来源」弹窗——
+        # 那里才是看"这条判定的依据与它的边界"的地方。
         return [], ""
     hist = sorted(history, key=lambda h: h.get("date", ""))
     hist_out = [
@@ -467,6 +478,45 @@ def _excl_status(note, today):
     if to and to < today:
         return "已过期"
     return "生效中"
+
+
+def exclusion_expiry(db, today=None, warn_days=14):
+    """
+    当前生效中的 301 排除里，最早哪天到期、还剩几天。
+
+    **为什么值得单独做一个函数**：排除到期后若没重抓 Chapter 99 并重跑提取，
+    工具会继续按已失效的排除判 0% —— 这是**少报**方向，四类错误里风险最高的那个
+    （多收只是多花钱，少报要被 CBP 追补加罚）。而当前生效的排除只剩两个标目，
+    且是同一天到期，等于整个排除判定有一个统一的悬崖。
+
+    今天重算而不是用提取那天的 status：数据可能是几个月前提的。
+
+    返回 {最早到期, 剩余天数, 标目, 生效中标目数, 告警} —— 没有任何生效中的
+    排除时返回 None（此时不是"安全"，是"本来就没排除可判"）。
+    """
+    ex = db.get("exclusions") or {}
+    notes = ex.get("notes") or {}
+    if not notes:
+        return None
+    today = today or _dt.date.today().isoformat()
+    live = {c99: n for c99, n in notes.items()
+            if _excl_status(n, today) == "生效中" and n.get("effective_to")}
+    if not live:
+        return None
+    earliest = min(n["effective_to"] for n in live.values())
+    expiring = sorted(c99 for c99, n in live.items() if n["effective_to"] == earliest)
+    try:
+        days = (_dt.date.fromisoformat(earliest) - _dt.date.fromisoformat(today)).days
+    except ValueError:
+        return None
+    return {
+        "最早到期": earliest,
+        "剩余天数": days,
+        "标目": [_fmt_c99(c) for c in expiring],
+        "生效中标目数": len(live),
+        # 到期当天才报警来不及：重抓 + 重提 + 重建要人动手，得留出提前量
+        "告警": days <= warn_days,
+    }
 
 
 def exclusion_lookup(db, code, code8, today=None):
@@ -758,8 +808,19 @@ def query_one(db, code, origin="CN"):
         })
     if flip301_on and flip301_src:
         sources.append({"key": flip301_src.get("key", "flip_frn"), "类型": "FLIP 301", **flip301_src, "说明": flip301_note})
-    if flip_hist:
-        sources.append({"key": "local", "类型": "301 flip 历史", "文件": "data/flip_301.json（本地转录）", "位置": "", "说明": flip_change})
+    if is_china and c99:
+        # 有历史就讲变化；没有就讲清楚"是没数据，不是没变过"。
+        # 一片空白看起来像"该编码档位从没变过"，会让人放心地按当前档位报关——
+        # 而事实只是这个人工维护的存根库没覆盖到它。
+        _flips = (db.get("flip_301") or {}).get("flips") or {}
+        sources.append({
+            "key": "local", "类型": "301 flip 历史",
+            "文件": "data/flip_301.json（本地转录）", "位置": "",
+            "说明": flip_change or (
+                f"⚠ 无此编码的历史档位数据。该库为人工转录存根，当前仅覆盖 "
+                f"{len(_flips)} 个编码（{'、'.join(fmt(c, 8) for c in sorted(_flips))}），"
+                f"空白不代表该编码档位未变过。"),
+        })
     if vn_measures:
         sources.append({"key": "local", "类型": "适用措施说明", "文件": "data/vietnam_measures.json（本地转录）", "位置": "", "说明": vn_measures})
     result["来源"] = sources

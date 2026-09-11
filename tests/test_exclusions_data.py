@@ -113,3 +113,45 @@ class TestExclusionData(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestExclusionExpiry(unittest.TestCase):
+    """排除到期告警：这是唯一会让工具**少报**的定时炸弹，三处都要报得出来"""
+
+    @classmethod
+    def setUpClass(cls):
+        import core
+        cls.db = core.load_db()
+
+    def test_expiry_counts_down_from_query_day(self):
+        import core
+        e = core.exclusion_expiry(self.db, today="2026-10-30")
+        self.assertIsNotNone(e, "应存在生效中且带到期日的排除标目")
+        self.assertEqual(e["剩余天数"], 10)
+        self.assertTrue(e["告警"], "剩 10 天应触发告警")
+        self.assertTrue(e["标目"], "必须点名是哪几个标目到期")
+
+    def test_no_warning_when_far_out(self):
+        import core
+        e = core.exclusion_expiry(self.db, today="2026-09-11")
+        self.assertFalse(e["告警"], "剩 59 天不该天天弹告警")
+
+    def test_all_expired_returns_none_not_silence(self):
+        """
+        全过期时 exclusion_expiry 返回 None——调用方不能把 None 当"安全"。
+        check_sources 那条路径必须在此时喊得最响。
+        """
+        import core, check_sources
+        self.assertIsNone(core.exclusion_expiry(self.db, today="2026-11-20"))
+        msg = check_sources.exclusion_expiry_warning(today="2026-11-20")
+        self.assertIn("已全部过期", msg)
+        self.assertIn("少报", msg)
+
+    def test_probe_warning_is_independent_of_source_updates(self):
+        """官方不改版，排除照样会到期——告警不能挂在 updated 分支里"""
+        import inspect, check_sources
+        src = inspect.getsource(check_sources.main)
+        expiry_at = src.index("expiry_msg = exclusion_expiry_warning()")
+        notify_at = src.index("if a.notify:")
+        self.assertLess(expiry_at, notify_at,
+                        "到期判断应独立于 updated/errors，先算再决定怎么报")

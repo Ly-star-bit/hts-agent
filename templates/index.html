@@ -1565,10 +1565,22 @@ fetch('/api/info')
     const srcs = [d.hts_csv, d.ustr_pdf, d.flip_frn_pdf, d.ch99_pdf].filter(Boolean).join(' + ');
     const el = document.getElementById('info');
     const day = (d.built_at || '').slice(0, 10);
-    el.innerHTML = `<span class="dot"></span>数据就绪${day ? ' · ' + day : ''}`;
+    // 排除到期优先于"数据就绪"显示：这是唯一会让工具**少报**的情形
+    // （到期后不重抓数据，会继续按失效的排除判 0%），比构建日期重要得多。
+    const ee = d.exclusion_expiry;
+    if (ee && ee.告警) {
+      el.className = 'status-pill bad';
+      el.innerHTML = `<span class="dot"></span>301 排除 ${ee.剩余天数} 天后到期`;
+    } else {
+      el.innerHTML = `<span class="dot"></span>数据就绪${day ? ' · ' + day : ''}`;
+    }
     el.title = `数据源：${srcs}\n301 映射 ${(d.sec301_mapping_count || 0).toLocaleString()} 条`
              + ` ｜ 8位子目 ${(d.rates_8_count || 0).toLocaleString()} 个`
-             + (d.built_at ? `\n构建于 ${d.built_at}` : '') + '\n点击查看数据来源';
+             + (d.built_at ? `\n构建于 ${d.built_at}` : '')
+             + (ee ? `\n\n⚠ 当前生效的 301 排除（${ee.标目.join('、')}）于 ${ee.最早到期} 到期`
+                   + `，剩 ${ee.剩余天数} 天。到期后须重抓 Chapter 99 并重跑 extract_exclusions.py，`
+                   + `否则工具会继续按已失效的排除判 0%（少报方向）。` : '')
+             + '\n\n点击查看数据来源';
   })
   .catch(() => {
     const el = document.getElementById('info');

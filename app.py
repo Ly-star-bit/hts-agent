@@ -77,6 +77,9 @@ def api_info():
         "flip_frn_pdf": meta.get("flip_frn_pdf", ""),
         "ch99_pdf": meta.get("ch99_pdf", ""),   # 301 排除清单来源，顶栏提示里要列全四份源
         "built_at": meta.get("built_at", ""),
+        # 排除到期是唯一会让工具**少报**的定时炸弹：到期后不重抓数据，
+        # 它会继续按失效的排除判 0%。顶栏据此变色。
+        "exclusion_expiry": core.exclusion_expiry(get_db()),
     }
 
 
