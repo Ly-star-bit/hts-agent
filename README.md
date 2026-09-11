@@ -56,6 +56,7 @@ hts_agent/
 ├── compare_db_301.py              # MongoDB 产品库 301 加征对账（只读，出差异报表）
 ├── update_db_301.py               # MongoDB 产品库 301 加征回写（默认计划模式，写前强制备份）
 ├── scripts/
+│   ├── bootstrap.py               # ★ 一条命令装机：拉源 → 建库 → 判定链自检
 │   ├── build_db.py                # 解析两份原始数据 → data/sec301_db.json（含版本对比）
 │   ├── core.py                    # 核心查询逻辑（Web 与命令行共用）
 │   ├── rate.py                    # ★ 税率引擎：税率解析 / 总税负计算 / 关键词搜索
@@ -99,11 +100,23 @@ uv pip install -r requirements.txt
 
 开发/跑测试再装一份：`uv pip install -r requirements-dev.txt`
 
-**首次使用必须先构建数据库**（`data/sec301_db.json` 是构建产物，不随仓库分发）：
+**然后一条命令装机**——拉齐官方源、建库、跑判定链自检：
 
 ```bash
-.venv/bin/python scripts/build_db.py
+.venv/bin/python scripts/bootstrap.py
 ```
+
+它会逐步检查并在缺什么时自己补：依赖 → 四份官方源（缺的自动下载，其中
+Chapter 99 PDF 有 13MB 且不随仓库分发）→ 构建数据库 → 用三条真实编码跑
+端到端自检（从价税 + 301 / 从量税折算两个方向 / 逐行估算含计量单位），
+最后报出当前 301 排除的到期日。任一步失败都会点名是哪一份、该怎么补。
+
+```bash
+.venv/bin/python scripts/bootstrap.py --check       # 只体检，不改任何东西
+.venv/bin/python scripts/bootstrap.py --skip-deps   # 依赖已装好，只补数据
+```
+
+只想重建数据库（官方数据更新后）：`.venv/bin/python scripts/build_db.py`
 
 之后所有命令都用 `.venv/bin/python`（或先 `source .venv/bin/activate`）。
 
