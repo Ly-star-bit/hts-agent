@@ -694,3 +694,131 @@ class TestCalcTotalCodeNormalization(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRefuseToGuess(unittest.TestCase):
+    """
+    「宁可说不知道」的七处判断，逐条钉死。
+
+    这套代码最值钱的不是它算了什么，而是它在哪些地方选择不算。那些分支目前
+    主要靠注释维系——注释拦不住下一个想图省事的人。每条断言对应判定链上的
+    一步，任何把它改成兜底的改动都会在这里失败。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_step1_six_digit_refuses_301(self):
+        """① 6 位品目不拿前 8 位去凑——品目层面没有加征档位"""
+        r = core.query_one(self.db, "620469", origin="CN")
+        self.assertEqual(r["301判定"], "无法判定")
+        self.assertIn("6位", r["备注"])
+
+    def test_step2_compound_rate_refuses_half_answer(self):
+        """
+        ② 复合税不返回从价那一半。
+
+        '$1.104/kg + 14.9%' 若只返回 14.9，调用方无从分辨这个数字是否完整——
+        按 $4/kg 折算实际是 42.5%，差了近三倍。
+        """
+        self.assertIsNone(rate.estimate_ad_valorem("$1.104/kg + 14.9%", None))
+        # 给了单位货值就应该算得出，否则是另一个方向的错误
+        self.assertIsNotNone(rate.estimate_ad_valorem("$1.104/kg + 14.9%", 4.0))
+
+    def test_step3_partial_suffix_prefix_refuses_8digit(self):
+        """
+        ③ 只有部分 10 位后缀入 301 清单的前缀，给 8 位一律判无法判定。
+
+        同一前缀下不同后缀档位可能不同（6307.90.98 下 …42 是 +50%，其余 +7.5%），
+        任何 8 位层面的归纳都会算错。
+        """
+        partial = self.db.get("sec301_partial_8") or {}
+        self.assertTrue(partial, "数据库应含 partial8 分区")
+        code8 = sorted(partial)[0]
+        c99, note = core._sec301_lookup(self.db, code8, code8)
+        self.assertIsNone(c99)
+        self.assertIn("10 位", note)
+        # 补全 10 位后必须能给出结论（否则就成了永远查不了）
+        code10 = partial[code8][0]
+        self.assertIsNotNone(core._sec301_lookup(self.db, code10, code8)[0])
+
+    def test_step4_described_exclusion_never_auto_exempts(self):
+        """
+        ④ 按描述授予的排除绝不自动判免。
+
+        同一税号下有的款符合描述、有的不符合，编码本身回答不了；
+        自动判免会直接造出错误申报。
+        """
+        ex = (self.db.get("exclusions") or {}).get("by_code") or {}
+        described = [c for c, recs in ex.items()
+                     if all(r.get("covers") != "full" for r in recs)]
+        self.assertTrue(described, "应存在仅按描述排除的编码")
+        for code in described[:5]:
+            auto, items = core.exclusion_lookup(self.db, code, code[:8])
+            self.assertIsNone(auto, f"{code} 仅按描述排除，不得自动判免")
+            self.assertTrue(items, f"{code} 仍应列出条目供人工核对")
+
+    def test_step4b_exclusion_status_recomputed_on_query_day(self):
+        """④b 有效期按查询当天重算，不能用提取那天的状态"""
+        note = {"effective_from": "2024-01-01", "effective_to": "2026-11-09"}
+        self.assertEqual(core._excl_status(note, "2026-09-11"), "生效中")
+        self.assertEqual(core._excl_status(note, "2026-11-10"), "已过期")
+        self.assertEqual(core._excl_status(note, "2023-12-31"), "未生效")
+        # 没标日期的老标目一律不判免
+        self.assertEqual(core._excl_status({}, "2026-09-11"), "有效期未标注")
+
+    def test_step5_scoped_annex_ii_is_conditional_not_exempt(self):
+        """
+        ⑤ 带范围限制的 ANNEX II 豁免必须是 conditional，不能是 exempt。
+
+        1257/2113 条通用豁免带 Scope Limitations（限 Aircraft/Pharma 等用途），
+        判成 exempt 会让一支普通工业温度计被算成免征——少收要被 CBP 追补加罚。
+        """
+        ex = self.db.get("flip301_exemptions") or {}
+        scopes = ex.get("universal_scopes") or {}
+        scoped = [c for c, s in scopes.items() if s]
+        self.assertTrue(scoped, "应存在带范围限制的豁免编码")
+        for code8 in scoped[:5]:
+            _txt, _note, _src, spec = core.flip301_judge(self.db, "CN", code8)
+            self.assertEqual(spec["mode"], "conditional",
+                             f"{code8} 带范围限制 {scopes[code8]}，不得判为无条件豁免")
+            self.assertIn("fallback", spec)
+        # 无范围限制的才是真豁免
+        plain = [c for c in (ex.get("universal") or []) if not scopes.get(c)]
+        if plain:
+            _t, _n, _s, spec = core.flip301_judge(self.db, "CN", plain[0])
+            self.assertEqual(spec["mode"], "exempt")
+
+    def test_step5b_tier_decided_before_annex_lookup(self):
+        """
+        ⑤b 非被调查经济体命中 ANNEX II 时答「不适用」而非「已豁免」。
+
+        税额同样是 0，但把"不适用"说成"已豁免"，人工复核会去找一份
+        并不存在的豁免依据。
+        """
+        ex = self.db.get("flip301_exemptions") or {}
+        code8 = (ex.get("universal") or [None])[0]
+        self.assertIsNotNone(code8)
+        # 冰岛不在 60 个被调查经济体名单里（澳/新/南非/挪威都在，别拿它们当反例）
+        txt, note, _src, spec = core.flip301_judge(self.db, "IS", code8)
+        self.assertEqual(spec["mode"], "none")
+        self.assertNotIn("豁免", txt)
+        self.assertIn("不在", note)
+
+    def test_step6_unpriced_specific_row_not_counted_as_zero(self):
+        """⑥ 缺单价的从量税行不按 0 计入合计，必须单独点名"""
+        out = rate.estimate_lines(self.db, [{"code": "01051100", "qty": 500}], origin="CN")
+        self.assertEqual(out["summary"]["税费合计"], 0)
+        self.assertEqual(out["summary"]["未填行数"], 1)
+        self.assertIn("未填", out["summary"]["说明"])
+
+    def test_step7_unresolvable_part_poisons_the_total(self):
+        """
+        ⑦ 任一分项折算不出来，总额就是「需人工」，不能把能算的加起来。
+
+        分项的不确定性不允许被一个看着完整的汇总数字吞掉。
+        """
+        r = rate.calc_total(self.db, "01051100")      # 0.9¢ each，没给单位货值
+        self.assertIn("需人工", r["总税负估算"])
+        self.assertNotIn("%", r["总税负估算"].split("（")[0])
