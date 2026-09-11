@@ -259,6 +259,7 @@ def build():
     vietnam = load_json_data("vietnam_measures.json", {})
     flip301 = load_json_data("flip301_forced_labor.json", {})
     flip301_exemptions = load_json_data("flip301_exemptions.json", {})
+    exclusions = load_json_data("sec301_exclusions.json", {})
     # UFLPA 强迫劳动检查维度已移除（v1.5），不再摄入 uflpa_entities.json
     ex_univ = len(flip301_exemptions.get("universal", []))
     ex_econ = {k: len(v) for k, v in (flip301_exemptions.get("by_economy") or {}).items()}
@@ -267,6 +268,15 @@ def build():
           f"FLIP 301: 10%档 {len((flip301.get('rates') or {}).get('10', []))} | "
           f"12.5%档 {len((flip301.get('rates') or {}).get('125', []))} | "
           f"FLIP 301 豁免: 通用 {ex_univ} | 按经济体 {ex_econ}")
+    ex_notes = exclusions.get("notes") or {}
+    ex_live = [c for c, v in ex_notes.items() if v.get("status") == "生效中"]
+    print(f"   301 排除（U.S. note 20）: 标目 {len(ex_notes)} 个 | 生效中 {len(ex_live)} 个"
+          f"（{', '.join(sorted(ex_live)) or '无'}）| 涉及编码 {len(exclusions.get('by_code') or {})}")
+    if not ex_notes:
+        # 缺这份数据不阻断构建（老库仍可用），但必须喊出来：
+        # 没有它，命中 301 的编码一律报满额加征，被整号排除的商品会被高报 25%。
+        print("   ⚠ 未找到 data/sec301_exclusions.json —— 301 排除判定将整体缺失，"
+              "请先跑 python scripts/extract_exclusions.py")
 
     from datetime import datetime
 
@@ -275,6 +285,7 @@ def build():
             "hts_csv": os.path.basename(HTS_CSV),
             "ustr_pdf": os.path.basename(PDF_FILE),
             "flip_frn_pdf": "FLIP 301 Investigation Final Action FRN 7-23-26 FINAL.pdf",
+            "ch99_pdf": (exclusions.get("meta") or {}).get("source", ""),
             "sec301_mapping_count": len(sec301_map),
             "sec301_mapping_10_count": len(sec301_map_10),
             "rates_8_count": len(rates_8),
@@ -293,6 +304,7 @@ def build():
         "vietnam": vietnam,          # 越南适用措施与代表编码说明
         "flip301": flip301,          # FLIP 301 强迫劳动调查关税（60 经济体税率表 + 豁免）
         "flip301_exemptions": flip301_exemptions,  # FLIP 301 ANNEX II 豁免编码清单
+        "exclusions": exclusions,    # 301 排除（U.S. note 20）：notes 标目元信息 + by_code 逐编码
     }
     print("④ 产出下限校验 ...")
     failures = sanity_check({

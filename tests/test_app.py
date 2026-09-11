@@ -63,8 +63,9 @@ class TestQueryAPI(unittest.TestCase):
         self.assertEqual(row["301判定"], "是")
         self.assertIn("+25%", row["301加征"])
         self.assertEqual(len(row["301 flip历史"]), 1)  # 锂电池有 flip 历史
-        # 8507.60.00 锂电池在 ANNEX II 通用豁免 → FLIP 301 豁免（官方 FRN 核实）
-        self.assertEqual(row["FLIP 301加征"], "豁免")
+        # 8507.60.00 锂电池在 ANNEX II Part A，但带 Aircraft 范围限制（FRN 页 225）：
+        # 只有民用航空器用锂电池豁免，普通锂电池照加 12.5%，故不是无条件"豁免"
+        self.assertEqual(row["FLIP 301加征"], "+12.5%(范围存疑)")
         self.assertNotIn("强迫劳动", row)
         self.assertNotIn("强迫劳动提示", row)
         # 非豁免编码（光伏）仍按 12.5% 加征

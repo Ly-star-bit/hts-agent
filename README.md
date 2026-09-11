@@ -17,6 +17,8 @@
 | **多原产地** | 原产地选择：**中国**（301 + flip 历史 + FLIP 301 关税）/ **越南**（MFN + FLIP 301 12.5%）/ **其他国家**（MFN 通用轨道 + 按国家查 FLIP 301）；301 仅固定适用于中国 | Web「原产地」下拉 / `--origin` |
 | **301 flip 历史** | 同一编码**此前的 301 加征档位**（带生效日期），查询展示"此前 X% → 当前 Y%（2026 现行）"；当前值来自 2026 现行 HTS（含 9903.91.xx 2026 档位） | 查询结果「备注」/ 数据结构 `301 flip历史` |
 | **FLIP 301 强迫劳动关税** | **2026-07-24 生效**（USTR Final Action FRN 7-23-26）：60 个被调查经济体全部产品加征，**ANNEX II 豁免清单逐编码生效**——**12.5%**（中国/香港/越南/新加坡/巴西等）、**10%**（加拿大/墨西哥/印度/英国等）、net-of-MFN（EU/台湾合计 10%，日/韩/瑞士合计 12.5%）；**已适用 Section 232 的产品豁免**（不重复征税）；不在 60 名单不适用 | 查询结果「FLIP301」列 / `--origin 国家代码` |
+| **301 排除（U.S. note 20）** | 命中 301 清单后再判 USTR 排除。排除分两种：**整号排除**（条目正文就是一个统计号，该号下中国产商品全免）→ 直接判免、加征归零、9903 子目改成排除标目、备注写明报关要填哪个号；**按描述排除**（"…(described in statistical reporting number X)"）→ **绝不自动判免**，只列出条目原文、有效期与 Chapter 99 PDF 页码供人工核对。有效期按**查询当天**重算（9903.88.69/.70 均至 **2026-11-09**，.66/.67/.68 已过期；老标目无日期一律按"有效期未标注"不判免）。8 位查询不判免（排除授予到 10 位），但会点名该子目下哪些统计号是整号排除 | 查询结果「301排除」列（可点开条目原文） |
+| **ANNEX II 范围限制（Scope Limitations）** | ANNEX II 里 **1257/2113 条通用豁免带范围限制**（Pharma 700 / Aircraft 541 / Ex 16），**只有落在该范围内的商品才豁免**。这类编码不判为"豁免"，而是标 **`+12.5%(范围存疑)`**：税额按**不豁免**保守计（少收会被 CBP 追补加罚），说明栏给出 FRN 页 137 的官方范围定义（`Ex` 档另附 ANNEX II 该行 Description 原文，因为这一档的范围就写在那一栏里），要求人工核实商品用途后确认 | 查询结果「FLIP301」列（琥珀色虚下划线） |
 | **加征开关配置** | `measures_config.json` 可分别**启用/禁用** 中国 301 加征（cn301）与 FLIP 301（flip301），默认全启用；禁用后查询/估算/搜索**不含该加征字段、总税负不叠加**，重新启用恢复 | 编辑 `measures_config.json` |
 | **来源追溯** | 每条查询结果的每项税负判定均标注**官方出处**（源文件 + CSV 行号 / PDF 物理页码），点击 📄 弹窗展示来源链，可**直接打开源文件并定位到对应页/行**（PDF 用 `#page=N` 定位）；FLIP 豁免同时标注 ANNEX II **范围限制**（Aircraft/Pharma，需按商品描述核对） | Web「编码查询」结果表「来源」列 / 头部「📄 查看数据来源」 |
 | **USITC 官网直达** | 结果表每行 🌐 按钮 / 来源弹窗顶部链接 → 新标签打开 **USITC 官方在线 HTS**（`https://hts.usitc.gov/search?query=<编码>`）直接查该编码最新税率；头部「数据来源」弹窗含官网主入口 | Web「编码查询」结果表 / 弹窗 |
@@ -36,6 +38,10 @@
 hts_agent/
 ├── htsdata.csv                    # 数据源①：USITC 全量税率表（含 9903 子目税率）
 ├── China Tariffs_2026HTSRev15.pdf # 数据源②：USTR 301 中国清单（8位HTS → 9903 映射）
+├── Chapter 99_2026HTSRev18.pdf    # 数据源④：HTS 第 99 章全文（301 排除清单 note 20 正文）
+│                                  #   13MB，**不入 git**（判定读的是它的产物
+│                                  #   data/sec301_exclusions.json）。缺文件时：
+│                                  #   python scripts/check_sources.py --apply --only ch99_pdf
 ├── app.py                         # ★ Web 网页版（FastAPI），浏览器操作
 ├── templates/
 │   └── index.html                 # 前端页面（Tab 化：查询/搜索/估算/AI/变动）
@@ -63,6 +69,7 @@ hts_agent/
 │   ├── vietnam_measures.json      # 数据源④：越南适用措施与代表编码说明
 │   ├── flip301_forced_labor.json  # 数据源⑤：FLIP 301 强迫劳动关税（60 经济体税率表 + 豁免，2026-07-24 生效）
 │   ├── flip301_exemptions.json    # 数据源⑥：FLIP 301 ANNEX II 豁免编码清单（通用 2113 + 按经济体）
+│   ├── sec301_exclusions.json     # 数据源⑦：301 排除清单（U.S. note 20，由 Chapter 99 PDF 提取）
 │   ├── .db_fingerprint.json       # 构建产物（不入 git）：上次构建的关键字段快照
 │   └── .db_changes.json           # 构建产物（不入 git）：最近一次构建的变动清单
 ├── tests/                         # 单元测试与 API 集成测试
@@ -393,10 +400,11 @@ AI 结果仅供参考，正式报关归类以 CBP 裁定为准，请人工复核
 | 商品描述 | 官方品目描述 |
 | 一般税率 / 特殊税率 / 第二栏税率 | 基础税率（非 301 部分） |
 | 原产地 / 原产地代码 | 中国 / 越南 / 其他国家（国家代码） |
-| 301判定 | 是 / 否 / 是(豁免/0%) / 无法判定 / 不适用（非中国原产） |
+| 301判定 | 是 / 是(已排除) / 否 / 是(豁免/0%) / 无法判定 / 不适用（非中国原产） |
+| 301排除 / 301排除明细 | `已排除 至 2026-11-09`（整号排除，加征已归零）/ `待核：3 整号 / 2 描述`（需人工核对）；明细含每条的覆盖方式、统计号、原文、有效期与 Chapter 99 PDF 页码 |
 | 9903子目 | 命中的 Chapter 99 子目，如 9903.88.03 |
 | 301加征 | 加征比例，如 +25%、+100%（配置启用时输出） |
-| FLIP 301加征 / FLIP 301说明 | 强迫劳动关税 +12.5%/+10% 及豁免提示（配置启用时输出） |
+| FLIP 301加征 / FLIP 301说明 | 强迫劳动关税 +12.5%/+10%、`豁免`（ANNEX II 且无范围限制）、`+12.5%(范围存疑)`（ANNEX II 但带 Scope Limitations，已按不豁免计，需人工核实用途）（配置启用时输出） |
 | 来源 | 每条税负判定的官方出处列表：文件 + CSV 行号 / PDF 页码 + 范围限制；Web 端点击 📄 查看详情并可打开原文定位 |
 | 301 flip历史 / 301 flip变化 | 此前的 301 档位与变化（2026 现行） |
 | 越南措施 | 越南/其他国家的适用措施说明 |
@@ -432,6 +440,7 @@ AI 结果仅供参考，正式报关归类以 CBP 裁定为准，请人工复核
 | `htsdata.csv` | [USITC 全量导出](https://hts.usitc.gov/reststop/exportList?from=0100&to=9999&format=CSV&styles=false) | [`/reststop/currentRelease`](https://hts.usitc.gov/reststop/currentRelease) → `{"name":"2026HTSRev17"}` |
 | `China Tariffs_*.pdf` | [USITC 托管的 China Tariffs](https://hts.usitc.gov/reststop/file?release=currentRelease&filename=China+Tariffs)（**不在 USTR 站上**） | 响应头 `Content-Disposition` 文件名带 Rev 号；首页有 "Last Updated" |
 | `FLIP 301 ... FINAL.pdf` | [USTR 最终行动 FRN](https://ustr.gov/sites/default/files/files/Press/Releases/2026/FLIP%20301%20Investigation%20Final%20Action%20FRN%207-23-26%20FINAL.pdf) | `ETag` / `Last-Modified` |
+| `Chapter 99_*.pdf` | [USITC HTS 第 99 章](https://hts.usitc.gov/reststop/file?release=currentRelease&filename=Chapter+99)（301 排除清单 U.S. note 20 正文；China Tariffs 那份 PDF 不含排除） | `currentRelease` 版本号 |
 
 ### 自动检测：`scripts/check_sources.py`
 
@@ -458,9 +467,14 @@ python scripts/check_sources.py --json            # 机器可读
 重建时自动与上一版本对比，生成**数据变动清单**（Web 端「数据变动」可查看），
 方便你第一时间发现"客户常查的商品税率变了"。
 
-FLIP 301 豁免的范围限制与页码（`data/flip301_exemptions.json` 的
-`universal_scopes` / `universal_pages` 等键）由独立脚本提取：
-`python scripts/extract_flip_scopes.py`（FLIP FRN 更新后重跑一次即可）。
+FLIP 301 豁免的范围限制、页码与 `Ex` 档描述原文（`data/flip301_exemptions.json` 的
+`universal_scopes` / `universal_pages` / `universal_ex_desc` 等键）由独立脚本提取：
+`python scripts/extract_flip_scopes.py`（FLIP FRN 更新后重跑一次即可），
+**改完要跑 `scripts/build_db.py`**——这份 JSON 是编译进 `sec301_db.json` 的，不重建不生效。
+
+301 排除清单（`data/sec301_exclusions.json`）由 `python scripts/extract_exclusions.py`
+从 `Chapter 99_*.pdf` 提取（条目正文）+ `htsdata.csv`（有效期）。
+**Chapter 99 或 htsdata.csv 任一更新都要重跑它**，`check_sources.py --apply --rebuild` 已自动串好。
 
 ## 判定逻辑与重要局限
 
@@ -468,7 +482,9 @@ FLIP 301 豁免的范围限制与页码（`data/flip301_exemptions.json` 的
 
 **必须注意的局限（重要）**：
 
-1. **豁免（Exclusion）状态**：本工具只判定"是否在 301 清单"，**不判定豁免**。命中清单的商品可能已获 USTR 豁免（见 9903.88.05~.14 等豁免子目），正式申报前请核对 USTR 豁免清单。
+1. **中国 301 的排除（Exclusion）**：已判定，但只有**整号排除**能自动判免（条目正文就是一个统计号，纯粹是编码 + 日期问题）。**按描述授予的排除本工具不自动判免**——同一税号下有的款符合描述、有的不符合，编码本身回答不了，自动判免会直接造出错误申报；工具只给出条目原文与页码，需人工逐条核对。另：排除授予到 **10 位统计号**，只给 8 位时不判免。
+   ⚠ 排除有硬到期日：9903.88.69 / .70 均至 **2026-11-09**。到期后若不重抓 Chapter 99 并重跑 `extract_exclusions.py`，工具会继续按已失效的排除判 0%——**少报**的方向，务必让 `check_sources.py` 的每日探测保持运行。
+   ⚠ 这与 **FLIP 301 的 ANNEX II 豁免**是两套东西：后者按税号列示、已逐编码判定，带范围限制的会标"范围存疑"（见上表）。
 2. **原产地规则**：301 关税仅适用于**中国原产**商品。经第三国实质性转型的产品不适用。
 3. **编码版本**：本工具基于 2026 现行 HTS（2022 年后的新编码体系）。旧版编码（如 8703.23.00）会提示"未找到"，请使用现行编码（如 8703.23.01）。
 4. **总税率估算**：从价税直接相加；从量/复合税需按单位货值折算（Web/命令行均可传单位货值），分部件复杂税无法折算，标"需人工"。估算仅供参考。

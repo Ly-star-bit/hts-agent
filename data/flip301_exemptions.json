@@ -16007,5 +16007,68 @@
    "94049081": 431,
    "94049096": 431
   }
+ },
+ "universal_ex_desc": {
+  "08059001": "Etrogs",
+  "08119080": "Tropical fruit, nesoi, frozen, whether or not previously steamed or boiled",
+  "12073000": "Castor oil seeds, for sowing",
+  "12074000": "Sesame seeds, whether or not broken, for sowing",
+  "12075000": "Mustard seeds, whether or not broken, for sowing",
+  "12076000": "Safflower (Carthamus tintorius) seeds, for sowing",
+  "12079903": "Other oil seeds and oleaginous fruits whether or not broken, including niger seeds, hemp seeds and seeds nesoi, for sowing",
+  "19059010": "Bread, pastry, cakes, biscuits and similar baked products, nesoi, and puddings, whether or not containing chocolate, fruit, nuts or confectionery, for religious purposes only",
+  "19059090": "Bakers’ wares, communion wafers, sealing wafers, rice paper and similar products, nesoi, for religious purposes only",
+  "20089921": "Acai",
+  "20093160": "Citrus juice of any single citrus fruit (other than orange, grapefruit or lime), of a Brix value not exceeding 20, concentrated, unfermented, except for lemon juice",
+  "20098970": "Coconut water or juice of acai",
+  "20099040": "Coconut water juice blends, not from concentrate, packaged for retail sale",
+  "21069099": "Acai preparations for the manufacture of beverages",
+  "33012951": "Essential oils other than those of citrus fruit, nesoi, for religious purposes only",
+  "44123357": "Eucalyptus plywood sheets n/o 6mm thick, outerply of specified nonconiferous wood including birch and walnut, surface covered beyond clear/transparen"
+ },
+ "by_economy_ex_desc": {
+  "MY": {
+   "12119089": "Psyllium seed husks",
+   "13019091": "Boswellia",
+   "15159081": "Argan oil"
+  },
+  "KH": {
+   "12119089": "Psyllium seed husks",
+   "13019091": "Boswellia",
+   "13021991": "Aloe, Tasmanian pepper, coconut and centella"
+  },
+  "GT": {
+   "12119089": "Psyllium seed husks",
+   "13019091": "Boswellia",
+   "13021991": "Aloe, Tasmanian pepper, coconut and centella"
+  },
+  "SV": {
+   "13021991": "Aloe, Tasmanian pepper, coconut and centella"
+  },
+  "AR": {
+   "12119089": "Psyllium seed husks",
+   "13021991": "Aloe, Tasmanian pepper, coconut and centella",
+   "15159081": "Argan oil"
+  },
+  "BD": {
+   "12119089": "Psyllium seed husks",
+   "15159081": "Argan oil"
+  },
+  "TW": {
+   "12119089": "Psyllium seed husks",
+   "13019091": "Boswellia",
+   "13021991": "Aloe, Tasmanian pepper, coconut and centella",
+   "15159081": "Argan oil"
+  },
+  "ID": {
+   "13021991": "Aloe, Tasmanian pepper, coconut and centella"
+  },
+  "EC": {
+   "13021991": "Aloe, Tasmanian pepper, coconut and centella"
+  },
+  "JO": {
+   "12119089": "Psyllium seed husks",
+   "13021991": "Aloe, Tasmanian pepper, coconut and centella"
+  }
  }
 }

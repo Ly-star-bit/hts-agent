@@ -262,6 +262,11 @@ def _flip_amount(spec, base_av):
                  EU/TW 合计 10%，JP/KR/CH 合计 12.5%。这一档不能按显示文本
                  "≤+10%" 直接相加，否则 MFN 已达上限的商品会被凭空多加一遍
                  （如 EU 产 6109.10.00，MFN 16.5%，正确总额就是 16.5%）。
+      conditional —— ANNEX II 命中但带 Scope Limitations（Aircraft/Pharma/Ex）：
+                 只有落在该范围内的商品才豁免，范围外按 fallback 档位照加。
+                 编码本身判不出用途，这里按 fallback 给数（即"不豁免"），
+                 由 core 的说明文本标"范围存疑"要求人工确认。取零会把
+                 一支普通工业温度计算成免征 FLIP 301，少收要被 CBP 追补加罚。
       exempt / none —— 0
     MFN 无法折算时 net_mfn 档也算不出来，返回原因让调用方标"需人工"。
     """
@@ -274,6 +279,8 @@ def _flip_amount(spec, base_av):
         if base_av is None:
             return 0.0, f"FLIP 301 与 MFN 合计封顶 {cap:g}%，但基础税率无法折算"
         return max(0.0, round(cap - base_av, 4)), ""
+    if mode == "conditional":
+        return _flip_amount(spec.get("fallback"), base_av)
     return 0.0, ""
 
 
@@ -722,6 +729,13 @@ def search(db, keyword, limit=100, sort="relevance", include_special=False,
             r["总税负估算"] = t["总税负估算"]
             r["总税负数值"] = _total_num(t["总税负估算"])
             r["301加征数值"] = t["301加征数值"]
+            # 上面那段自建的 301 判定不认排除、也不含 FLIP。calc_total 走的是
+            # core.query_one 那套完整判定，这里直接覆盖回来，让搜索表与查询表口径一致——
+            # 否则被整号排除的编码在搜索里仍显示 "+25%"，而查询页显示 "0%(排除)"。
+            for k in ("301判定", "301加征", "9903子目", "备注",
+                      "FLIP 301加征", "FLIP 301说明", "301排除", "301排除明细"):
+                if k in t:
+                    r[k] = t[k]
         return items
 
     if sort == "total_asc":

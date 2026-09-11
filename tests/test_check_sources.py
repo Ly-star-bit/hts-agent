@@ -29,6 +29,8 @@ CSV_V1 = b"\xef\xbb\xbfHTS Number,Indent\n\"0101\",\"0\"\n\"0101.21.00\",\"2\"\n
 CSV_V2 = CSV_V1 + b"\"9903.03.12\",\"0\"\n"
 PDF_A = b"%PDF-1.6 china tariffs A"
 PDF_B = b"%PDF-1.6 china tariffs B"
+CH99_A = b"%PDF ch99 A"
+CH99_B = b"%PDF ch99 B"
 FRN_A = b"%PDF-1.6 flip frn A"
 
 
@@ -42,6 +44,7 @@ class FakeServers:
         self.pdf_name = "China Tariffs_2026HTSRev15.pdf"
         self.frn = FRN_A
         self.frn_etag = '"etag-1"'
+        self.ch99 = CH99_A
         self.down = set()            # 放进去的 host 返回 503
         self.hits = []               # (method, url) 记录，用来断言"没重新下载"
 
@@ -58,6 +61,10 @@ class FakeServers:
         if "filename=China+Tariffs" in url:
             return httpx.Response(200, content=self.pdf,
                                   headers={"content-disposition": f'inline; filename="{self.pdf_name}"'})
+        if "filename=Chapter+99" in url:
+            return httpx.Response(200, content=self.ch99,
+                                  headers={"content-disposition":
+                                           'inline; filename="Chapter 99_2026HTSRev18.pdf"'})
         if "FLIP" in url:
             headers = {"etag": self.frn_etag, "last-modified": "Thu, 23 Jul 2026 20:58:23 GMT",
                        "content-length": str(len(self.frn))}
@@ -79,10 +86,11 @@ class CheckSourcesTest(unittest.TestCase):
         self.backup = os.path.join(self.tmp, "output", "sources_backup")
         self.srv = FakeServers()
         self.transport = httpx.MockTransport(self.srv.handler)
-        # 本地三份文件与"远端当前版"一致
+        # 本地四份文件与"远端当前版"一致
         self.write("htsdata", CSV_V1)
         self.write("ustr_pdf", PDF_A)
         self.write("flip_frn", FRN_A)
+        self.write("ch99_pdf", CH99_A)
         # PDF 首页 "Last Updated" 提取依赖 pdfplumber 读真 PDF，假字节读不了；关掉以免噪音
         self._orig_lu = cs._pdf_last_updated
         cs._pdf_last_updated = lambda data: ""
@@ -188,7 +196,7 @@ class CheckSourcesTest(unittest.TestCase):
         self.srv.down.add("ustr.gov")
         self.srv.release, self.srv.csv = "2026HTSRev17", CSV_V2
         r = self.run_check()
-        self.assertEqual(r["errors"], ["flip_frn"])
+        self.assertEqual(r["errors"], ["flip_frn"])  # ch99 与 flip 不同 host，不受牵连
         self.assertIn("error", r["sources"]["flip_frn"])
         self.assertEqual(r["updated"], ["htsdata"])
         with open(self.state, encoding="utf-8") as f:

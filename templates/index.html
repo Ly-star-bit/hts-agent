@@ -384,6 +384,28 @@
   .tag.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
   .tag.na { background: var(--gray-bg); color: var(--gray); border: 1px solid var(--border); }
   .add-pct { color: var(--hit); font-weight: 700; white-space: nowrap; }
+  /* 范围存疑：ANNEX II 命中但带 Scope Limitations（Aircraft/Pharma/Ex），
+     税额按不豁免保守计，是否真要交取决于商品用途。跟"确定加征"的红色分开，
+     否则报关行会把一个待人工确认的数当成定论直接申报。 */
+  /* 301 排除：已排除是"少交钱"的确定结论，用正向色；待核用警示色并可点开原文 */
+  /* 允许折行：结论短（"已排除 至 2026-11-09"/"待核：3 整号"），两行内放得下；
+     nowrap 会顶穿本列压到 FLIP301 上 */
+  .excl-cell { font-size: 12px; white-space: normal; line-height: 1.35; }
+  .tag { white-space: nowrap; }
+  .excl-cell.excl-done { color: var(--ok, #16a34a); font-weight: 700; }
+  .excl-cell.excl-todo { color: var(--warn); cursor: pointer; text-decoration: underline dotted; }
+  .excl-item { border-top: 1px solid var(--border); padding: 8px 0; font-size: 13px; }
+  .excl-item:first-child { border-top: 0; }
+  .excl-tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px;
+              background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+  .excl-tag.on { background: rgba(22,163,74,.12); color: #16a34a; border-color: rgba(22,163,74,.4); }
+  .add-pct.scope-suspect {
+    color: var(--warn); text-decoration: underline dotted; cursor: help;
+    /* "+12.5%(范围存疑)" 比纯百分比长一倍，继承 .add-pct 的 nowrap 会撑破列宽、
+       盖住右边的备注列。这一档允许折行。 */
+    white-space: normal; word-break: keep-all; line-height: 1.35;
+  }
+  tr.row-hit .add-pct.scope-suspect { color: var(--warn); text-shadow: none; }
   /* 备注常是长文本（FLIP 档位说明 + flip 历史 + 越南措施拼接），钳成 2 行，
      超出省略——全文靠单元格 hover tooltip（data-full）可见，不必把整行撑到 250px 高 */
   .note {
@@ -776,15 +798,17 @@
             <!-- 编码/9903 加宽到不截断（8507.60.00 / 9903.91.xx 都是关键信息，
                  之前 7% 会被省略成 8507…）；备注从 8% 提到 15% 并在 CSS 里钳成
                  2 行，长文本不再把行高撑到 269px。数值列（税率/加征）够放 4-5 字即可 -->
-            <col style="width:9%"><col style="width:8%"><col style="width:14%">
-            <col style="width:6%"><col style="width:7%"><col style="width:7%">
-            <col style="width:6%"><col style="width:9%"><col style="width:6%"><col style="width:7%"><col style="width:15%"><col style="width:6%">
+            <!-- 2026-09 加了「301排除」列（第 10 列），列数 12 → 13，整体重新配比：
+                 描述 14→12、特殊税率 7→5，腾给排除列 9%（要放得下"待核：3 整号 / 2 描述"）-->
+            <col style="width:9%"><col style="width:8%"><col style="width:12%">
+            <col style="width:5%"><col style="width:5%"><col style="width:6%">
+            <col style="width:7%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:5%">
           </colgroup>
           <thead>
             <tr>
               <th>输入编码</th><th>8位子目</th><th>商品描述</th>
               <th>一般税率</th><th>特殊税率</th><th>原产地</th>
-              <th>301判定</th><th>9903子目</th><th>301加征</th><th>FLIP301</th><th>备注</th><th>来源</th>
+              <th>301判定</th><th>9903子目</th><th>301加征</th><th>301排除</th><th>FLIP301</th><th>备注</th><th>来源</th>
             </tr>
           </thead>
           <tbody id="resultBody"></tbody>
@@ -1424,7 +1448,10 @@ function renderTable() {
       <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
       <td class="code" data-full="${esc(r['9903子目'])}">${esc(r['9903子目'])}</td>
       <td class="add-pct" data-full="${esc(r['301加征'] || '')}">${esc(r['301加征'] || '—')}</td>
-      <td class="add-pct" data-full="${esc(r['FLIP 301加征'])}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
+      <td class="excl-cell${exclCls(r['301排除'])}" data-full="${esc(r['301排除'] || '')}"
+          ${(r['301排除明细'] || []).length ? `onclick="showExclOf(${idx})" title="点击查看排除条目原文"` : ''}
+      >${esc(r['301排除'] || '—')}</td>
+      <td class="add-pct${String(r['FLIP 301加征'] || '').includes('范围存疑') ? ' scope-suspect' : ''}" data-full="${esc(r['FLIP 301加征'])}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
       <td class="note" data-full="${esc(noteFull)}">${esc(noteFull)}</td>
       <td><button class="src-btn" title="查看该条税负的官方来源" onclick="showSourceOf(${idx})">📄</button> <button class="src-btn" title="在 USITC 官网查看该编码（https://hts.usitc.gov）" onclick="openHtsSite('${esc(r['输入编码'])}')">🌐</button></td>`;
     body.appendChild(tr);
@@ -1555,6 +1582,39 @@ async function showSourceFiles() {
   } catch (e) {
     alert('数据来源清单加载失败：' + e.message);
   }
+}
+
+function exclCls(v) {
+  const t = String(v || '');
+  if (!t) return '';
+  return t.startsWith('已排除') ? ' excl-done' : ' excl-todo';
+}
+
+// 排除条目原文弹窗：排除是按 U.S. note 20 的产品描述授予的，
+// 只给一个"3 条待核"没用——要能看到每条的原文、覆盖方式、有效期与 PDF 页码。
+function showExclOf(idx) {
+  const r = currentRows[idx] || {};
+  const items = r['301排除明细'] || [];
+  if (!items.length) return;
+  const html = items.map(x => `
+    <div class="excl-item">
+      <div>
+        <span class="excl-tag ${x['状态'] === '生效中' ? 'on' : ''}">${esc(x['状态'])}</span>
+        <b>${esc(x['9903子目'])}</b> ${esc(x['note'] || '')}
+        ｜${esc(x['覆盖方式'])}${x['统计号'] ? '｜统计号 ' + esc(x['统计号']) : ''}
+        ｜有效期 ${esc(x['有效期'])}
+      </div>
+      ${x['描述'] ? `<div style="margin-top:4px;color:var(--muted)">${esc(x['描述'])}</div>`
+                  : '<div style="margin-top:4px;color:var(--muted)">（整号排除，该统计号下商品全免，不受描述限制）</div>'}
+      <div style="margin-top:4px;font-size:12px;color:var(--muted)">
+        适用于 ${esc(x['适用于'] || '')} 的加征｜第 ${x['条目号']} 项｜Chapter 99 PDF 第 ${x['页']} 页
+      </div>
+    </div>`).join('');
+  openSrcModal(`301 排除条目 — ${esc(r['输入编码'] || '')}`,
+    `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+       排除由 USTR 按 U.S. note 20 逐条授予：<b>整号排除</b>看编码即可判定；
+       <b>按描述排除</b>必须逐条核对商品是否符合描述，编码相同不代表适用。
+     </div>` + html);
 }
 
 function tagClass(v) {
@@ -2562,7 +2622,7 @@ function renderEstimate(data) {
       <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
       <td>${esc(r['基础等效从价'])}</td>
       <td class="add-pct" data-full="${esc(r['301加征'] || '')}">${esc(r['301加征'] || '—')}</td>
-      <td class="add-pct" data-full="${esc(r['FLIP 301加征'] || '')}">${esc(r['FLIP 301加征'] || '—')}</td>
+      <td class="add-pct${String(r['FLIP 301加征'] || '').includes('范围存疑') ? ' scope-suspect' : ''}" data-full="${esc(r['FLIP 301加征'] || '')}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
       <td><b style="color:var(--primary-dark)">${esc(r['总税负估算'])}</b></td>
       <td>${esc(r['原产地'] || '')}</td>
       <td class="note" data-full="${esc(r['备注'])}">${esc(r['备注'])}</td>`;

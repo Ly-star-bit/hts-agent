@@ -242,15 +242,21 @@ class TestTaxReversal(unittest.TestCase):
 
     def test_real_reversal_detected(self):
         """
-        真实数据：8506.50.00 基础 2.7% 低于 8507.60.00 的 3.4%，
-        但 301 档位不同，总税负 40.2% 反而高于 28.4%。
+        真实数据：4012.90.10 基础 0% 低于 4006.10.00 的 2.9%，
+        但 301 档位不同（List 3 25% vs List 4A 7.5%），
+        总税负 37.5% 反而高于 22.9%。
+
+        原来这里用的是锂电池 8506.50.00 / 8507.60.00。那个反转其实是
+        FLIP 301 把带 Aircraft 范围限制的 8507.60.00 误判成无条件豁免
+        （28.4% vs 40.2%）造出来的——修掉之后两者同为 12.5% 档，不再反转。
+        换成由 301 清单档位差驱动的一组，不依赖豁免判定。
         """
-        rows = rate.search(self.db, "锂电池", limit=20, sort="relevance")
+        rows = rate.search(self.db, "tire", limit=20, sort="relevance")
         d = criteria.detect_dispute(self.db, rows)
-        self.assertTrue(d["有分歧"], "锂电池应命中 8507/8506 两个品目")
+        self.assertTrue(d["有分歧"], "tire 应命中 4006/4012 两个品目")
         self.assertTrue(d["税负反转"], "该组存在反转，必须提示")
-        self.assertIn("8506.50.00", d["税负反转"])
-        self.assertIn("8507.60.00", d["税负反转"])
+        self.assertIn("4012.90.10", d["税负反转"])
+        self.assertIn("4006.10.00", d["税负反转"])
 
     def test_no_reversal_when_order_agrees(self):
         rows = [row("8507.60.00", 3.4), row("8507.60.00", 3.4)]

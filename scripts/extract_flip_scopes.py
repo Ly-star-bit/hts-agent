@@ -9,10 +9,12 @@ Scope Limitations（范围限制，如 Aircraft/Pharma）与物理页码，回�
 供 Web 端"来源追溯"点击查看原文定位使用。
 
 输出新增键（保留原有 universal / by_economy / meta 不变）：
-  - universal_scopes:      {norm8: "Aircraft"|"Pharma"|""}   Part A 通用豁免的范围限制
+  - universal_scopes:      {norm8: "Aircraft"|"Pharma"|"Ex"|""}  Part A 通用豁免的范围限制
   - universal_pages:       {norm8: 物理页号}                  Part A 编码所在页（PDF 页号，1 起）
+  - universal_ex_desc:     {norm8: Description 原文}         仅 Ex 档（该栏正文即范围本身）
   - by_economy_scopes:     {经济体: {norm8: scope}}          Parts B-O 范围限制
   - by_economy_pages:      {经济体: {norm8: 页号}}           Parts B-O 编码所在页
+  - by_economy_ex_desc:    {经济体: {norm8: Description}}    仅 Ex 档
   - meta 追加 scope_extraction 说明，并更新 scoped_count
 
 用法：python scripts/extract_flip_scopes.py
@@ -46,8 +48,10 @@ def extract():
 
     universal_scopes = {}
     universal_pages = {}
+    universal_ex_desc = {}
     by_economy_scopes = {}
     by_economy_pages = {}
+    by_economy_ex_desc = {}
     part_aliases = {  # FRN Part → 现有 by_economy 键
         "B": "GB", "C": "EU", "D": "CH", "E": "MY", "F": "KH", "G": "GT",
         "H": "SV", "I": "AR", "J": "BD", "K": "TW", "L": "ID", "M": "EC",
@@ -77,16 +81,26 @@ def extract():
                         continue
                     code = norm(first)
                     scope = (row[2] or "").strip() if len(row) > 2 else ""
+                    # Aircraft / Pharma 的范围由 FRN 页 137 的定义给出，Description 栏
+                    # 只是"informational only"；但 "Ex" 档 FRN 明写"defined and limited
+                    # by the product description"——范围本身就在这一栏里。只存编码
+                    # 等于把这一档的判定依据丢了，所以 Ex 行连描述一起留下。
+                    desc = re.sub(r"\s+", " ", (row[1] or "").strip()) if len(row) > 1 else ""
                     if part == "A":
                         universal_scopes[code] = scope
                         universal_pages[code] = page_no
+                        if scope == "Ex" and desc:
+                            universal_ex_desc[code] = desc
                     elif part in part_aliases:
                         key = part_aliases[part]
                         by_economy_scopes.setdefault(key, {})[code] = scope
                         by_economy_pages.setdefault(key, {})[code] = page_no
+                        if scope == "Ex" and desc:
+                            by_economy_ex_desc.setdefault(key, {})[code] = desc
                     # Part A 之外的未识别部分跳过
 
-    return universal_scopes, universal_pages, by_economy_scopes, by_economy_pages
+    return (universal_scopes, universal_pages, universal_ex_desc,
+            by_economy_scopes, by_economy_pages, by_economy_ex_desc)
 
 
 def _report_delta(old_u, old_e, new_u, new_e):
@@ -112,14 +126,16 @@ def _report_delta(old_u, old_e, new_u, new_e):
           f"移除豁免 {rm_t} 个（这些此前被少收）")
 
 
-def merge_and_save(us, up, es, ep):
+def merge_and_save(us, up, ud, es, ep, ed):
     with open(EXEMPTIONS_JSON, encoding="utf-8-sig") as f:
         data = json.load(f)
 
     data["universal_scopes"] = us
     data["universal_pages"] = up
+    data["universal_ex_desc"] = ud
     data["by_economy_scopes"] = es
     data["by_economy_pages"] = ep
+    data["by_economy_ex_desc"] = ed
     data["scoped_count"] = sum(1 for s in us.values() if s)
 
     # 权威豁免列表也由本次提取重建。
@@ -162,11 +178,13 @@ def merge_and_save(us, up, es, ep):
 
 def main():
     print("提取 FLIP FRN ANNEX II 范围限制与页码（约 1-3 分钟）...")
-    us, up, es, ep = extract()
+    us, up, ud, es, ep, ed = extract()
     print(f"Part A 编码 {len(us)} 个（其中带范围限制 {sum(1 for s in us.values() if s)} 个）")
     for k, v in es.items():
         print(f"  Part {k}: {len(v)} 个")
-    data = merge_and_save(us, up, es, ep)
+    print(f"  其中 Ex 档（范围由 Description 栏定义）留存描述："
+          f"Part A {len(ud)} 条，Parts B-O {sum(len(v) for v in ed.values())} 条")
+    data = merge_and_save(us, up, ud, es, ep, ed)
 
     # 自检：关键编码
     for probe in ("90251980", "85076000", "85414300"):

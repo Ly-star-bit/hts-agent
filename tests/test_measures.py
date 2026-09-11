@@ -158,6 +158,19 @@ class TestFlip301ForcedLabor(unittest.TestCase):
         self.assertEqual(r["FLIP 301加征"], "")
         self.assertIn("不在 FLIP 301", r["FLIP 301说明"])
 
+    def test_not_investigated_beats_annex_ii(self):
+        """
+        不在 60 名单的原产地，命中 ANNEX II 也应答"不适用"，不是"豁免"。
+
+        档位判定此前排在 ANNEX II 之后，美国产 0201.20.02 会被答成"官方豁免"。
+        税额同样是 0，但结论性质不同：说"已豁免"，复核的人会去 FRN 里找一份
+        对美国并不存在的豁免依据。
+        """
+        r = core.query_one(self.db, "02012002", origin="US")
+        self.assertEqual(r["FLIP 301加征"], "")
+        self.assertIn("不在 FLIP 301", r["FLIP 301说明"])
+        self.assertEqual(r["FLIP 301档位"], {"mode": "none"})
+
     def test_eu_member_normalized_to_eu(self):
         # 成员国代码必须归一到 EU，否则会落进"不在名单"而静默漏加
         for member in ("DE", "FR", "IT", "DEU", "FRA"):
@@ -179,14 +192,15 @@ class TestFlip301ForcedLabor(unittest.TestCase):
         self.assertEqual(r["FLIP 301加征数值"], 12.5)
 
     def test_exemption_universal_part_a(self):
-        # ANNEX II 通用豁免（Part A）：8507.60.00 锂电池被官方豁免 FLIP 301
-        r = core.query_one(self.db, "85076000", origin="CN")
+        # ANNEX II 通用豁免（Part A）且**无**范围限制才是真豁免：
+        # 0201.20.02 牛肉，Scope Limitations 栏为空，FLIP 301 不加征
+        r = core.query_one(self.db, "02012002", origin="CN")
         self.assertEqual(r["FLIP 301加征"], "豁免")
         self.assertIn("ANNEX II", r["FLIP 301说明"])
         self.assertIn("豁免", r["备注"])
-        # 豁免不叠加进总税负：中国 3.4% + 25% + 0 = 28.4%
-        t = rate.calc_total(self.db, "85076000", unit_value=10, origin="CN")
-        self.assertIn("28.4%", t["总税负估算"])
+        # 豁免不叠加进总税负：中国 4% + 301 7.5% + 0 = 11.5%
+        t = rate.calc_total(self.db, "02012002", unit_value=10, origin="CN")
+        self.assertIn("11.5%", t["总税负估算"])
         self.assertEqual(t["FLIP 301加征数值"], 0.0)
 
     def test_exemption_not_universal(self):
@@ -195,16 +209,52 @@ class TestFlip301ForcedLabor(unittest.TestCase):
         self.assertEqual(r["FLIP 301加征"], "+12.5%")
 
     def test_exemption_scope_limitation(self):
-        # 9025.19.80 在 ANNEX II Part A，但带 Aircraft 范围限制（仅民用航空器用途豁免）
+        """
+        带 Scope Limitations 的 ANNEX II 条目不是无条件豁免。
+
+        9025.19.80（温度计）在 Part A 但标 Aircraft，按 FRN 页 137 只有民用航空器
+        及其零部件豁免。此前一律返回"豁免"、FLIP 加征算 0，一支普通工业温度计
+        的中国产总税负被给成 25%（正确是 25% + 12.5% = 37.5%）——少收会被 CBP
+        追补加罚，所以判不出用途时按不豁免保守计，另标"范围存疑"要人工确认。
+        """
         r = core.query_one(self.db, "90251980", origin="CN")
-        self.assertEqual(r["FLIP 301加征"], "豁免")
-        self.assertIn("范围限制：Aircraft", r["FLIP 301说明"])
+        self.assertEqual(r["FLIP 301加征"], "+12.5%(范围存疑)")
+        self.assertEqual(r["FLIP 301档位"]["mode"], "conditional")
+        self.assertEqual(r["FLIP 301档位"]["scope"], "Aircraft")
+        self.assertEqual(r["FLIP 301档位"]["fallback"], {"mode": "flat", "rate": 12.5})
+        self.assertIn("范围限制 “Aircraft”", r["FLIP 301说明"])
+        self.assertIn("民用航空器", r["FLIP 301说明"])   # FRN 页 137 的官方定义要给出来
         self.assertIn("FRN 物理页", r["FLIP 301说明"])
+        self.assertIn("范围限制", r["备注"])              # 列表页只看备注也要看得出有条件
+        # 税额按不豁免保守计：Free + 301 25% + FLIP 12.5%
+        t = rate.calc_total(self.db, "90251980", unit_value=10, origin="CN")
+        self.assertEqual(t["FLIP 301加征数值"], 12.5)
+        self.assertIn("37.5%", t["总税负估算"])
         # 来源字段：FLIP 来源带范围限制与页码
         flip_src = next(s for s in r["来源"] if s["类型"] == "FLIP 301")
         self.assertEqual(flip_src["范围限制"], "Aircraft")
         self.assertRegex(flip_src["位置"], r"第 \d+ 页")
         self.assertEqual(flip_src["key"], "flip_frn")
+
+    def test_scope_ex_carries_description(self):
+        """
+        "Ex" 档的范围由 ANNEX II 该行 Description 栏正文定义（FRN 页 137 原文），
+        只给一个 "Ex" 等于没说。0805.90.01 的 Description 是 Etrogs（香橼），
+        说明里必须带上，否则用户无从判断自己的货在不在范围内。
+        """
+        r = core.query_one(self.db, "08059001", origin="CN")
+        self.assertIn("范围存疑", r["FLIP 301加征"])
+        self.assertEqual(r["FLIP 301档位"]["scope"], "Ex")
+        self.assertIn("Etrogs", r["FLIP 301说明"])
+
+    def test_scope_limitation_net_mfn_origin(self):
+        """
+        net-of-MFN 档（EU/TW 合计封顶 10%）遇到范围限制，回退额仍要走 net_mfn，
+        不能按名义 10% 直接加——否则 MFN 已达上限的商品会被凭空多加一遍。
+        """
+        r = core.query_one(self.db, "90251980", origin="EU")
+        self.assertEqual(r["FLIP 301加征"], "≤+10%(范围存疑)")
+        self.assertEqual(r["FLIP 301档位"]["fallback"], {"mode": "net_mfn", "cap": 10.0})
 
     def test_source_field_structure(self):
         # 来源字段：基础税率带 CSV 行号；301 加征带 USTR PDF 页码；flip 历史带本地文件
@@ -374,8 +424,9 @@ class TestFlip301DataAvailability(unittest.TestCase):
         self.assertNotIn("豁免", pct)
 
     def test_rates_present_still_exempt(self):
-        # 数据齐全时豁免判定不受影响（回归）
-        pct, note, _src, spec = core.flip301_judge(self.db, "CN", code8="85076000")
+        # 数据齐全时豁免判定不受影响（回归）。用无范围限制的条目——
+        # 8507.60.00 标 Aircraft，本就不该是无条件豁免。
+        pct, note, _src, spec = core.flip301_judge(self.db, "CN", code8="02012002")
         self.assertEqual(pct, "豁免")
         self.assertIn("ANNEX II", note)
 
@@ -631,3 +682,117 @@ class TestMeasuresConfigCache(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSec301Exclusions(unittest.TestCase):
+    """
+    301 排除（U.S. note 20）判定。
+
+    此前工具完全没有这一层：命中 301 清单就报满额加征。而 USTR 的排除是逐条授予的，
+    9025.19.80.85（温度计）整个统计号列在 note 20(vvv)(ii) 第 (3) 项，报关填
+    9903.88.69 即免掉 25%——工具却一直报 +25%，是让客户白交钱的方向。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_full_exclusion_zeroes_301(self):
+        """整号排除 + 当日生效 → 加征归零，9903 子目改成排除标目"""
+        r = core.query_one(self.db, "9025198085", origin="CN")
+        self.assertEqual(r["301判定"], "是(已排除)")
+        self.assertEqual(r["301加征"], "0%(排除)")
+        self.assertEqual(r["9903子目"], "9903.88.69")     # 报关要改填这个
+        self.assertIn("已排除", r["301排除"])
+        self.assertIn("2026-11-09", r["301排除"])
+        self.assertIn("9903.88.69", r["备注"])
+        # 税额真的要少这 25%：Free + 0 + FLIP 12.5%
+        t = rate.calc_total(self.db, "9025198085", unit_value=10, origin="CN")
+        self.assertEqual(t["301加征数值"], 0.0)
+        self.assertIn("12.5%", t["总税负估算"])
+
+    def test_sibling_suffix_not_excluded(self):
+        """
+        排除授予到 10 位统计号。同一 8 位子目下没被列入的后缀照常加征——
+        整号排除绝不能外溢到兄弟后缀，否则会把该交的税判没了。
+        """
+        r = core.query_one(self.db, "9025198030", origin="CN")
+        self.assertEqual(r["301判定"], "是")
+        self.assertEqual(r["301加征"], "+25%")
+        self.assertIn("待核", r["301排除"])
+
+    def test_eight_digit_names_the_excluded_stat_numbers(self):
+        """
+        只给 8 位时不能判免（不知道具体统计号），但必须把被整号排除的后缀点出来。
+        只说"有 3 条待核"，用户不会想到其中某个后缀是无条件全免的，仍会按满额报关。
+        """
+        r = core.query_one(self.db, "90251980", origin="CN")
+        self.assertEqual(r["301加征"], "+25%")
+        self.assertIn("整号", r["301排除"])
+        for suffix in ("9025.19.80.10", "9025.19.80.20", "9025.19.80.85"):
+            self.assertIn(suffix, r["备注"])
+
+    def test_described_exclusion_never_auto_applies(self):
+        """
+        按产品描述授予的排除不能按编码自动判免——同一税号下有的款符合有的不符合，
+        自动判免会直接造出错误申报。只提示 + 给原文。
+        """
+        r = core.query_one(self.db, "3906905000", origin="CN")
+        self.assertEqual(r["301加征"], "+25%")
+        self.assertIn("描述", r["301排除"])
+        live = [x for x in r["301排除明细"] if x["状态"] == "生效中"]
+        self.assertTrue(live)
+        self.assertTrue(all(x["覆盖方式"] == "按描述排除" for x in live))
+        self.assertTrue(all(x["描述"] for x in live), "按描述排除必须带原文，否则无从核对")
+
+    def test_expired_exclusion_does_not_apply(self):
+        """
+        已过期的排除只能作历史提示。9903.88.66/.67/.68 都已到期，
+        它们在 c99_percent 里同样是 0.0，接进判定链时若不看有效期就会把过期排除算成免税。
+        """
+        r = core.query_one(self.db, "9025198085", origin="CN")
+        expired = [x for x in r["301排除明细"] if x["状态"] == "已过期"]
+        self.assertTrue(expired, "该编码历史上有过期排除，应作为历史列出")
+        # 生效的那条必须来自仍在有效期内的标目
+        auto = [x for x in r["301排除明细"]
+                if x["状态"] == "生效中" and x["覆盖方式"] == "整号排除"]
+        self.assertTrue(auto)
+        self.assertEqual(auto[0]["9903子目"], "9903.88.69")
+
+    def test_status_recomputed_at_query_time(self):
+        """
+        有效期状态必须按**查询当天**算，不能用提取那天的快照。
+        9903.88.69/.70 都在 2026-11-09 到期，用快照迟早把过期的说成有效。
+        """
+        notes = (self.db.get("exclusions") or {}).get("notes") or {}
+        n69 = notes.get("99038869")
+        self.assertIsNotNone(n69)
+        self.assertEqual(core._excl_status(n69, "2026-09-03"), "生效中")
+        self.assertEqual(core._excl_status(n69, "2026-11-09"), "生效中")   # 含当日
+        self.assertEqual(core._excl_status(n69, "2026-11-10"), "已过期")
+        self.assertEqual(core._excl_status(n69, "2024-06-14"), "未生效")
+
+    def test_no_dates_never_auto_applies(self):
+        """
+        老排除标目在 htsdata.csv 里不带 Effective 字样。"没有日期"不等于"长期有效"——
+        这些标目 2020 年就废止了，默认成生效中会把过期排除算成免税。
+        """
+        self.assertEqual(
+            core._excl_status({"effective_from": "", "effective_to": ""}, "2026-09-03"),
+            "有效期未标注")
+
+    def test_non_china_origin_has_no_exclusion(self):
+        """301 与其排除都只针对中国原产"""
+        r = core.query_one(self.db, "9025198085", origin="VN")
+        self.assertNotIn("已排除", r.get("301排除", "") or "")
+
+    def test_search_rows_agree_with_query(self):
+        """
+        搜索表此前自建 301 判定、不认排除，会显示 "+25%" 而查询页显示 "0%(排除)"。
+        同一个编码在两处给出不同税负，比两处都错更难发现。
+        """
+        rows = rate.search(self.db, "9025.19.80", limit=3, sort="relevance", origin="CN")
+        row = next(r for r in rows if r["编码"] == "9025.19.80")
+        q = core.query_one(self.db, "90251980", origin="CN")
+        self.assertEqual(row["301加征"], q["301加征"])
+        self.assertEqual(row["301排除"], q["301排除"])

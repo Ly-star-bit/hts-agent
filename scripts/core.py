@@ -12,6 +12,7 @@ core.py —— HTS 多措施查询核心逻辑（命令行工具与 Web 前端�
 禁用后查询/估算不含该加征字段、总税负不叠加该项）。
 数据来源：data/sec301_db.json（由 build_db.py 生成，含 flip_301 / vietnam / flip301 分区）。
 """
+import datetime as _dt
 import json
 import os
 import re
@@ -300,12 +301,52 @@ def normalize_origin(origin_code):
     return ORIGIN_ALIASES.get(o, o)
 
 
+# ANNEX II "Scope Limitations" 三档的官方定义（FRN 物理页 137 原文，逐条转述）。
+# 带这一列的子目**只有落在该范围内**才不适用 FLIP 301，范围外仍按经济体档位加征。
+FLIP_SCOPE_DEFS = {
+    "Aircraft": "仅民用航空器（军用航空器以外的所有航空器）及其发动机、零部件、组件，"
+                "其他部件、组件与分总成，以及地面飞行模拟器及其零部件，且须另行满足 "
+                "HTSUS general note 6 的条件（不论是否按 Special 栏 “Free (C)” 申报）",
+    "Pharma": "仅用于医药用途（pharmaceutical applications）的商品"
+              "（不论是否按 Special 栏 “Free (K)” 申报）",
+    "Ex": "仅限 ANNEX II 该行 Description 栏所述商品——该栏正文即范围本身",
+}
+
+
+def _flip_tier(o, rates):
+    """
+    按经济体取 FLIP 301 档位，返回 (显示文本, 说明, 来源Part文本, spec)。
+
+    从 flip301_judge 里拆出来，是因为豁免判定要用到它：ANNEX II 里带范围限制的
+    子目，范围外照旧按本档加征，得先知道本档是多少才能给出"不豁免时是多少"。
+    """
+    if o in rates.get("10", []):
+        return ("+10%",
+                "FLIP 301 强迫劳动关税 10%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）",
+                "FRN 税率表（10% 档）", {"mode": "flat", "rate": 10.0})
+    if o in rates.get("net_mfn_10", []):
+        return ("≤+10%",
+                "FLIP 301 与 MFN 合计封顶 10%（MFN≥10% 则本税 0；已适用 Section 232 或 Annex 豁免产品除外）",
+                "FRN 税率表（net-of-MFN 10%）", {"mode": "net_mfn", "cap": 10.0})
+    if o in rates.get("net_mfn_125", []):
+        return ("≤+12.5%",
+                "FLIP 301 与 MFN 合计封顶 12.5%（MFN≥12.5% 则本税 0；已适用 Section 232 或 Annex 豁免产品除外）",
+                "FRN 税率表（net-of-MFN 12.5%）", {"mode": "net_mfn", "cap": 12.5})
+    if o in rates.get("125", []):
+        return ("+12.5%",
+                "FLIP 301 强迫劳动关税 12.5%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）",
+                "FRN 税率表（12.5% 档）", {"mode": "flat", "rate": 12.5})
+    return ("", f"{o} 不在 FLIP 301 被调查经济体名单（60 个），不适用",
+            "FRN 范围（60 经济体名单）", {"mode": "none"})
+
+
 def flip301_judge(db, origin_code, code8=""):
     """
     FLIP 301 强迫劳动调查关税（Section 301，2026-07-24 生效）按原产地国家查表。
 
     返回 (加征文本, 说明, 来源dict, 档位spec)：
-      - "豁免"：编码命中 ANNEX II 豁免清单（通用 Part A / 经济体专属 / Part O 纺织品），不加征
+      - "豁免"：编码命中 ANNEX II 豁免清单且**无**范围限制，不加征
+      - "+12.5%(范围存疑)"：命中 ANNEX II 但该子目带 Scope Limitations
       - "+12.5%"：12.5% 档（all other investigated）：中国、香港、越南、新加坡、巴西等
       - "+10%"：10% 档：加拿大、墨西哥、印度、英国等 17 个
       - net-of-MFN：欧盟/台湾（合计 10%）、日本/韩国/瑞士（合计 12.5%）
@@ -315,6 +356,8 @@ def flip301_judge(db, origin_code, code8=""):
       {"mode": "flat",    "rate": 12.5}   在 MFN 之上直接加 12.5%
       {"mode": "net_mfn", "cap": 10.0}    与 MFN 合计封顶 10% → 实际加征 max(0, 10 - MFN)
       {"mode": "exempt"}                  豁免，加征 0
+      {"mode": "conditional", "scope": "Aircraft", "fallback": {...}}
+                                          仅 scope 范围内豁免，范围外按 fallback 加征
       {"mode": "none"}                    不适用 / 数据未覆盖
     加征文本只适合展示；net-of-MFN 档的 "+10%" 是名义上限而非实际加征额，
     数值计算必须走 spec，否则 MFN 已达上限的商品会被多加一遍。
@@ -344,43 +387,148 @@ def flip301_judge(db, origin_code, code8=""):
     if not f:
         return "", "数据未覆盖（缺 FLIP 301 数据源）", _src("", "", ""), {"mode": "none"}
 
-    # ① ANNEX II 豁免清单判定（逐编码）：通用 Part A / 经济体专属 / CAFTA-DR（仅 JO/SV/GT）
+    tier_txt, tier_note, tier_part, tier_spec = _flip_tier(o, rates)
+
+    # ① 不在 60 经济体名单 → 本措施对该原产地根本不适用，是否收录进 ANNEX II 无意义。
+    #    此前 ANNEX II 判在档位之前，非被调查经济体命中清单会被答成"官方豁免"：
+    #    税额同样是 0，但把"不适用"说成"已豁免"，人工复核会去找一份并不存在的豁免依据。
+    if tier_spec["mode"] == "none":
+        return tier_txt, tier_note, _src("", tier_part, ""), tier_spec
+
+    def _annex(prefix, part_txt, page, scope, ex_desc=""):
+        """
+        ANNEX II 命中后的结论：无范围限制才是真豁免，带范围限制只是"可能豁免"。
+
+        1257/2113 条 Part A 条目带 Scope Limitations（Pharma 700 / Aircraft 541 / Ex 16），
+        此前一律返回 {"mode": "exempt"}，范围限制只写进说明文本、不进档位——
+        于是一支普通工业温度计（9025.19.80，限 Aircraft）被算成 FLIP 301 免征，
+        中国产总税负给到 25% 而非 37.5%。少收要被 CBP 追补加罚，比多收危险，
+        所以判不了用途时按**不豁免**给数，另标"范围存疑"要求人工确认。
+        """
+        page_txt = f"（FRN 物理页 {page}）" if page else ""
+        if not scope:
+            return "豁免", f"{prefix}，不适用 FLIP 301{page_txt}", _src(
+                page, part_txt, ""), {"mode": "exempt"}
+        defn = FLIP_SCOPE_DEFS.get(scope, "见 FRN ANNEX II 原文")
+        desc_txt = f"；该行 Description 原文：{ex_desc}" if ex_desc else ""
+        note = (f"{prefix}，但该子目带范围限制 “{scope}”：{defn}{desc_txt}。"
+                f"仅此范围内的商品豁免，范围外仍按 {tier_txt} 加征——"
+                f"下方税额已按不豁免保守计，请核实商品用途后人工确认{page_txt}")
+        return (f"{tier_txt}(范围存疑)", note, _src(page, part_txt, scope),
+                {"mode": "conditional", "scope": scope, "fallback": tier_spec})
+
+    # ② ANNEX II 判定（逐编码）：通用 Part A / 经济体专属 / CAFTA-DR（仅 JO/SV/GT）
     if code8:
         universal = ex.get("universal") or []
         by_econ = ex.get("by_economy") or {}
         if code8 in universal:
-            scope = (ex.get("universal_scopes") or {}).get(code8, "")
-            page = (ex.get("universal_pages") or {}).get(code8, "")
-            scope_txt = f"，范围限制：{scope}（仅该范围商品豁免）" if scope else ""
-            page_txt = f"（FRN 物理页 {page}）" if page else ""
-            return "豁免", f"ANNEX II 通用豁免（Part A{scope_txt}），不适用 FLIP 301{page_txt}", _src(
-                page, "ANNEX II Part A（通用豁免，所有被调查经济体）", scope), {"mode": "exempt"}
+            return _annex(
+                "ANNEX II 通用豁免（Part A）",
+                "ANNEX II Part A（通用豁免，所有被调查经济体）",
+                (ex.get("universal_pages") or {}).get(code8, ""),
+                (ex.get("universal_scopes") or {}).get(code8, ""),
+                (ex.get("universal_ex_desc") or {}).get(code8, ""))
         if code8 in by_econ.get(o, []):
-            scope = ((ex.get("by_economy_scopes") or {}).get(o) or {}).get(code8, "")
-            page = ((ex.get("by_economy_pages") or {}).get(o) or {}).get(code8, "")
-            scope_txt = f"，范围限制：{scope}（仅该范围商品豁免）" if scope else ""
-            page_txt = f"（FRN 物理页 {page}）" if page else ""
-            return "豁免", f"ANNEX II 豁免（该经济体专属 Part{scope_txt}），不适用 FLIP 301{page_txt}", _src(
-                page, f"ANNEX II 该经济体专属（{o}）", scope), {"mode": "exempt"}
+            return _annex(
+                "ANNEX II 豁免（该经济体专属 Part）",
+                f"ANNEX II 该经济体专属（{o}）",
+                ((ex.get("by_economy_pages") or {}).get(o) or {}).get(code8, ""),
+                ((ex.get("by_economy_scopes") or {}).get(o) or {}).get(code8, ""),
+                ((ex.get("by_economy_ex_desc") or {}).get(o) or {}).get(code8, ""))
         if o in ("JO", "SV", "GT") and code8 in by_econ.get("CAFTA_DR", []):
-            page = ((ex.get("by_economy_pages") or {}).get("CAFTA_DR") or {}).get(code8, "")
-            page_txt = f"（FRN 物理页 {page}）" if page else ""
-            return "豁免", f"ANNEX II Part O（约旦 / 萨尔瓦多 / 危地马拉纺织品），不适用 FLIP 301{page_txt}", _src(
-                page, "ANNEX II Part O（约旦 / 萨尔瓦多 / 危地马拉 免税纺织品）", ""), {"mode": "exempt"}
-    if o in rates.get("10", []):
-        return "+10%", "FLIP 301 强迫劳动关税 10%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）", _src(
-            "", "FRN 税率表（10% 档）", ""), {"mode": "flat", "rate": 10.0}
-    if o in rates.get("net_mfn_10", []):
-        return "≤+10%", "FLIP 301 与 MFN 合计封顶 10%（MFN≥10% 则本税 0；已适用 Section 232 或 Annex 豁免产品除外）", _src(
-            "", "FRN 税率表（net-of-MFN 10%）", ""), {"mode": "net_mfn", "cap": 10.0}
-    if o in rates.get("net_mfn_125", []):
-        return "≤+12.5%", "FLIP 301 与 MFN 合计封顶 12.5%（MFN≥12.5% 则本税 0；已适用 Section 232 或 Annex 豁免产品除外）", _src(
-            "", "FRN 税率表（net-of-MFN 12.5%）", ""), {"mode": "net_mfn", "cap": 12.5}
-    if o in rates.get("125", []):
-        return "+12.5%", "FLIP 301 强迫劳动关税 12.5%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）", _src(
-            "", "FRN 税率表（12.5% 档）", ""), {"mode": "flat", "rate": 12.5}
-    return "", f"{o} 不在 FLIP 301 被调查经济体名单（60 个），不适用", _src(
-        "", "FRN 范围（60 经济体名单）", ""), {"mode": "none"}
+            return _annex(
+                "ANNEX II Part O（约旦 / 萨尔瓦多 / 危地马拉纺织品）",
+                "ANNEX II Part O（约旦 / 萨尔瓦多 / 危地马拉 免税纺织品）",
+                ((ex.get("by_economy_pages") or {}).get("CAFTA_DR") or {}).get(code8, ""),
+                ((ex.get("by_economy_scopes") or {}).get("CAFTA_DR") or {}).get(code8, ""),
+                ((ex.get("by_economy_ex_desc") or {}).get("CAFTA_DR") or {}).get(code8, ""))
+
+    # ③ 未命中 ANNEX II：按经济体档位加征
+    return tier_txt, tier_note, _src("", tier_part, ""), tier_spec
+
+
+# ---------- 301 排除（U.S. note 20）----------
+
+# 只有"整号排除 + 当日在有效期内"才允许机器判免。理由见 exclusion_lookup 的注释。
+EXCL_AUTO = "full"
+
+
+def _excl_status(note, today):
+    """
+    排除标目在 today 的状态。与 extract_exclusions._status 同一套规则，
+    但**以查询当天重算**——数据里存的 status 是提取那天的，
+    9903.88.69/.70 都在 2026-11-09 到期，靠提取日期判断迟早会把过期的说成有效。
+    """
+    frm, to = note.get("effective_from"), note.get("effective_to")
+    if not frm and not to:
+        return "有效期未标注"
+    if frm and frm > today:
+        return "未生效"
+    if to and to < today:
+        return "已过期"
+    return "生效中"
+
+
+def exclusion_lookup(db, code, code8, today=None):
+    """
+    查该编码可用的 301 排除（USTR 按 U.S. note 20 逐条授予）。
+
+    返回 (auto, items)：
+      auto   可直接判免的那条（covers=full 且当日生效中），没有则 None
+      items  全部相关排除条目，按"生效中优先、整号优先"排序，供展示与人工核对
+
+    **为什么只有 full 能自动判免**：排除分两种形态——
+      full       条目正文就是一个统计号（如 note 20(vvv)(ii) 第 (3) 项 "9025.19.8085"）。
+                 该号下所有中国产商品都排除，纯粹是"编码 + 日期"问题，不需要判断商品，
+                 机器能给确定答案，也**必须**给——不给就等于让客户白交 25%。
+      described  排除按产品描述授予（"Infrared thermometers (described in …9025.19.8085)"）。
+                 同一个税号下有的款符合、有的不符合，编码本身回答不了，
+                 自动判免会直接造出错误申报，所以只列原文供人工核对。
+
+    排除按 10 位统计号授予，8 位查询命中不到具体统计号时只能提示、不能判免。
+    """
+    ex = db.get("exclusions") or {}
+    by_code = ex.get("by_code") or {}
+    notes = ex.get("notes") or {}
+    if not by_code:
+        return None, []
+    today = today or _dt.date.today().isoformat()
+
+    recs = list(by_code.get(code) or []) if len(code) == 10 else []
+    exact = bool(recs)
+    if not exact:
+        # 8 位查询：把该 8 位下所有 10 位统计号的排除都捞出来，但一律不判免——
+        # 排除授予到 10 位，不知道具体统计号就不知道该不该免。
+        for c, rs in by_code.items():
+            if c[:8] == code8 and len(c) == 10:
+                for r in rs:
+                    recs.append({**r, "统计号": fmt(c, 10)})
+
+    out = []
+    for r in recs:
+        note = notes.get(r["c99"]) or {}
+        st = _excl_status(note, today)
+        out.append({
+            "9903子目": _fmt_c99(r["c99"]),
+            "note": r.get("note", ""),
+            "适用于": _fmt_c99(r.get("list_c99", "")),
+            "覆盖方式": "整号排除" if r["covers"] == "full" else "按描述排除",
+            "状态": st,
+            "有效期": f"{note.get('effective_from') or '—'} → {note.get('effective_to') or '—'}",
+            "生效止": note.get("effective_to", ""),
+            "描述": r.get("desc", ""),
+            "条目号": r.get("item"),
+            "页": r.get("page"),
+            **({"统计号": r["统计号"]} if r.get("统计号") else {}),
+        })
+    order = {"生效中": 0, "未生效": 1, "有效期未标注": 2, "已过期": 3}
+    out.sort(key=lambda x: (order.get(x["状态"], 9), 0 if x["覆盖方式"] == "整号排除" else 1))
+
+    auto = None
+    if exact:
+        auto = next((x for x in out
+                     if x["状态"] == "生效中" and x["覆盖方式"] == "整号排除"), None)
+    return auto, out
 
 
 def _criteria_of(db, code8):
@@ -470,6 +618,35 @@ def query_one(db, code, origin="CN"):
             c99_fmt = ""
             pct_txt = ""
             note = ""
+        # 301 排除（U.S. note 20）：命中清单后还要看有没有被 USTR 排除。
+        # 只有"整号排除 + 当日生效"才改税额；按描述授予的只列原文供人工核对。
+        excl_auto, excl_items = (None, [])
+        if cn301_on and is301.startswith("是"):
+            excl_auto, excl_items = exclusion_lookup(db, code, code8)
+            if excl_auto:
+                pct = 0.0
+                is301 = "是(已排除)"
+                pct_txt = "0%(排除)"
+                c99_fmt = excl_auto["9903子目"]
+                note = (f"命中301清单，但该统计号整号列入 {excl_auto['note']} 排除"
+                        f"（{excl_auto['9903子目']}，有效期 {excl_auto['有效期']}）"
+                        f"，报关时申报 {excl_auto['9903子目']} 即免除加征")
+            elif excl_items:
+                live = [x for x in excl_items if x["状态"] == "生效中"]
+                if live:
+                    # 整号排除要单独点名并给出统计号。8 位查询看不到 10 位后缀，
+                    # 而排除恰恰授予到 10 位：只说"有 N 条待核"，用户不会想到
+                    # 其中某个后缀是**无条件全免**的，仍旧按满额报关。
+                    full = [x for x in live if x["覆盖方式"] == "整号排除"]
+                    parts = []
+                    if full:
+                        nums = "、".join(dict.fromkeys(
+                            x.get("统计号", "") for x in full if x.get("统计号")))
+                        parts.append(f"{len(full)} 条整号排除"
+                                     + (f"（统计号 {nums}，报这些号即全免加征）" if nums else ""))
+                    if len(live) > len(full):
+                        parts.append(f"{len(live) - len(full)} 条按描述排除（需逐条核对是否适用）")
+                    note += "；该子目下有生效中的排除：" + "，".join(parts)
         if n < 8:
             note = "⚠ 6位品目无法判定301，请提供8位子目" + ("；" + note if note else "")
             is301 = "无法判定"
@@ -491,12 +668,19 @@ def query_one(db, code, origin="CN"):
         if not base:
             note = "⚠ 未在2026现行HTS税率表中找到该子目，可能为旧版编码" + ("；" + note if note else "")
         flip_hist, flip_change = [], ""
+        excl_auto, excl_items = None, []   # 301 排除只对中国原产有意义
         vn_measures = vietnam_info(db, code8, "VN" if origin_code == ORIGIN_VN else "OTHER")
 
     # 配置裁剪：禁用加征时备注标注，且不输出加征字段
     if not cn301_on:
         note = (note + "；301 加征已禁用（配置）") if note else "301 加征已禁用（配置）"
-    if flip301_pct and flip301_pct != "豁免":
+    if "范围存疑" in (flip301_pct or ""):
+        # 备注是列表页唯一能看全的文字列，范围限制这种"结论有条件"的信息必须进来，
+        # 否则一眼扫过去只看到一个百分比，看不出这笔税还取决于商品用途。
+        _scope = (flip301_spec or {}).get("scope", "")
+        _t = f"FLIP 301 命中 ANNEX II 但带范围限制“{_scope}”，已按不豁免计（{flip301_pct}），需人工核实用途"
+        note = (note + "；" + _t) if note else _t
+    elif flip301_pct and flip301_pct != "豁免":
         note = (note + f"；FLIP 301 强迫劳动关税 {flip301_pct}") if note else f"FLIP 301 强迫劳动关税 {flip301_pct}"
     elif flip301_pct == "豁免":
         note = (note + "；FLIP 301 豁免（ANNEX II 清单）") if note else "FLIP 301 豁免（ANNEX II 清单）"
@@ -527,6 +711,21 @@ def query_one(db, code, origin="CN"):
     # 加征字段：仅启用时输出（禁用则不输出、总税负不叠加）
     if cn301_on:
         result["301加征"] = pct_txt
+        # 排除信息独立成列：既然报关时要改填 9903 子目，就得让人看到依据与有效期
+        _live = [x for x in excl_items if x["状态"] == "生效中"]
+        _full = [x for x in _live if x["覆盖方式"] == "整号排除"]
+        # 列宽有限，单元格只放结论；完整依据在「301排除明细」与备注里。
+        # 9903 子目已被改写成排除标目，这里不必重复。
+        if excl_auto:
+            result["301排除"] = f"已排除 至 {excl_auto['生效止']}"
+        elif _full:
+            _d = len(_live) - len(_full)
+            result["301排除"] = f"待核：{len(_full)} 整号" + (f" / {_d} 描述" if _d else "")
+        elif _live:
+            result["301排除"] = f"待核：{len(_live)} 描述"
+        else:
+            result["301排除"] = ""
+        result["301排除明细"] = excl_items[:20]
     if flip301_on:
         result["FLIP 301加征"] = flip301_pct
         result["FLIP 301说明"] = flip301_note

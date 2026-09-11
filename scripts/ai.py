@@ -420,8 +420,13 @@ def _candidate_line(db, i, row):
     cr_txt = "；".join(f"{c['类型']}:{c['原文'][:48]}" for c in crs[:3])
 
     add = f"，附加税 {row['附加税']}" if row.get("附加税") else ""
+    # FLIP 301 与 301 排除也要进候选行。此前只给"301: 是 +25%"，模型是拿一份
+    # 残缺的税负信息在挑码：带 Aircraft/Pharma 范围限制的 FLIP 12.5%、
+    # 以及整号排除掉的那 25%，模型都看不到。
+    flip = f" | FLIP301: {row['FLIP 301加征']}" if row.get("FLIP 301加征") else ""
+    excl = f" | 301排除: {row['301排除']}" if row.get("301排除") else ""
     line = (f"{i}. {row['编码']} | {path_txt} | 一般税率 {row['一般税率']} | "
-            f"301: {row['301判定']} {row['301加征']}{add}")
+            f"301: {row['301判定']} {row['301加征']}{add}{flip}{excl}")
     if cr_txt:
         line += f" | 判定条件: {cr_txt}"
     return line
@@ -503,6 +508,13 @@ def classify_product(db, description, top_n=3, origin="CN"):
             "9903子目": row["9903子目"],
             "301加征": row["301加征"],
             "附加税": row["附加税"],
+            # 警示字段必须跟着数字一起走。只给"总税负 37.5%"而不说其中 12.5% 取决于
+            # 用途、25% 可能已被整号排除，比给错数更糟——它看着像个确定的结论。
+            "FLIP 301加征": (total or {}).get("FLIP 301加征", ""),
+            "FLIP 301说明": (total or {}).get("FLIP 301说明", ""),
+            "301排除": (total or {}).get("301排除", ""),
+            "301排除明细": (total or {}).get("301排除明细", []),
+            "备注": (total or {}).get("备注", ""),
             "总税负估算": total["总税负估算"] if total else "",
             "confidence": _clamp_confidence(pk.get("confidence")),
             "reason": str(pk.get("reason", ""))[:300],
@@ -879,6 +891,8 @@ def analyze_list(db, items, origin="CN"):
                 "301判定": chosen["301判定"],
                 "301加征": chosen["301加征"],
                 "9903子目": chosen["9903子目"],
+                "FLIP 301加征": (total or {}).get("FLIP 301加征", ""),
+                "301排除": (total or {}).get("301排除", ""),
                 "总税负估算": total["总税负估算"] if total else "",
                 "confidence": conf,
                 "reason": pk.get("reason", ""),
@@ -908,7 +922,10 @@ def analyze_list(db, items, origin="CN"):
         else:
             report_lines.append(
                 f"- {d['序号']}. {d['品名']} → {d['编码']} {d['商品描述'][:40]} | "
-                f"{d['一般税率']} | 301: {d['301判定']} {d['301加征']} | 总税负 {d['总税负估算']}"
+                f"{d['一般税率']} | 301: {d['301判定']} {d['301加征']}"
+                + (f" | FLIP301: {d['FLIP 301加征']}" if d.get("FLIP 301加征") else "")
+                + (f" | 301排除: {d['301排除']}" if d.get("301排除") else "")
+                + f" | 总税负 {d['总税负估算']}"
             )
     try:
         report = provider.chat(

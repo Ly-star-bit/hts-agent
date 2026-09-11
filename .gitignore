@@ -53,5 +53,11 @@ data/cross.db
 data/cross.db-shm
 data/cross.db-wal
 
+# HTS 第 99 章全文（13MB）。另外三份官方源（htsdata.csv / China Tariffs / FLIP FRN）
+# 都跟踪，唯独这份不入 git —— 体积是它们加起来的两倍，而且判定并不直接读它：
+# 判定读的是它的产物 data/sec301_exclusions.json（已跟踪），PDF 只在重新提取排除清单时需要。
+# 缺文件时：python scripts/check_sources.py --apply --only ch99_pdf
+Chapter 99_*.pdf
+
 # Playwright MCP 的临时快照/截图
 .playwright-mcp/

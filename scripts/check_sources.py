@@ -2,11 +2,11 @@
 """
 check_sources.py —— 三份官方源文件的更新检测 / 下载
 
-本工具的一切税负判定都建立在仓库根目录的三个官方文件上；官方每月都可能改版，
+本工具的一切税负判定都建立在仓库根目录的四个官方文件上；官方每月都可能改版，
 而本地文件不会自己变。这个脚本回答"官方现在的版本和我手里这份是不是同一份"，
 并可按需把新版拉下来替换。
 
-【三份文件的官方地址】（2026-09 实测钉死）
+【四份文件的官方地址】（2026-09 实测钉死）
   htsdata.csv        USITC 全量税率表导出
                      https://hts.usitc.gov/reststop/exportList?from=0100&to=9999&format=CSV&styles=false
                      当前版本号另有一个极便宜的探针：/reststop/currentRelease → {"name": "2026HTSRev17"}
@@ -15,6 +15,11 @@ check_sources.py —— 三份官方源文件的更新检测 / 下载
                      https://hts.usitc.gov/reststop/file?release=currentRelease&filename=China+Tariffs
   FLIP 301 FRN       USTR 最终行动通知，固定 URL，服务端给 ETag / Last-Modified：
                      https://ustr.gov/sites/default/files/files/Press/Releases/2026/FLIP%20301%20...FINAL.pdf
+  Chapter 99.pdf     USITC HTS 第 99 章全文，301 **排除清单**（U.S. note 20 各子条）只在这里。
+                     China Tariffs 那份 PDF 自己第 1 页就写了排除要查 note 20，正文不在它里面。
+                     https://hts.usitc.gov/reststop/file?release=currentRelease&filename=Chapter+99
+                     ⚠ 排除有硬性到期日（9903.88.69/.70 均至 2026-11-09）。到期后官方会改版，
+                     不重新抓这份文件，工具会继续按已失效的排除判 0% —— 少报的方向。
 
 【判定原则】"有没有更新"以**内容哈希**为准，不信版本号也不信文件名：
   - USITC 每次发版都把 China Tariffs 改名（Rev15→Rev17），内容却可能完全一样——按名判会误报
@@ -83,12 +88,20 @@ SOURCES = {
                 "FLIP%20301%20Investigation%20Final%20Action%20FRN%207-23-26%20FINAL.pdf"),
         "kind": "pdf",
     },
+    "ch99_pdf": {
+        "path": "Chapter 99_2026HTSRev18.pdf",
+        "label": "HTS Chapter 99（301 排除清单 U.S. note 20 正文）",
+        "url": "https://hts.usitc.gov/reststop/file?release=currentRelease&filename=Chapter+99",
+        "kind": "pdf",
+    },
 }
 
 # 远端探针里印出的"人工关注"提醒——脚本探测不到的那类变化
 MANUAL_WATCH = {
     "flip_frn": "新的 FLIP 301 修改通知会是新 URL，本脚本只盯这一份；请关注 "
                 "https://ustr.gov/about/policy-offices/press-office/press-releases",
+    "ch99_pdf": "301 排除有硬到期日（9903.88.69/.70 至 2026-11-09）。USTR 若延期或不延期，"
+                "都要重抓本文件并重跑 extract_exclusions.py，否则工具会按过期排除继续判 0%",
 }
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (hts-agent source checker)"}
@@ -242,7 +255,31 @@ def _probe_flip_frn(client, prev, local_hash, force):
     return res, data
 
 
-PROBES = {"htsdata": _probe_htsdata, "ustr_pdf": _probe_ustr_pdf, "flip_frn": _probe_flip_frn}
+def _probe_ch99_pdf(client, prev, local_hash, force):
+    """
+    13MB，比其他三份都大，所以先用 USITC 的 currentRelease 探针省流量：
+    版本号没变、本地文件也没被人动过，就沿用上次的哈希不重下。
+    版本号一变必须重下——排除清单的条目与有效期都在这份文件里。
+    """
+    rel = ""
+    try:
+        rel = (_get(client, USITC_RELEASE_URL).json() or {}).get("name", "")
+    except Exception:
+        rel = ""
+    res = {"remote_version": rel}
+    if (not force and rel and prev.get("remote_version") == rel
+            and prev.get("local_sha256") == local_hash and prev.get("remote_sha256")):
+        res.update(remote_sha256=prev["remote_sha256"], skipped_download=True)
+        return res, None
+    r = _get(client, SOURCES["ch99_pdf"]["url"])
+    data = r.content
+    res["remote_sha256"] = content_sha256(data, "pdf")
+    res["remote_size"] = len(data)
+    return res, data
+
+
+PROBES = {"htsdata": _probe_htsdata, "ustr_pdf": _probe_ustr_pdf,
+          "flip_frn": _probe_flip_frn, "ch99_pdf": _probe_ch99_pdf}
 
 
 # ------------------------------------------------------------
@@ -328,6 +365,10 @@ def rebuild(updated_keys):
     steps = []
     if "flip_frn" in updated_keys:
         steps.append([py, os.path.join(BASE_DIR, "scripts", "extract_flip_scopes.py")])
+    # Chapter 99 变了要重提排除清单；htsdata.csv 变了也要——排除的**有效期**取自
+    # htsdata.csv 里 9903 标目的品名，日期一改，"生效中/已过期"的判定就跟着变。
+    if "ch99_pdf" in updated_keys or "htsdata" in updated_keys:
+        steps.append([py, os.path.join(BASE_DIR, "scripts", "extract_exclusions.py")])
     steps.append([py, os.path.join(BASE_DIR, "scripts", "build_db.py")])
     for cmd in steps:
         print(f"\n$ {' '.join(os.path.relpath(c, BASE_DIR) if c.startswith(BASE_DIR) else c for c in cmd)}")

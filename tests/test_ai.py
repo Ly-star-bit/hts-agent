@@ -366,9 +366,10 @@ class TestAIOriginPlumbing(unittest.TestCase):
         cn = ai.classify_product(self.db, "锂电池", origin="CN")["candidates"][0]
         _install_fake(list(replies))
         vn = ai.classify_product(self.db, "锂电池", origin="VN")["candidates"][0]
-        # 中国 3.4% + 301 25% = 28.4%；越南不适用中国 301 → 3.4%
-        self.assertIn("28.4%", cn["总税负估算"])
-        self.assertIn("3.4%", vn["总税负估算"])
+        # 8507.60.00 在 ANNEX II 但带 Aircraft 范围限制，按不豁免保守计 FLIP 301 12.5%：
+        # 中国 3.4% + 301 25% + 12.5% = 40.9%；越南不适用中国 301 → 3.4% + 12.5% = 15.9%
+        self.assertIn("40.9%", cn["总税负估算"])
+        self.assertIn("15.9%", vn["总税负估算"])
         self.assertNotEqual(cn["总税负估算"], vn["总税负估算"])
 
 
@@ -431,3 +432,38 @@ class TestOllamaThink(unittest.TestCase):
         finally:
             ai.CONFIG_FILE = orig
             ai.reset_provider_cache()
+
+
+class TestAICarriesCaveats(unittest.TestCase):
+    """
+    AI 链路必须把税负的**警示字段**一起带出来，不能只给一个总数。
+
+    此前 classify_product 的候选里只有 301判定/301加征/总税负估算：
+    总税负虽然算对了（走的是同一个 rate.calc_total），但"其中 12.5% 取决于商品用途"
+    （FLIP ANNEX II 范围限制）和"其中 25% 可能已被整号排除"这两条都被丢掉了。
+    一个看起来很确定、实际有条件的数字，比一个错误的数字更容易被直接拿去报关。
+    喂给模型的候选行同理——模型是拿这行文本在挑码。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import core
+        cls.db = core.load_db()
+
+    def test_candidate_line_includes_flip_and_exclusion(self):
+        import rate
+        rows = rate.search(self.db, "9025.19.80", limit=1, sort="relevance", origin="CN")
+        line = ai._candidate_line(self.db, 1, rows[0])
+        self.assertIn("FLIP301:", line)
+        self.assertIn("301排除:", line)
+
+    def test_classify_result_carries_caveat_fields(self):
+        replies = ['{"keywords": ["thermometer"]}',
+                   '{"picks": [{"code": "9025.19.80", "confidence": 0.9, "reason": "温度计"}]}']
+        _install_fake(list(replies))
+        res = ai.classify_product(self.db, "温度计", origin="CN")
+        c = res["candidates"][0]
+        self.assertIn("范围存疑", c["FLIP 301加征"])
+        self.assertIn("待核", c["301排除"])
+        self.assertTrue(c["301排除明细"], "排除明细要带出来，否则用户无从核对描述")
+        self.assertIn("整号", c["备注"])

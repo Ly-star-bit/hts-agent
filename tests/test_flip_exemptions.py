@@ -50,6 +50,37 @@ class TestExemptionConsistency(unittest.TestCase):
             self.assertEqual(missing, set(),
                              f"{eco} 缺少 {len(missing)} 个豁免编码（会多收 FLIP 301）：{sorted(missing)[:5]}")
 
+    def test_scope_values_are_known(self):
+        """
+        Scope Limitations 只有 FRN 页 137 定义的三档。冒出第四种值，
+        说明表格列错位或 PDF 换版了——此时 core.FLIP_SCOPE_DEFS 查不到定义，
+        用户会拿到一个没有解释的范围限制。
+        """
+        known = {"", "Aircraft", "Pharma", "Ex"}
+        vals = set(self.ex["universal_scopes"].values())
+        for eco in self.ex["by_economy_scopes"].values():
+            vals |= set(eco.values())
+        self.assertEqual(vals - known, set(), f"出现未知 Scope Limitations 取值：{vals - known}")
+        for v in vals - {""}:
+            self.assertIn(v, core.FLIP_SCOPE_DEFS, f"{v} 缺官方定义文案")
+
+    def test_ex_scope_has_description(self):
+        """
+        "Ex" 档 FRN 明写 "defined and limited by the product description"——
+        范围本身就在 Description 栏里。只存编码等于丢掉判定依据，
+        用户看到一个孤零零的 "Ex" 无从判断自己的货在不在范围内。
+        """
+        ud = self.ex.get("universal_ex_desc") or {}
+        for code, scope in self.ex["universal_scopes"].items():
+            if scope == "Ex":
+                self.assertTrue(ud.get(code), f"Part A 的 Ex 档 {code} 缺 Description 原文")
+        ed = self.ex.get("by_economy_ex_desc") or {}
+        for eco, scopes in self.ex["by_economy_scopes"].items():
+            for code, scope in scopes.items():
+                if scope == "Ex":
+                    self.assertTrue((ed.get(eco) or {}).get(code),
+                                    f"{eco} 的 Ex 档 {code} 缺 Description 原文")
+
     def test_every_code_has_provenance(self):
         """每个豁免编码都要能说出它来自 FRN 第几页——否则无从复核"""
         for code in self.ex["universal"]:
