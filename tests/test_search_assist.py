@@ -15,6 +15,7 @@ test_search_assist.py —— 搜索页的 AI 补充分析（assist_search）
 用真实 db + 假 provider，不联网。
 """
 import os
+import re
 import sys
 import unittest
 
@@ -614,3 +615,52 @@ class TestParseDoc(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCandidateDisclosure(unittest.TestCase):
+    """
+    AI 归类必须把「没选的那几个」一并交出来。
+
+    实测同一句品名连跑 5 次得到 3 个不同编码、置信度全是 0.9——单数形式的
+    「编码」一栏因此把一次抽样说成了结论。候选本来就在召回结果里，带出去零成本，
+    让人看得见 AI 是在什么范围里挑的；范围本身就不对时（实测有此情况），
+    也一眼看得出来。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def setUp(self):
+        self._orig = ai.get_provider
+
+    def tearDown(self):
+        ai.get_provider = self._orig
+
+    def _run(self, keywords, code):
+        ai.get_provider = lambda: ListProvider(
+            [{"index": 1, "keywords": keywords, "chapters": []}],
+            [{"index": 1, "code": code, "confidence": 0.9, "reason": "x"}])
+        return ai.analyze_list(self.db, [{"name": "lithium battery"}])["details"][0]
+
+    def test_alternatives_are_returned_with_cost(self):
+        d = self._run(["battery"], "85076000")
+        self.assertNotIn("error", d)
+        self.assertIn("候选", d)
+        self.assertTrue(d["候选"], "同批召回不止一条时必须给出备选")
+        for c in d["候选"]:
+            self.assertIn("编码", c)
+            # 候选不带税负就看不出选错的代价，等于只列了一串号码
+            self.assertIn("总税负估算", c)
+
+    def test_chosen_code_excluded_from_alternatives(self):
+        """选中的那个不能重复出现——同一个码列两遍会被读成两个选项"""
+        d = self._run(["battery"], "85076000")
+        picked = re.sub(r"\D", "", d["编码"])
+        for c in d["候选"]:
+            self.assertNotEqual(re.sub(r"\D", "", c["编码"]), picked)
+
+    def test_alternatives_capped(self):
+        """备选要封顶：召回 12 条全塞进弹窗，人一样挑不动"""
+        d = self._run(["battery"], "85076000")
+        self.assertLessEqual(len(d["候选"]), 5)

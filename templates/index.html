@@ -833,6 +833,21 @@
   .list-progress .psep { color: var(--border-strong); font-size: 11px; }
   .list-progress .ptext { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
+  /* 「备选 N」：不是警告，是"这里还有别的选择"。用中性描边，别和存疑抢注意力 */
+  .alt-btn {
+    font-family: var(--mono); font-size: 10.5px; padding: 1px 7px; border-radius: 10px;
+    background: var(--surface-2); color: var(--muted);
+    border: 1px solid var(--border); cursor: pointer;
+  }
+  .alt-btn:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-bg); }
+  .alt-table td, .alt-table th { font-size: 12.5px; padding: 7px 10px 7px 0; }
+  .alt-table .mono { font-family: var(--font-mono); }
+  tr.alt-picked td { background: var(--primary-bg); }
+  .alt-tag {
+    font-size: 10.5px; color: var(--primary); border: 1px solid var(--primary);
+    border-radius: 9px; padding: 0 6px; margin-left: 7px; white-space: nowrap;
+  }
+
   /* 底部 */
   footer { color: var(--muted); font-size: 12px; margin-top: 24px; text-align: center; line-height: 1.8; }
 
@@ -3432,6 +3447,40 @@ async function doAnalyzeList() {
   }
 }
 
+// 备选候选弹窗。
+// 同一句品名连跑 5 次会得到 3 个不同编码、置信度全是 0.9——单数形式的"编码"
+// 一栏因此是有误导性的，它把一次抽样说成了一个结论。把 AI 没选的那几个摆出来，
+// 让人看见它是在什么范围里挑的；范围本身不对时（实测有此情况），也一眼看得出来。
+function showAltOf(seq) {
+  const r = (currentListRows || []).find(x => x['序号'] === seq);
+  if (!r || !(r['候选'] || []).length) return;
+  const rows = [
+    `<tr class="alt-picked">
+       <td><b class="mono">${esc(r['编码'])}</b><span class="alt-tag">AI 选了这个</span></td>
+       <td>${esc(r['商品描述'] || '')}</td>
+       <td class="mono">${esc(r['一般税率'] || '')}</td>
+       <td class="mono">${esc(r['总税负估算'] || '')}</td>
+     </tr>`,
+    ...r['候选'].map(c => `<tr>
+       <td><b class="mono">${esc(c['编码'])}</b></td>
+       <td>${esc(c['商品描述'] || '')}</td>
+       <td class="mono">${esc(c['一般税率'] || '')}</td>
+       <td class="mono">${esc(c['总税负估算'] || '')}</td>
+     </tr>`),
+  ].join('');
+  openSrcModal(`同批候选 — ${esc(r['品名'] || '')}`,
+    `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.7;">
+       这些是本地税则库按 AI 给出的检索词召回的同批候选，AI 从中挑了第一行。
+       <b>同一句品名重复跑会挑出不同的码</b>（实测 5 次给出 3 个不同结果，置信度都是 0.9），
+       所以这一栏是候选而非结论。<b>若整批候选看着都不对</b>，说明检索词就偏了，
+       转去「搜索与归类」页用中文品名直接检索会更准。
+     </div>
+     <div class="table-wrap"><table class="alt-table">
+       <thead><tr><th>编码</th><th>官方品名</th><th>一般税率</th><th>总税负</th></tr></thead>
+       <tbody>${rows}</tbody>
+     </table></div>`);
+}
+
 // 置信度分档。阈值定在 80 / 60：低于 60 的行实测基本要重写品名再跑，
 // 60-80 之间多半是编码大方向对、但细分档位要核商品描述。
 // 带「存疑」信号的行一律不给绿档——那恰恰是"AI 很自信但归错了"的情形，
@@ -3495,7 +3544,11 @@ function renderList(data) {
         <div class="code">${esc(r['编码'])}</div>
         <div class="code-meta">${
           flags.length ? '<span class="tag hit" title="该行有存疑信号，见理由列">存疑</span>' : ''
-        }${confBadge(conf, flags.length > 0)}</div></td>
+        }${confBadge(conf, flags.length > 0)}${
+          (r['候选'] || []).length
+            ? `<button class="alt-btn" onclick="showAltOf(${r['序号']})"
+                 title="看 AI 在什么范围里挑的">备选 ${r['候选'].length}</button>` : ''
+        }</div></td>
       <td class="desc" data-full="${esc(r['商品描述'])}" title="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
       <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
       <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>

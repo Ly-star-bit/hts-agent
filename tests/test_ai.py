@@ -508,3 +508,4 @@ class TestAICarriesCaveats(unittest.TestCase):
         self.assertIn("待核", c["301排除"])
         self.assertTrue(c["301排除明细"], "排除明细要带出来，否则用户无从核对描述")
         self.assertIn("整号", c["备注"])
+
