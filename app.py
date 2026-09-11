@@ -57,7 +57,10 @@ class ExportRequest(BaseModel):
 @app.get("/")
 def index():
     """前端页面"""
-    return FileResponse(TEMPLATE_HTML)
+    # no-cache：不是"不缓存"，是"每次都拿 ETag 去问一句"，没变就 304。
+    # 默认只发 Last-Modified，Chrome 会按启发式规则（文件年龄的 10%）直接吃本地副本，
+    # 改完页面刷新看到的还是旧版——改样式时一路被这个坑，装了新版也得让用户硬刷。
+    return FileResponse(TEMPLATE_HTML, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/info")
@@ -70,6 +73,7 @@ def api_info():
         "hts_csv": meta.get("hts_csv", ""),
         "ustr_pdf": meta.get("ustr_pdf", ""),
         "flip_frn_pdf": meta.get("flip_frn_pdf", ""),
+        "ch99_pdf": meta.get("ch99_pdf", ""),   # 301 排除清单来源，顶栏提示里要列全四份源
         "built_at": meta.get("built_at", ""),
     }
 

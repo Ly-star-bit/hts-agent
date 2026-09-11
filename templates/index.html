@@ -57,6 +57,16 @@
     --gray: #6b7280;
     --gray-bg: #f9fafb;
 
+    /* 顶栏与分段标签（2026-09 改版）：顶栏是一条贴边白条，内容区仍居中限宽；
+       标签从"文件夹页签"改成轨道里的胶囊，选中项是浮起的白片。 */
+    --appbar-bg: rgba(255,255,255,.88);
+    --appbar-border: #e5e7eb;
+    --track: #eef1f5;                /* 标签轨道底色，比页面底色深一档才显出"凹槽" */
+    --tab-active-bg: #ffffff;
+    --tab-active-color: var(--primary);
+    --ok: #16a34a;                   /* 正向结论色（301 已排除）。此前 .excl-done 硬编码
+                                        了这个值，黑金主题下是一块突兀的荧光绿 */
+
     --focus-ring: 0 0 0 3px rgba(26,86,219,.12);
     --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
     --shadow-pop: 0 4px 16px rgba(0,0,0,.28);
@@ -122,6 +132,14 @@
     --gray: #a89574;
     --gray-bg: #1e1710;
 
+    /* 顶栏/轨道在墨底上不能用白，改用比卡片再深一档的墨色，金线勾边 */
+    --appbar-bg: rgba(21,16,10,.88);
+    --appbar-border: #3d2f1c;
+    --track: #120d08;
+    --tab-active-bg: #241c12;
+    --tab-active-color: var(--primary-dark);
+    --ok: #79b493;                   /* 青瓷，对应现代主题的绿 */
+
     --focus-ring: 0 0 0 3px rgba(216,166,63,.22);
     --shadow-card: 0 0 0 1px rgba(216,166,63,.10), 0 3px 20px rgba(0,0,0,.6);
     --shadow-pop: 0 0 0 1px rgba(216,166,63,.28), 0 6px 26px rgba(0,0,0,.75);
@@ -151,6 +169,9 @@
       rgba(216,166,63,.85) 14px 16px, transparent 16px 26px);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* 顶栏是 sticky 的，scrollIntoView({block:'start'}) 会把目标顶到栏底下去
+     （查询完自动滚到结果卡、搜索完滚到结果区都走这条路）。留出栏高 + 一点余量。 */
+  html { scroll-padding-top: 68px; }
   body {
     font-family: var(--font-ui);
     background-color: var(--bg);
@@ -160,31 +181,67 @@
     color: var(--text);
     line-height: 1.6;
   }
-  .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px 60px; }
+  /* 表格是 13 列的，1200px 下商品描述被压得只剩两三个字；放宽到 1320 */
+  .container { max-width: 1320px; margin: 0 auto; padding: 20px 16px 60px; }
 
-  /* 头部 */
-  header { text-align: center; padding: 28px 0 8px; position: relative; }
-  header h1 {
-    font-size: 26px; font-weight: 700;
+  /* ---------- 顶栏 ----------
+     此前是居中大标题 + 三行灰字（副标题 / 数据源长句），占掉近 200px 垂直空间，
+     而这三行里只有"构建于哪天"是每次都要看的。改成一条贴边的应用栏：
+     左边身份（图标 + 名称 + 措施徽标），右边状态（数据就绪胶囊 + 主题切换），
+     数据源长句收进胶囊的 hover 提示与既有的「数据来源」弹窗。 */
+  .appbar {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--appbar-bg); backdrop-filter: saturate(180%) blur(8px);
+    border-bottom: 1px solid var(--appbar-border);
+  }
+  .appbar-inner {
+    max-width: 1320px; margin: 0 auto; padding: 10px 16px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand-logo {
+    width: 34px; height: 34px; border-radius: 9px; flex: none;
+    background: var(--primary); color: var(--on-primary);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: var(--glow-primary);
+  }
+  .brand h1 {
+    font-size: 17px; font-weight: 700; line-height: 1.25;
     font-family: var(--font-display);
     background-image: var(--title-gradient);
     -webkit-background-clip: text; background-clip: text;
     color: var(--title-color);
     -webkit-text-fill-color: var(--title-color);
   }
+  .brand p { font-size: 11.5px; color: var(--muted); line-height: 1.25; }
   /* 徽标不参与标题渐变，单独还原配色 */
-  header h1 .badge {
-    display: inline-block; font-size: 13px; font-weight: 500;
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 500;
     background: var(--hit-bg); color: var(--hit);
     -webkit-text-fill-color: var(--hit);
     border: 1px solid var(--hit-border); border-radius: 20px;
-    padding: 2px 10px; margin-left: 8px; vertical-align: middle;
+    padding: 2px 10px; vertical-align: middle; white-space: nowrap;
     box-shadow: var(--glow);
   }
+  .appbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  /* 数据就绪胶囊：绿点 + 构建日期。整块可点，开「数据来源」弹窗——
+     数据源文件名、行号、版本号这类信息本来就该在弹窗里看，不必常驻顶栏。 */
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 12px; border-radius: 20px; cursor: pointer;
+    font-size: 12px; font-weight: 600; font-family: inherit;
+    background: var(--miss-bg); color: var(--miss-dark);
+    border: 1px solid var(--miss-border); white-space: nowrap;
+  }
+  .status-pill:hover { box-shadow: var(--focus-ring); }
+  .status-pill.bad { background: var(--hit-bg); color: var(--hit); border-color: var(--hit-border); }
+  .status-pill .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
+  }
 
-  /* 主题切换 */
+  /* 主题切换：从右上角绝对定位改为顶栏内的常规流元素 */
   .theme-switch {
-    position: absolute; top: 24px; right: 0;
     display: flex; gap: 2px; padding: 3px;
     background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 20px; box-shadow: var(--glow);
@@ -200,27 +257,41 @@
     background: var(--primary); color: var(--on-primary);
     box-shadow: var(--glow-primary);
   }
-  @media (max-width: 640px) {
-    .theme-switch { position: static; margin: 0 auto 12px; width: fit-content; }
+  @media (max-width: 760px) {
+    .brand p { display: none; }          /* 窄屏先舍副标题，保住名称与徽标 */
+    .appbar-right { width: 100%; margin-left: 0; }
   }
-  header p { color: var(--muted); margin-top: 6px; font-size: 14px; }
-  #info { color: var(--muted); font-size: 12px; margin-top: 6px; }
 
-  /* Tab 导航 */
-  .tabs {
-    display: flex; gap: 6px; margin-top: 22px;
-    border-bottom: 2px solid var(--border); flex-wrap: wrap;
+  /* ---------- Tab 导航：轨道 + 胶囊 ----------
+     此前是"文件夹页签"（上圆角 + 底部 2px 横线），选中态靠断开那条横线表示，
+     在深色主题下几乎看不出来。改成凹槽轨道 + 浮起白片，选中态是明确的层级差。 */
+  .tabs { display: flex; align-items: center; gap: 12px; margin: 18px 0 0; flex-wrap: wrap; }
+  .tab-track {
+    display: inline-flex; gap: 4px; padding: 4px;
+    background: var(--track); border: 1px solid var(--border);
+    border-radius: 12px; flex-wrap: wrap;
   }
   .tab {
-    border: 1px solid var(--border); border-bottom: none;
-    border-radius: 10px 10px 0 0; background: var(--gray-bg);
-    padding: 10px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid transparent; border-radius: 9px; background: none;
+    padding: 8px 16px; font-size: 13.5px; font-weight: 600; cursor: pointer;
     color: var(--muted); font-family: inherit; transition: all .15s;
   }
+  .tab svg { width: 15px; height: 15px; flex: none; }
   .tab:hover { color: var(--primary); }
   .tab.active {
-    background: var(--card); color: var(--primary); border-color: var(--border);
-    box-shadow: var(--tab-active-shadow);
+    background: var(--tab-active-bg); color: var(--tab-active-color);
+    border-color: var(--border); box-shadow: var(--shadow-card), var(--tab-active-shadow);
+  }
+  /* 标签行右侧的上下文提示（当前页签一句话说明 + 快捷键） */
+  .tabs-hint {
+    margin-left: auto; font-size: 12px; color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  kbd {
+    font-family: var(--font-mono); font-size: 11px; padding: 2px 6px;
+    border: 1px solid var(--border-strong); border-bottom-width: 2px;
+    border-radius: 5px; background: var(--surface-2); color: var(--text);
   }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
@@ -228,17 +299,38 @@
   /* 卡片 */
   .card {
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 20px; margin-top: 20px;
+    border-radius: 14px; padding: 18px 20px; margin-top: 16px;
     box-shadow: var(--shadow-card);
   }
-  .card h2 { font-size: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 { font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .card h2 .step {
     width: 22px; height: 22px; border-radius: 50%;
     background: var(--primary); color: var(--on-primary);
     font-size: 12px; display: inline-flex; align-items: center; justify-content: center;
     box-shadow: var(--glow-primary);
   }
+  /* 标题下的一行灰字说明：此前这类说明散在各处用内联 style 写，
+     字号从 11 到 13 不等；统一成卡片自己的副标题槽位 */
+  .card h2 + .card-sub { font-size: 12px; color: var(--muted); margin: -6px 0 12px 30px; }
   .card .hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  /* 卡片标题右侧的小动作按钮（⚙加征开关 / 核对来源之类），此前靠内联 style 压字号 */
+  .btn-sm { margin-left: auto; padding: 5px 12px; font-size: 12px; }
+
+  /* 输入区与旁注的双栏：左边干活，右边放"必须看见但不该打断操作"的提示。
+     结果表格不参与分栏，仍占满整行——13 列的表压到一半宽没法看。 */
+  .grid-2 { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .grid-2 > .card { margin-top: 16px; }
+  @media (max-width: 980px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* 旁注卡：琥珀色图标 + 粗体引导词的要点列表 */
+  .tips-card li { list-style: none; font-size: 12.5px; color: var(--muted); line-height: 1.7; padding-left: 14px; position: relative; }
+  .tips-card li + li { margin-top: 7px; }
+  .tips-card li::before {
+    content: ''; position: absolute; left: 0; top: 9px;
+    width: 5px; height: 5px; border-radius: 50%; background: var(--warn);
+  }
+  .tips-card li b { color: var(--text); font-weight: 600; }
+  .tips-card h2 { color: var(--warn); }
 
   /* 输入 */
   textarea {
@@ -256,14 +348,23 @@
   .or-divider::before { left: 0; } .or-divider::after { right: 0; }
 
   .dropzone {
-    border: 2px dashed var(--border); border-radius: 8px;
-    padding: 20px; text-align: center; color: var(--muted);
-    cursor: pointer; transition: all .15s;
+    border: 1.5px dashed var(--border-strong); border-radius: 12px;
+    padding: 18px; text-align: center; color: var(--muted);
+    cursor: pointer; transition: all .15s; background: var(--surface-2);
   }
   .dropzone:hover, .dropzone.dragover {
     border-color: var(--primary); color: var(--primary);
     background: var(--dropzone-hover-bg); box-shadow: var(--glow);
   }
+  /* 圆形图标让空白的虚线框有个落点，不然一大片灰底只有两行小字 */
+  .dropzone .dz-icon {
+    width: 38px; height: 38px; margin: 0 auto 8px; border-radius: 50%;
+    background: var(--primary-bg); color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dropzone .dz-main { font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .dropzone:hover .dz-main, .dropzone.dragover .dz-main { color: var(--primary); }
+  .dropzone .dz-sub { font-size: 12px; margin-top: 3px; }
   .dropzone .file-name { color: var(--primary); font-weight: 600; margin-top: 4px; word-break: break-all; }
   input[type="file"] { display: none; }
 
@@ -275,11 +376,17 @@
   .btn-primary { background: var(--primary); color: var(--on-primary); box-shadow: var(--glow-primary); }
   .btn-primary:hover { background: var(--primary-dark); }
   .btn-primary:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+  .btn-primary .kbd-hint { font-weight: 500; opacity: .75; font-size: 12px; margin-left: 2px; }
   .btn-ghost { background: var(--gray-bg); color: var(--text); border: 1px solid var(--border); }
   .btn-ghost:hover { background: var(--hover); border-color: var(--border-strong); }
-  .btn-export { background: var(--miss); color: var(--on-primary); }
-  .btn-export:hover { background: var(--miss-dark); }
-  .btn-export:disabled { opacity: .4; cursor: not-allowed; }
+  /* 导出改描边：绿色实心按钮和主按钮抢视线，而且禁用态的浅绿看着像"已点过"。
+     现在层级是 主操作=蓝实心 > 导出=绿描边 > 清空=灰描边。 */
+  .btn-export {
+    background: var(--surface); color: var(--miss-dark);
+    border: 1px solid var(--miss-border);
+  }
+  .btn-export:hover:not(:disabled) { background: var(--miss-bg); border-color: var(--miss); }
+  .btn-export:disabled { opacity: .45; cursor: not-allowed; }
   .spinner {
     display: none; width: 16px; height: 16px; margin-left: 8px;
     border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%;
@@ -309,7 +416,9 @@
   /* 深色主题下浏览器默认把下拉弹层渲染成浅色，显式指定避免白底白字 */
   .inline-form select option { background: var(--surface); color: var(--text); }
   .inline-form .grow { flex: 1; min-width: 220px; }
-  .inline-form .narrow { width: 160px; }
+  /* 160px 放不下"🇨🇳 中国（适用 301 加征）"，一直被截成"中国（适用 3("——
+     原产地选错整页结果都是错的，这个下拉不能省字 */
+  .inline-form .narrow { width: 210px; }
   .inline-form .label { font-size: 13px; color: var(--muted); }
 
   /* 统计条 */
@@ -364,15 +473,22 @@
     background: var(--surface); box-shadow: var(--glow);
   }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+  /* 表头允许折行：13 列之后窄列放不下 4 个汉字，nowrap + 省略号会把
+     「一般税率」截成「一…」——列名看不出是什么，整张表就废了。宁可折成两行。 */
   thead th {
-    background: var(--surface-2); text-align: left; padding: 10px 12px;
-    border-bottom: 2px solid var(--border-strong); white-space: nowrap; position: sticky; top: 0;
-    overflow: hidden; text-overflow: ellipsis; color: var(--text);
+    background: var(--surface-2); text-align: left; padding: 9px 10px;
+    border-bottom: 2px solid var(--border-strong); position: sticky; top: 0;
+    color: var(--text); white-space: normal; line-height: 1.25; font-size: 12.5px;
   }
   tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; word-break: break-word; }
   tbody tr:hover { background: var(--hover); }
   .desc { word-break: break-word; }
-  .code { font-family: var(--font-mono); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 编码列字号比正文小半档并收紧字距：13 列之后每列都只有百来像素，
+     等宽字体按原字号会把 9025.19.80 截成 9025.19.…，而编码截断等于没显示 */
+  .code {
+    font-family: var(--font-mono); font-weight: 600; font-size: 12.5px; letter-spacing: -.2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .tag {
@@ -392,13 +508,13 @@
      nowrap 会顶穿本列压到 FLIP301 上 */
   .excl-cell { font-size: 12px; white-space: normal; line-height: 1.35; }
   .tag { white-space: nowrap; }
-  .excl-cell.excl-done { color: var(--ok, #16a34a); font-weight: 700; }
+  .excl-cell.excl-done { color: var(--ok); font-weight: 700; }
   .excl-cell.excl-todo { color: var(--warn); cursor: pointer; text-decoration: underline dotted; }
   .excl-item { border-top: 1px solid var(--border); padding: 8px 0; font-size: 13px; }
   .excl-item:first-child { border-top: 0; }
   .excl-tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px;
               background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
-  .excl-tag.on { background: rgba(22,163,74,.12); color: #16a34a; border-color: rgba(22,163,74,.4); }
+  .excl-tag.on { background: var(--miss-bg); color: var(--ok); border-color: var(--miss-border); }
   .add-pct.scope-suspect {
     color: var(--warn); text-decoration: underline dotted; cursor: help;
     /* "+12.5%(范围存疑)" 比纯百分比长一倍，继承 .add-pct 的 nowrap 会撑破列宽、
@@ -408,9 +524,15 @@
   tr.row-hit .add-pct.scope-suspect { color: var(--warn); text-shadow: none; }
   /* 备注常是长文本（FLIP 档位说明 + flip 历史 + 越南措施拼接），钳成 2 行，
      超出省略——全文靠单元格 hover tooltip（data-full）可见，不必把整行撑到 250px 高 */
-  .note {
-    color: var(--muted); font-size: 12px; line-height: 1.45;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  /* 备注钳 3 行（原写 2 行，但从来没生效过）。
+     -webkit-line-clamp 要求 display:-webkit-box，而 <td> 的 display 会被
+     表格布局强制成 table-cell，clamp 直接失效、overflow:hidden 在 td 上也不可靠——
+     结果是长备注在行底被切出半截字。所以钳行必须套一层内部 div。
+     钳 3 行而非 2：加了排除与"范围存疑"两段说明后，2 行只够看到"命中301清单，但…"
+     就断了，而断在哪一句恰恰是要读的。全文仍靠单元格 hover 的 data-full 提示。 */
+  .note { color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .note-in {
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
     overflow: hidden;
   }
   .empty { text-align: center; color: var(--muted); padding: 30px; }
@@ -634,11 +756,16 @@
      全部 scoped 在 [data-theme="wukong"] 下，另两套主题不受影响。
      ========================================================================== */
 
-  /* 标题下的回纹分隔（--ornament 在其余主题为 none，规则自然失效） */
-  header::after {
-    content: ""; display: var(--ornament);
-    height: 3px; max-width: 420px; margin: 14px auto 2px;
+  /* 回纹分隔（--ornament 在其余主题为 none，规则自然失效）。
+     原本挂在居中大标题下面；顶栏改成贴边应用栏后，改挂到标签行上方当章节分隔。 */
+  .tabs::before {
+    content: ""; display: var(--ornament); order: -1;
+    /* flex-basis:100% 会被同时写的 max-width 压回去，导致金线和标签挤在同一行；
+       改成占满整行、靠 background 居中画出那 420px 的回纹 */
+    flex: 0 0 100%; height: 3px; margin: 2px 0 10px;
     background-image: var(--rule-image);
+    background-repeat: no-repeat; background-position: center;
+    background-size: 420px 3px;
   }
 
   /* 卡片对角金角：两个伪元素各画一角，比四角克制 */
@@ -653,7 +780,7 @@
   [data-theme="wukong"] .card::after { bottom: 7px; right: 7px; border-width: 0 2px 2px 0; }
 
   /* 徽标做成朱砂印章 */
-  [data-theme="wukong"] header h1 .badge {
+  [data-theme="wukong"] .brand .badge {
     font-family: var(--font-display); font-weight: 700; letter-spacing: 1px;
     background: rgba(226,80,63,.16);
     border: 1px solid rgba(216,166,63,.55);
@@ -698,7 +825,7 @@
   }
 
   @media (max-width: 640px) {
-    header h1 { font-size: 20px; }
+    .brand h1 { font-size: 15px; }
     .actions button { flex: 1; }
     .msg { max-width: 95%; }
   }
@@ -708,33 +835,61 @@
 </style>
 </head>
 <body>
-<div class="container">
 
-  <header>
-    <div class="theme-switch" role="group" aria-label="界面主题">
-      <button type="button" data-theme-btn="modern" onclick="setTheme('modern')">现代</button>
-      <button type="button" data-theme-btn="wukong" onclick="setTheme('wukong')">黑神话</button>
+<!-- 顶栏贴屏幕边，所以放在 .container 之外；栏内自己再限一次宽与内容区对齐 -->
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="brand">
+      <span class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>
+        </svg>
+      </span>
+      <div>
+        <h1>HTS 关税智能查询工具</h1>
+        <p>编码查询 · 税率搜索 · 成本估算 · AI 归类助手</p>
+      </div>
+      <span class="badge">美国对华 Section 301</span>
     </div>
-    <h1>HTS 关税智能查询工具 <span class="badge">美国对华 Section 301</span></h1>
-    <p>编码查询 · 税率搜索 · 成本估算 · AI 归类助手</p>
-    <div id="info">数据加载中 ...</div>
-  </header>
+    <div class="appbar-right">
+      <!-- #info 由 loadInfo 填成「● 数据就绪 · 构建日期」，完整数据源清单进 title 与弹窗 -->
+      <button type="button" class="status-pill" id="info" onclick="showSourceFiles()"
+              title="查看数据来源"><span class="dot"></span>数据加载中</button>
+      <div class="theme-switch" role="group" aria-label="界面主题">
+        <button type="button" data-theme-btn="modern" onclick="setTheme('modern')">现代</button>
+        <button type="button" data-theme-btn="wukong" onclick="setTheme('wukong')">黑神话</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="container">
 
   <!-- Tab 导航 -->
   <nav class="tabs">
-    <button class="tab active" data-tab="query" onclick="switchTab('query')">编码查询</button>
-    <button class="tab" data-tab="search" onclick="switchTab('search')">搜索与归类</button>
-    <button class="tab" data-tab="estimate" onclick="switchTab('estimate')">成本估算</button>
-    <button class="tab" data-tab="ai" onclick="switchTab('ai')">清单归类</button>
-    <button class="tab" data-tab="changes" onclick="switchTab('changes')">数据变动</button>
+    <div class="tab-track">
+      <button class="tab active" data-tab="query" onclick="switchTab('query')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>编码查询</button>
+      <button class="tab" data-tab="search" onclick="switchTab('search')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>搜索与归类</button>
+      <button class="tab" data-tab="estimate" onclick="switchTab('estimate')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h5"/></svg>成本估算</button>
+      <button class="tab" data-tab="ai" onclick="switchTab('ai')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"/><path d="M18 15.5 19 18l2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1 1-2.5Z"/></svg>清单归类</button>
+      <button class="tab" data-tab="changes" onclick="switchTab('changes')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>数据变动</button>
+    </div>
+    <div class="tabs-hint" id="tabsHint"></div>
   </nav>
 
   <!-- ============ Tab 1：编码查询 ============ -->
   <div class="tab-panel active" id="tab-query">
+   <div class="grid-2">
     <div class="card">
       <h2><span class="step">1</span> 输入 HTS 编码
-        <button class="btn-ghost" style="margin-left:auto;padding:5px 14px;font-size:12px;" onclick="toggleMeasuresConfig()">⚙ 加征开关</button>
+        <button class="btn-ghost btn-sm" onclick="toggleMeasuresConfig()">⚙ 加征开关</button>
       </h2>
+      <div class="card-sub">支持 8 位 / 10 位，空格、换行、逗号混排自动拆分去重</div>
       <!-- 加征措施开关面板（保存后立即生效，无需重启） -->
       <div id="measuresConfigPanel" style="display:none;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;background:var(--gray-bg);">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px;">加征措施开关</div>
@@ -760,19 +915,41 @@
       <textarea id="codesInput" placeholder="粘贴 HTS 编码，支持多种格式，如：&#10;6204.69.45&#10;8703.80.00, 8507.60.00&#10;2931.90.9010&#10;&#10;（可含描述文字，自动提取编码）"></textarea>
       <div class="or-divider">或 上传文件</div>
       <div class="dropzone" id="dropzone">
-        <div>点击选择 或 拖拽文件到此处</div>
+        <div class="dz-icon">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/>
+          </svg>
+        </div>
+        <div class="dz-main">点击选择 或 拖拽文件到此处</div>
         <div class="file-name" id="fileName"></div>
-        <div style="font-size:12px; margin-top:4px;">支持 Excel(.xlsx) / CSV / 文本，自动识别 HTS 列</div>
+        <div class="dz-sub">支持 Excel(.xlsx) / CSV / 文本，自动识别 HTS 列</div>
       </div>
       <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.txt">
       <div class="actions">
-        <button class="btn-primary" id="btnQuery" onclick="doQuery()">开始查询</button>
+        <button class="btn-primary" id="btnQuery" onclick="doQuery()">开始查询 <span class="kbd-hint">(Ctrl+Enter)</span></button>
         <button class="btn-ghost" onclick="clearAll()">清空</button>
         <button class="btn-export" id="btnExport" onclick="doExport('xlsx')" disabled>导出 Excel</button>
         <button class="btn-export" id="btnExportCsv" onclick="doExport('csv')" disabled>导出 CSV</button>
       </div>
       <div class="error-bar" id="errorBar"></div>
     </div>
+
+    <!-- 判定要点：这几条以前只在页脚一行小字里，用户滚到结果表就再也看不到了。
+         而"范围存疑""待核"这些结论恰恰要配着这几条才读得懂，所以搬到输入框旁边常驻。 -->
+    <div class="card tips-card">
+      <h2>
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+        结果怎么读
+      </h2>
+      <ul>
+        <li><b>301排除 = 已排除</b>：该统计号被 USTR 整号排除，加征已归零，报关时填结果里那个 9903 子目即可全免。</li>
+        <li><b>301排除 = 待核</b>：排除是按产品描述授予的，同一税号有的款符合有的不符合，<b>工具不替你判</b>——点开单元格看条目原文逐条核对。</li>
+        <li><b>FLIP301 带"范围存疑"</b>：命中 ANNEX II 豁免但限 Aircraft / Pharma 等用途，税额已按<b>不豁免</b>保守计，核实用途后再定。</li>
+        <li><b>排除授予到 10 位统计号</b>：只给 8 位不判免，但会点名该子目下哪几个统计号是整号排除。</li>
+        <li><b>301 仅适用中国原产</b>；经第三国实质性转型的不适用。正式报关以 CBP 裁定为准。</li>
+      </ul>
+    </div>
+   </div>
 
     <div class="card" id="resultCard" style="display:none;">
       <h2><span class="step">2</span> 查询结果 <span id="sourceInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span></h2>
@@ -798,11 +975,12 @@
             <!-- 编码/9903 加宽到不截断（8507.60.00 / 9903.91.xx 都是关键信息，
                  之前 7% 会被省略成 8507…）；备注从 8% 提到 15% 并在 CSS 里钳成
                  2 行，长文本不再把行高撑到 269px。数值列（税率/加征）够放 4-5 字即可 -->
-            <!-- 2026-09 加了「301排除」列（第 10 列），列数 12 → 13，整体重新配比：
-                 描述 14→12、特殊税率 7→5，腾给排除列 9%（要放得下"待核：3 整号 / 2 描述"）-->
-            <col style="width:9%"><col style="width:8%"><col style="width:12%">
-            <col style="width:5%"><col style="width:5%"><col style="width:6%">
-            <col style="width:7%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:5%">
+            <!-- 2026-09 加了「301排除」列（第 10 列），列数 12 → 13；容器同时放宽到
+                 1320px，按 13 列重配：编码类列要放得下完整的 10 位号（9025.19.8085），
+                 来源列要够两个按钮并排（5% 时会上下堆成两行）。合计 100%。 -->
+            <col style="width:11%"><col style="width:8%"><col style="width:12%">
+            <col style="width:6%"><col style="width:5%"><col style="width:5%">
+            <col style="width:6%"><col style="width:8%"><col style="width:6%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:6%">
           </colgroup>
           <thead>
             <tr>
@@ -1028,7 +1206,7 @@
 
   <footer>
     <b>重要提示</b>：本工具仅供内部效率参考。<br>
-    ① 301 加征仅适用于<b>中国原产</b>商品；② 命中清单的商品可能已有 USTR <b>豁免</b>，申报前请核对豁免清单；
+    ① 301 加征仅适用于<b>中国原产</b>商品；② USTR <b>排除</b>已判定，但只有整号排除自动判免，按描述授予的须人工核对条目原文；
     ③ 税率 = 基础税率 + 301 加征（从量税需按货值折算）；④ 正式报关以 CBP 裁定与 USTR 官方公告为准。
   </footer>
 </div>
@@ -1079,13 +1257,21 @@ syncThemeButtons();
 fetch('/api/info')
   .then(r => r.json())
   .then(d => {
-    const srcs = [d.hts_csv, d.ustr_pdf, d.flip_frn_pdf].filter(Boolean).join(' + ');
-    document.getElementById('info').innerHTML =
-      `数据源：${srcs} ｜ 301 映射 ${(d.sec301_mapping_count || 0).toLocaleString()} 条 ｜ 8位子目 ${(d.rates_8_count || 0).toLocaleString()} 个` +
-      ` ｜ <a href="javascript:void(0)" onclick="showSourceFiles()" style="color:var(--primary);text-decoration:underline;">📄 查看数据来源</a>` +
-      (d.built_at ? ` ｜ 构建于 ${d.built_at}` : '');
+    // 顶栏只留"数据是哪天的"——这是每次查询前唯一需要扫一眼的。
+    // 文件名、映射条数这些收进 hover 提示和「数据来源」弹窗（点胶囊即开）。
+    const srcs = [d.hts_csv, d.ustr_pdf, d.flip_frn_pdf, d.ch99_pdf].filter(Boolean).join(' + ');
+    const el = document.getElementById('info');
+    const day = (d.built_at || '').slice(0, 10);
+    el.innerHTML = `<span class="dot"></span>数据就绪${day ? ' · ' + day : ''}`;
+    el.title = `数据源：${srcs}\n301 映射 ${(d.sec301_mapping_count || 0).toLocaleString()} 条`
+             + ` ｜ 8位子目 ${(d.rates_8_count || 0).toLocaleString()} 个`
+             + (d.built_at ? `\n构建于 ${d.built_at}` : '') + '\n点击查看数据来源';
   })
-  .catch(() => document.getElementById('info').textContent = '数据源加载失败');
+  .catch(() => {
+    const el = document.getElementById('info');
+    el.className = 'status-pill bad';
+    el.innerHTML = '<span class="dot"></span>数据源加载失败';
+  });
 
 // AI 状态（可刷新）。搜索页的「AI 补充分析」按钮按此显隐——
 // AI 未配置时不该出现一个点了必然报错的按钮。
@@ -1254,14 +1440,32 @@ async function testAiConfig() {
 }
 
 // Tab 切换
+// 标签行右侧那句话：每个页签干什么、有没有快捷键。放在这里而不是各自面板里，
+// 是因为它要在"点标签的那一眼"就出现，而不是等用户读完面板标题才明白。
+const TAB_HINTS = {
+  query:    '粘贴编码或传表格，逐条出税率与加征 ｜ <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 查询',
+  search:   '按中文/英文关键词找编码，可按总税负排序',
+  estimate: '填货值与数量，算到岸总税负',
+  ai:       '整张清单交给 AI 归类，逐行给编码与置信度',
+  changes:  '官方数据更新后，这里列出与上一版的差异',
+};
+
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  document.getElementById('tabsHint').innerHTML = TAB_HINTS[name] || '';
   if (name === 'changes') loadChanges();
   if (name === 'query') renderHistory();
 }
+document.getElementById('tabsHint').innerHTML = TAB_HINTS.query;
 
 /* ================= 编码查询（原有功能） ================= */
+// Ctrl/⌘+Enter 直接查询：编码是粘贴进来的，手已经在键盘上，不该再去摸鼠标。
+// 只绑在输入框上，避免在结果表里误触发。
+document.getElementById('codesInput').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); doQuery(); }
+});
+
 const dz = document.getElementById('dropzone');
 const fi = document.getElementById('fileInput');
 dz.addEventListener('click', () => fi.click());
@@ -1452,7 +1656,7 @@ function renderTable() {
           ${(r['301排除明细'] || []).length ? `onclick="showExclOf(${idx})" title="点击查看排除条目原文"` : ''}
       >${esc(r['301排除'] || '—')}</td>
       <td class="add-pct${String(r['FLIP 301加征'] || '').includes('范围存疑') ? ' scope-suspect' : ''}" data-full="${esc(r['FLIP 301加征'])}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
-      <td class="note" data-full="${esc(noteFull)}">${esc(noteFull)}</td>
+      <td class="note" data-full="${esc(noteFull)}"><div class="note-in">${esc(noteFull)}</div></td>
       <td><button class="src-btn" title="查看该条税负的官方来源" onclick="showSourceOf(${idx})">📄</button> <button class="src-btn" title="在 USITC 官网查看该编码（https://hts.usitc.gov）" onclick="openHtsSite('${esc(r['输入编码'])}')">🌐</button></td>`;
     body.appendChild(tr);
   });
@@ -2625,7 +2829,7 @@ function renderEstimate(data) {
       <td class="add-pct${String(r['FLIP 301加征'] || '').includes('范围存疑') ? ' scope-suspect' : ''}" data-full="${esc(r['FLIP 301加征'] || '')}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
       <td><b style="color:var(--primary-dark)">${esc(r['总税负估算'])}</b></td>
       <td>${esc(r['原产地'] || '')}</td>
-      <td class="note" data-full="${esc(r['备注'])}">${esc(r['备注'])}</td>`;
+      <td class="note" data-full="${esc(r['备注'])}"><div class="note-in">${esc(r['备注'])}</div></td>`;
     body.appendChild(tr);
   });
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
