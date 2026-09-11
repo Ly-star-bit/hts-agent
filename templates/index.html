@@ -360,12 +360,30 @@
 
   /* 次级筛选栏：和主搜索框拉开层级——灰底、小字、贴在下面 */
   .filter-row {
-    display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
-    margin-top: 12px; padding: 10px 12px;
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+    margin-top: 12px; padding: 10px 14px;
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
   }
-  .filter-row .label { font-size: 12px; color: var(--muted); }
-  .filter-row select, .filter-row input { font-size: 13px; padding: 6px 10px; }
+  /* 一项 = 标签 + 控件，作为整体换行，窄屏不会出现标签和它的框被拆到两行 */
+  .filter-item { display: flex; align-items: center; gap: 8px; }
+  .filter-row .label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  /* 三个控件必须逐项写死，不能只调字号：
+     不写 border，Chrome 给 input[type=number] 的默认边框是 2px、给 select 是 1px，
+     两种框并排粗细不一眼就看出来；不写 width，三个框各自按内容撑到 198/133/169px，
+     右边缘参差不齐。统一高度 32、边框 1px、圆角 8px，宽度按内容长短分三档。 */
+  .filter-row select, .filter-row input {
+    height: 32px; padding: 0 10px; font-size: 13px; font-family: inherit;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text); outline: none;
+  }
+  .filter-row select:focus, .filter-row input:focus {
+    border-color: var(--primary); box-shadow: var(--focus-ring);
+  }
+  /* 深色主题下浏览器默认把下拉弹层渲染成浅色，显式指定避免白底白字 */
+  .filter-row select option { background: var(--surface); color: var(--text); }
+  .filter-row .w-sort   { width: 190px; }
+  .filter-row .w-origin { width: 150px; }
+  .filter-row .w-num    { width: 110px; }
 
   /* 卡内子页签：「关键词检索」与「多税号比对」是两条并列的路径，
      后者原先是一行 ▶ 小字链接，基本没人点得到。 */
@@ -738,6 +756,47 @@
   .change-item .ch-old { color: var(--hit); text-decoration: line-through; }
   .change-item .ch-new { color: var(--miss); font-weight: 600; }
 
+  /* 置信度分档徽标：原先是一行灰色"置信度 87%"，和"置信度 42%"长得一模一样，
+     要逐行读数字才知道哪几行能直接用。分三档上色后扫一眼就能挑出要复核的。
+     带「存疑」信号的行一律不进绿档——那正是"AI 很自信但归错了"的情形。 */
+  .conf-badge {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;
+    font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px;
+    border: 1px solid; white-space: nowrap;
+  }
+  .conf-badge.hi  { color: var(--ok);   background: var(--miss-bg); border-color: var(--miss-border); }
+  .conf-badge.mid { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-border); }
+  .conf-badge.lo  { color: var(--hit);  background: var(--hit-bg);  border-color: var(--hit-border); }
+
+  /* 变动明细 Diff 表：原先是一行文字把 类型/编码/描述/旧值/新值 挤在一起，
+     旧值新值都是长英文句（"The duty provided in the applicable subheading + 100%"），
+     混在同一行里根本看不出改了什么。拆成列，旧值划删除线，新值高亮。 */
+  .diff-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .diff-toolbar input, .diff-toolbar select {
+    height: 32px; padding: 0 10px; font-size: 13px; font-family: inherit;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text); outline: none;
+  }
+  .diff-toolbar input:focus, .diff-toolbar select:focus { border-color: var(--primary); box-shadow: var(--focus-ring); }
+  .diff-toolbar select option { background: var(--surface); color: var(--text); }
+  .diff-toolbar .grow { flex: 1; min-width: 200px; }
+  .ch-tag {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px;
+    border-radius: 10px; white-space: nowrap; border: 1px solid;
+  }
+  .ch-tag.add { color: var(--miss); background: var(--miss-bg); border-color: var(--miss-border); }
+  .ch-tag.del { color: var(--hit); background: var(--hit-bg); border-color: var(--hit-border); }
+  .ch-tag.mod { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-border); }
+  td.diff-old { color: var(--muted); text-decoration: line-through; font-size: 12px; }
+  td.diff-new { color: var(--miss-dark); font-weight: 600; font-size: 12px; background: var(--miss-bg); }
+  td.diff-new.none, td.diff-old.none { color: var(--muted); text-decoration: none; background: none; font-weight: 400; }
+
+  /* 编码 + 标记上下两行：.code 自带 nowrap + overflow:hidden，
+     直接把置信度徽标塞进同一格会被裁掉（改版时实测徽标整个不见）。 */
+  .code-stack { white-space: normal; }
+  .code-stack .code { display: block; }
+  .code-meta { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+
   /* 底部 */
   footer { color: var(--muted); font-size: 12px; margin-top: 24px; text-align: center; line-height: 1.8; }
 
@@ -1076,6 +1135,7 @@
 
   <!-- ============ Tab 2：税率搜索 ============ -->
   <div class="tab-panel" id="tab-search">
+   <div class="grid-2">
     <div class="card">
       <h2>
         <span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
@@ -1105,22 +1165,28 @@
           <button type="button" onclick="quickSearch('太阳能电池')">太阳能电池</button>
         </div>
         <div class="filter-row">
-          <span class="label">排序</span>
-          <select id="searchSort" title="排序方式">
-            <option value="relevance">相关度优先</option>
-            <option value="total_asc">总税负最低优先</option>
-            <option value="tax_asc">基础税率最低（不含 301）</option>
-            <option value="tax_desc">基础税率最高</option>
-            <option value="code_asc">编码升序</option>
-          </select>
-          <span class="label">原产地</span>
-          <select id="searchOrigin" title="原产地（按总税负排序时用于计算 301/FLIP）">
-            <option value="CN">中国（含 301）</option>
-            <option value="VN">越南</option>
-            <option value="OTHER">其他国家</option>
-          </select>
-          <span class="label">单位货值 USD</span>
-          <input type="number" id="searchUnitValue" class="narrow" placeholder="可选" title="折算从量税用，如按公斤计重填每公斤货值">
+          <span class="filter-item">
+            <span class="label">排序</span>
+            <select id="searchSort" class="w-sort" title="排序方式">
+              <option value="relevance">相关度优先</option>
+              <option value="total_asc">总税负最低优先</option>
+              <option value="tax_asc">基础税率最低（不含 301）</option>
+              <option value="tax_desc">基础税率最高</option>
+              <option value="code_asc">编码升序</option>
+            </select>
+          </span>
+          <span class="filter-item">
+            <span class="label">原产地</span>
+            <select id="searchOrigin" class="w-origin" title="原产地（按总税负排序时用于计算 301/FLIP）">
+              <option value="CN">中国（含 301）</option>
+              <option value="VN">越南</option>
+              <option value="OTHER">其他国家</option>
+            </select>
+          </span>
+          <span class="filter-item">
+            <span class="label">单位货值 USD</span>
+            <input type="number" id="searchUnitValue" class="w-num" placeholder="可选" title="折算从量税用，如按公斤计重填每公斤货值">
+          </span>
         </div>
         <div class="error-bar" id="searchError"></div>
       </div>
@@ -1145,6 +1211,23 @@
         </div>
       </details>
     </div>
+
+    <!-- 旁注常驻：结果表里那几个只有关务才懂的信号（税负反转、先例数、一物多号），
+         过去只在结果区临时弹条提示，翻过去就找不到了。 -->
+    <div class="card tips-card">
+      <h2>
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+        候选怎么挑
+      </h2>
+      <ul>
+        <li><b>别只看基础税率</b>：命中 301 的编码会被加征 25%，基础税率低的那个算完可能反而更贵。工具会在结果上方点名这种<b>税负反转</b>。</li>
+        <li><b>先例数</b>是 CBP 对该编码的历史裁定条数。数字大 = 海关常这么判，归类有据可循；勾选候选可查看具体裁定原文。</li>
+        <li><b>一物多号</b>：同一件商品命中两个以上品目时，必须按商品<b>实际特征</b>定夺，不能挑税低的报——这是申报不实的典型情形。</li>
+        <li><b>待确认属性</b>：结果上方列出的那几项（材质、容量、用途等）是税则原文里的判定条件，补齐才能定编码。</li>
+        <li>拿不准时勾选 2 个以上候选点<b>「归类对比」</b>，逐条列出各自的判定条件与所需证据。</li>
+      </ul>
+    </div>
+   </div>
 
     <div class="card" id="searchResultCard" style="display:none;">
       <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></span> 搜索结果 <span id="searchResultInfo" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
@@ -1239,6 +1322,7 @@
 
   <!-- ============ Tab 4：AI 助手 ============ -->
   <div class="tab-panel" id="tab-ai">
+   <div class="grid-2">
     <div class="card">
       <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"/><path d="M18 15.5 19 18l2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1 1-2.5Z"/></svg></span> 商品清单批量归类
         <span id="aiStatus" style="font-size:12px;color:var(--muted);font-weight:normal;"></span>
@@ -1294,6 +1378,21 @@
       </div>
       <div class="error-bar" id="listError"></div>
     </div>
+
+    <div class="card tips-card">
+      <h2>
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+        结果怎么核
+      </h2>
+      <ul>
+        <li><b>置信度分三档</b>：<b style="color:var(--ok)">高</b> 可直接采用；<b style="color:var(--warn)">中</b> 要核对商品描述对不对得上；<b style="color:var(--hit)">低</b> 基本要重写品名再跑。</li>
+        <li><b>标「存疑」的行优先看</b>：那是 AI 归错却装得自信的信号——实测"不锈钢菜刀"被归到 7204 钢铁废料，置信度还给到 80%。这类行整行带左侧警示条。</li>
+        <li><b>「降级检索」备注</b>：AI 给出的检索词在税则库里没匹配上，候选是退而求其次找的，质量会掉一档。</li>
+        <li><b>税率不是 AI 算的</b>：编码由 AI 给，税率、301 判定、排除与 FLIP 全部走本地税则库——所以编码对了，钱就是对的。</li>
+        <li>要论证某一个商品到底归哪个号，转去<b>「搜索与归类」</b>页，那里有完整候选表与分歧点对照。</li>
+      </ul>
+    </div>
+   </div>
 
     <div class="card" id="listResultCard" style="display:none;">
       <h2><span class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></span> 归类结果
@@ -2494,7 +2593,7 @@ function renderAssist(d, addedCount) {
       <div class="ai-pick-head">
         <span class="rank">${i + 1}</span>
         <b class="code">${esc(p['编码'])}</b>
-        <span class="conf">置信度 ${conf}%</span>
+        ${confBadge(conf, false)}
         <button class="btn-ghost" style="margin-left:auto;padding:3px 10px;font-size:12px;"
                 onclick="pickForCompare('${esc(p['编码'])}')">加入对比</button>
       </div>
@@ -3001,10 +3100,12 @@ function renderEstimate(data) {
 
 /* ================= 通用导出（搜索/估算） ================= */
 async function exportGeneric(kind) {
-  const rows = { search: currentSearchRows, est: currentEstRows, list: currentListRows }[kind];
+  const rows = { search: currentSearchRows, est: currentEstRows, list: currentListRows,
+                 changes: currentChangeRows }[kind];
   if (!rows || !rows.length) return;
   const btn = document.getElementById(
-    { search: 'btnSearchExport', est: 'btnEstExport', list: 'btnListExport' }[kind]);
+    { search: 'btnSearchExport', est: 'btnEstExport', list: 'btnListExport',
+      changes: 'btnChangesExport' }[kind]);
   setLoading(btn, true);
   try {
     const resp = await fetch('/api/export', {
@@ -3071,6 +3172,17 @@ async function doAnalyzeList() {
   }
 }
 
+// 置信度分档。阈值定在 80 / 60：低于 60 的行实测基本要重写品名再跑，
+// 60-80 之间多半是编码大方向对、但细分档位要核商品描述。
+// 带「存疑」信号的行一律不给绿档——那恰恰是"AI 很自信但归错了"的情形，
+// 绿色会让人直接采信，而这类行才是最该复核的。
+function confBadge(conf, suspect) {
+  if (suspect) return `<span class="conf-badge lo" title="有存疑信号，置信度不作数">待核 ${conf}%</span>`;
+  if (conf >= 80) return `<span class="conf-badge hi">高 ${conf}%</span>`;
+  if (conf >= 60) return `<span class="conf-badge mid">中 ${conf}%</span>`;
+  return `<span class="conf-badge lo">低 ${conf}%</span>`;
+}
+
 function renderList(data) {
   const rows = data.details || [];
   const s = data.stats || {};
@@ -3119,9 +3231,11 @@ function renderList(data) {
     tr.innerHTML = `
       <td>${r['序号']}</td>
       <td>${esc(r['品名'])}</td>
-      <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}${
-        flags.length ? ' <span class="tag hit" title="该行有存疑信号，见理由列">存疑</span>' : ''}
-        <div class="hd">置信度 ${conf}%</div></td>
+      <td class="code-stack" data-full="${esc(r['编码'])}">
+        <div class="code">${esc(r['编码'])}</div>
+        <div class="code-meta">${
+          flags.length ? '<span class="tag hit" title="该行有存疑信号，见理由列">存疑</span>' : ''
+        }${confBadge(conf, flags.length > 0)}</div></td>
       <td class="desc" data-full="${esc(r['商品描述'])}" title="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
       <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
       <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
@@ -3160,6 +3274,66 @@ function renderMD(text) {
 }
 
 /* ================= 数据变动 ================= */
+/* ---------- 变动明细：筛选 + Diff 表 ---------- */
+// 官方一次更新动辄上百条，不给筛选就只能一路往下滚。按章筛是最自然的入口——
+// 关务只关心自己那几章（9903 加征、85 电子、61/62 服装）。
+let currentChangeRows = [];
+
+function initDiffFilters(rows) {
+  const chapters = [...new Set(rows.map(c => String(c['编码'] || '').slice(0, 2)))]
+    .filter(Boolean).sort();
+  const types = [...new Set(rows.map(c => c['类型']).filter(Boolean))].sort();
+  const sel = document.getElementById('diffChapter');
+  sel.innerHTML = '<option value="">全部章节</option>' +
+    chapters.map(ch => `<option value="${esc(ch)}">第 ${esc(ch)} 章（${
+      rows.filter(c => String(c['编码'] || '').startsWith(ch)).length}）</option>`).join('');
+  const ts = document.getElementById('diffType');
+  ts.innerHTML = '<option value="">全部变更类型</option>' +
+    types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+}
+
+// 变更类型 → 颜色档：新增给正向色，删除给警示色，其余（税率/301/附加税变化）居中
+function chTagClass(t) {
+  const s = String(t || '');
+  if (s.includes('新增')) return 'add';
+  if (s.includes('删除') || s.includes('废止')) return 'del';
+  return 'mod';
+}
+
+function renderDiff() {
+  const q = (document.getElementById('diffQ').value || '').trim().toLowerCase();
+  const ch = document.getElementById('diffChapter').value;
+  const ty = document.getElementById('diffType').value;
+  const rows = currentChangeRows.filter(c => {
+    const code = String(c['编码'] || '');
+    if (ch && !code.startsWith(ch)) return false;
+    if (ty && c['类型'] !== ty) return false;
+    if (q && !(code.toLowerCase().includes(q) ||
+               String(c['描述'] || '').toLowerCase().includes(q))) return false;
+    return true;
+  });
+  document.getElementById('diffCount').textContent =
+    `显示 ${rows.length} / ${currentChangeRows.length} 条`;
+  const body = document.getElementById('diffBody');
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">没有符合条件的变动</td></tr>';
+    return;
+  }
+  // 「No change」是官方原文，意思是该标目本身不改税率，不是"没变动"——
+  // 照抄会让人以为这行白列了，所以弱化成灰字而不是当新值高亮。
+  const isNil = v => !v || v === '—' || /^no change$/i.test(String(v).trim());
+  body.innerHTML = rows.map(c => {
+    const oldV = c['旧'] || '', newV = c['新'] || '';
+    return `<tr>
+      <td><span class="ch-tag ${chTagClass(c['类型'])}">${esc(c['类型'])}</span></td>
+      <td class="code" data-full="${esc(c['编码'])}">${esc(c['编码'])}</td>
+      <td class="desc" data-full="${esc(c['描述'])}"><div class="note-in">${esc(c['描述'])}</div></td>
+      <td class="diff-old${isNil(oldV) ? ' none' : ''}" data-full="${esc(oldV)}">${esc(oldV || '—')}</td>
+      <td class="diff-new${isNil(newV) ? ' none' : ''}" data-full="${esc(newV)}">${esc(newV || '—')}</td>
+    </tr>`;
+  }).join('');
+}
+
 function loadChanges() {
   const body = document.getElementById('changesBody');
   body.innerHTML = '<div class="empty">加载中...</div>';
@@ -3202,19 +3376,36 @@ function loadChanges() {
       }
       if (!d.changes || !d.changes.length) {
         html += '<div class="info-bar">本次更新无明细变动。</div>';
-      } else {
-        html += `<div class="change-card"><div class="change-title">变动明细（共 ${total} 条${
-          d.truncated ? `，显示前 ${d.changes.length} 条` : ''}）</div>` +
-          d.changes.map(c => `
-            <div class="change-item">
-              <span class="ch-type">${esc(c['类型'])}</span>
-              <span class="ch-code">${esc(c['编码'])}</span>
-              <span class="ch-desc" title="${esc(c['描述'])}">${esc(c['描述'])}</span>
-              <span class="ch-old">${esc(c['旧'] || '—')}</span> →
-              <span class="ch-new">${esc(c['新'] || '—')}</span>
-            </div>`).join('') + '</div>';
+        currentChangeRows = [];
+        body.innerHTML = html;
+        return;
       }
+      // 明细改表格渲染（见 renderDiff）：旧值/新值都是长英文句，
+      // 挤在一行文字里看不出改了什么，拆成列才读得动。
+      currentChangeRows = d.changes;
+      html += `<div class="change-card">
+        <div class="change-title">变动明细（共 ${total} 条${
+          d.truncated ? `，显示前 ${d.changes.length} 条` : ''}）</div>
+        <div class="diff-toolbar">
+          <input type="text" id="diffQ" class="grow" placeholder="按编码或描述过滤，如 9903.08 / unmanned aircraft"
+                 oninput="renderDiff()">
+          <select id="diffChapter" onchange="renderDiff()"></select>
+          <select id="diffType" onchange="renderDiff()"></select>
+          <button class="btn-export" id="btnChangesExport" onclick="exportGeneric('changes')">导出 CSV</button>
+        </div>
+        <div class="result-count" id="diffCount"></div>
+        <div class="table-wrap">
+          <table>
+            <colgroup><col style="width:9%"><col style="width:11%"><col style="width:36%">
+                      <col style="width:22%"><col style="width:22%"></colgroup>
+            <thead><tr><th>变更</th><th>编码</th><th>描述</th><th>旧值</th><th>新值</th></tr></thead>
+            <tbody id="diffBody"></tbody>
+          </table>
+        </div>
+      </div>`;
       body.innerHTML = html;
+      initDiffFilters(d.changes);
+      renderDiff();
     })
     .catch(e => { body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; });
 }
