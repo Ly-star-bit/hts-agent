@@ -18,8 +18,10 @@ check_sources.py —— 三份官方源文件的更新检测 / 下载
   Chapter 99.pdf     USITC HTS 第 99 章全文，301 **排除清单**（U.S. note 20 各子条）只在这里。
                      China Tariffs 那份 PDF 自己第 1 页就写了排除要查 note 20，正文不在它里面。
                      https://hts.usitc.gov/reststop/file?release=currentRelease&filename=Chapter+99
-                     ⚠ 排除有硬性到期日（9903.88.69/.70 均至 2026-11-09）。到期后官方会改版，
-                     不重新抓这份文件，工具会继续按已失效的排除判 0% —— 少报的方向。
+                     ⚠ 排除有硬性到期日（9903.88.69/.70 均至 2026-11-09）。到期日本身不会算错
+                     （有效期按查询当天重算，过期即停止判免），但不重抓这份文件，USTR 的延期
+                     或新增排除就享受不到 —— 该免的没免，多收。反向风险是 USTR 提前撤销某条
+                     排除而本地仍按原到期日判它有效，那才是少报，同样只能靠定期重抓兜住。
 
 【判定原则】"有没有更新"以**内容哈希**为准，不信版本号也不信文件名：
   - USITC 每次发版都把 China Tariffs 改名（Rev15→Rev17），内容却可能完全一样——按名判会误报
@@ -100,8 +102,9 @@ SOURCES = {
 MANUAL_WATCH = {
     "flip_frn": "新的 FLIP 301 修改通知会是新 URL，本脚本只盯这一份；请关注 "
                 "https://ustr.gov/about/policy-offices/press-office/press-releases",
-    "ch99_pdf": "301 排除有硬到期日（9903.88.69/.70 至 2026-11-09）。USTR 若延期或不延期，"
-                "都要重抓本文件并重跑 extract_exclusions.py，否则工具会按过期排除继续判 0%",
+    "ch99_pdf": "301 排除有硬到期日（9903.88.69/.70 至 2026-11-09）。USTR 无论延期与否都要"
+                "重抓本文件并重跑 extract_exclusions.py：延期了不抓就白多缴，"
+                "提前撤销了不抓则会继续判免（少报）",
 }
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (hts-agent source checker)"}
@@ -449,8 +452,9 @@ def exclusion_expiry_warning(warn_days=14, today=None):
         any_dated = [n["effective_to"] for n in notes.values() if n.get("effective_to")]
         if any_dated and max(any_dated) < today:
             return (f"301 排除已全部过期（最后一个到 {max(any_dated)}）。"
-                    f"请重抓 Chapter 99 并重跑 extract_exclusions.py —— "
-                    f"否则查询会按已失效的排除判 0%，属少报方向。")
+                    f"工具现已不再判任何排除，命中清单的一律按满额加征——"
+                    f"USTR 若已延期或新发排除，你会因此多缴。"
+                    f"请重抓 Chapter 99 并重跑 extract_exclusions.py。")
         return ""
     earliest = min(n["effective_to"] for n in live.values())
     days = (datetime.date.fromisoformat(earliest)
@@ -492,13 +496,22 @@ def main(argv=None):
             ap.error(f"未知源：{', '.join(bad)}（可选：{', '.join(SOURCES)}）")
 
     result = check(keys, apply=a.apply, force=a.force)
-    print(json.dumps(result, ensure_ascii=False, indent=2) if a.json else format_report(result))
 
     # 排除到期与源文件有没有更新无关：官方不改版，排除照样会到期。
     # 所以这条独立判断、独立告警，不放在 updated/errors 的分支里。
     expiry_msg = exclusion_expiry_warning()
-    if expiry_msg:
-        print(f"\n⚠ {expiry_msg}")
+    if a.json:
+        # --json 号称机器可读，那 stdout 上就只能有一个 JSON 文档。
+        # 早先这条提示无条件 print 到 stdout，`check_sources.py --json | jq .`
+        # 会在到期前 14 天开始报 "Extra data" —— 提示本身把管道弄坏了。
+        result["exclusion_expiry_warning"] = expiry_msg
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if expiry_msg:
+            print(f"⚠ {expiry_msg}", file=sys.stderr)
+    else:
+        print(format_report(result))
+        if expiry_msg:
+            print(f"\n⚠ {expiry_msg}")
 
     if a.notify:
         if result["updated"]:

@@ -116,36 +116,54 @@ if __name__ == "__main__":
 
 
 class TestExclusionExpiry(unittest.TestCase):
-    """排除到期告警：这是唯一会让工具**少报**的定时炸弹，三处都要报得出来"""
+    """
+    排除到期告警：这是 301 排除链路唯一的悬崖，三处都要报得出来。
 
-    @classmethod
-    def setUpClass(cls):
-        import core
-        cls.db = core.load_db()
+    **刻意用合成数据而不是真库**：真库里当前生效的排除全在 2026-11-09 到期，
+    把断言钉在那个日期上，等下次重抓数据后这些测试会因为 None 取下标而抛
+    TypeError —— 一个读不懂的崩溃，而不是一条能诊断的失败。合成数据让"这个
+    函数该怎么表现"与"今天的数据长什么样"解耦。
+    """
+
+    def _db(self, notes):
+        return {"exclusions": {"notes": notes}}
+
+    LIVE = {"99038869": {"effective_from": "2024-01-01", "effective_to": "2026-11-09"},
+            "99038870": {"effective_from": "2024-01-01", "effective_to": "2026-11-09"}}
 
     def test_expiry_counts_down_from_query_day(self):
         import core
-        e = core.exclusion_expiry(self.db, today="2026-10-30")
-        self.assertIsNotNone(e, "应存在生效中且带到期日的排除标目")
+        e = core.exclusion_expiry(self._db(self.LIVE), today="2026-10-30")
+        self.assertIsNotNone(e)
+        self.assertEqual(e["状态"], "生效中")
         self.assertEqual(e["剩余天数"], 10)
         self.assertTrue(e["告警"], "剩 10 天应触发告警")
-        self.assertTrue(e["标目"], "必须点名是哪几个标目到期")
+        self.assertEqual(e["标目"], ["9903.88.69", "9903.88.70"], "必须点名是哪几个")
 
     def test_no_warning_when_far_out(self):
         import core
-        e = core.exclusion_expiry(self.db, today="2026-09-11")
+        e = core.exclusion_expiry(self._db(self.LIVE), today="2026-09-11")
+        self.assertIsNotNone(e)
         self.assertFalse(e["告警"], "剩 59 天不该天天弹告警")
 
-    def test_all_expired_returns_none_not_silence(self):
+    def test_all_expired_is_loud_not_silent(self):
         """
-        全过期时 exclusion_expiry 返回 None——调用方不能把 None 当"安全"。
-        check_sources 那条路径必须在此时喊得最响。
+        全部过期时**不能**返回 None。
+
+        None 会被调用方读成"没问题"——前端就踩过这个坑：后端返回 null，
+        顶栏退回绿色「数据就绪」，恰恰在数据最陈旧的时刻静默了。
         """
-        import core, check_sources
-        self.assertIsNone(core.exclusion_expiry(self.db, today="2026-11-20"))
+        import core
+        e = core.exclusion_expiry(self._db(self.LIVE), today="2026-11-20")
+        self.assertIsNotNone(e, "全部过期是最该喊的时刻，不得返回 None")
+        self.assertEqual(e["状态"], "已全部过期")
+        self.assertTrue(e["告警"])
+        self.assertLess(e["剩余天数"], 0)
+
+    def test_probe_reports_all_expired_too(self):
+        import check_sources
         msg = check_sources.exclusion_expiry_warning(today="2026-11-20")
         self.assertIn("已全部过期", msg)
-        self.assertIn("少报", msg)
 
     def test_probe_warning_is_independent_of_source_updates(self):
         """官方不改版，排除照样会到期——告警不能挂在 updated 分支里"""
@@ -155,3 +173,17 @@ class TestExclusionExpiry(unittest.TestCase):
         notify_at = src.index("if a.notify:")
         self.assertLess(expiry_at, notify_at,
                         "到期判断应独立于 updated/errors，先算再决定怎么报")
+
+    def test_json_output_stays_machine_readable(self):
+        """
+        --json 号称机器可读，stdout 上就只能有一个 JSON 文档。
+
+        到期提示早先无条件 print 到 stdout，`check_sources.py --json | jq .`
+        会在到期前 14 天开始报 Extra data——提示本身把管道弄坏了。
+        """
+        import inspect, check_sources
+        src = inspect.getsource(check_sources.main)
+        head = src[:src.index("else:\n        print(format_report(result))")]
+        self.assertIn("file=sys.stderr", head, "--json 分支下到期提示须走 stderr")
+        self.assertIn('result["exclusion_expiry_warning"]', src,
+                      "机器可读的那份也要拿得到这条信息")

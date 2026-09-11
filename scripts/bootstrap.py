@@ -21,6 +21,8 @@ import subprocess
 import sys
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# check_sources 用退出码区分"有更新"与"出错"，0 和它都不算失败
+EXIT_UPDATED = 10
 DB_PATH = os.path.join(BASE_DIR, "data", "sec301_db.json")
 REQ_PATH = os.path.join(BASE_DIR, "requirements.txt")
 
@@ -141,26 +143,33 @@ def smoke_test():
         say(BAD, "从量税折算异常", f"{a['总税负估算']} / {b['总税负估算']}")
         ok = False
 
-    # ③ 逐行估算 + 计量单位：新增的那条链路
+    # ③ 逐行估算：只判"算不算得出钱"。计量单位缺失是展示层的事，
+    #    check_db 已经把它报成可选的 WARN，这里再判成硬失败就是两套标准——
+    #    老库跑 bootstrap 会因为一个刚被告知"可选"的问题而退出 1。
     out = rate.estimate_lines(db, [{"code": "8507.60.00", "qty": 100, "unit_value": 20}])
     row = out["rows"][0]
-    if row["预估税费"] and row["计量单位"] != "—":
+    if row["预估税费"]:
+        unit = row["计量单位"]
         say(OK, "逐行估算", f"100 × $20 → 货值 ${row['货值']:,.0f}，"
-                          f"税费 ${row['预估税费']:,.2f}（计量单位 {row['计量单位']}）")
+                          f"税费 ${row['预估税费']:,.2f}"
+                          + (f"（计量单位 {unit}）" if unit != "—" else "（计量单位缺失，见上）"))
     else:
         say(BAD, "逐行估算异常", str(row.get("预估税费")))
         ok = False
 
     # ④ 排除到期：不是失败项，但必须在装机时就让人知道有这么个日期
     e = core.exclusion_expiry(db)
-    if e:
+    if e and e["状态"] == "已全部过期":
+        say(BAD, f"301 排除已全部过期（最后一个到 {e['最早到期']}）",
+            "工具现已不判任何排除，命中清单的一律按满额加征。"
+            "跑 python scripts/check_sources.py --apply --rebuild")
+    elif e:
         mark = WARN if e["剩余天数"] <= 30 else OK
         say(mark, f"301 排除有效期至 {e['最早到期']}（剩 {e['剩余天数']} 天）",
-            "到期后须重抓 Chapter 99 并重跑 extract_exclusions.py，"
-            "否则会按失效的排除判 0%")
+            "到期日本身不会算错（按查询当天重算，过期即停止判免），"
+            "但届时须重抓 Chapter 99，否则 USTR 的延期或新增排除享受不到")
     else:
-        say(WARN, "当前没有生效中的 301 排除",
-            "可能是数据已过期。跑 python scripts/check_sources.py --apply --rebuild")
+        say(WARN, "排除清单里没有带日期的条目", "数据可能不完整，建议重跑 build_db.py")
     return ok
 
 
@@ -202,9 +211,18 @@ def main():
         print(f"\n  缺 {len(missing)} 份官方源文件，开始下载"
               f"（Chapter 99 有 13MB，慢一点是正常的）")
         keys = [k for k, _ in missing]
+        # 必须带 --rebuild：Chapter 99 PDF 不入 git，新克隆上它永远"缺失"、
+        # 因而永远是**当前官方版本**；而仓库里跟踪的 data/sec301_exclusions.json
+        # 是从某个旧版提取的。只下载不重提，等于拿新 PDF 配旧排除清单，
+        # 而 bootstrap 还会报"装机完成"，没人看得出这层错位。
+        # --rebuild 会按变更的源串跑 extract_exclusions / extract_flip_scopes + build_db。
         rc = subprocess.call(
             [sys.executable, os.path.join(BASE_DIR, "scripts", "check_sources.py"),
-             "--apply", "--only", ",".join(keys)], cwd=BASE_DIR)
+             "--apply", "--rebuild", "--only", ",".join(keys)], cwd=BASE_DIR)
+        if rc not in (0, EXIT_UPDATED):
+            # 返回码要看：早先赋给 rc 就丢掉了，下载失败只能靠后面的重新点名兜住，
+            # 而"哪一步失败的"这个信息在那时已经没了
+            say(WARN, f"check_sources 退出码 {rc}", "下方会重新点名到底缺哪几份")
         still = check_sources_present()
         if still:
             # 逐份点名而不是笼统说"下载失败"：USITC 偶发 503，

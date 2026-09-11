@@ -484,35 +484,65 @@ def exclusion_expiry(db, today=None, warn_days=14):
     """
     当前生效中的 301 排除里，最早哪天到期、还剩几天。
 
-    **为什么值得单独做一个函数**：排除到期后若没重抓 Chapter 99 并重跑提取，
-    工具会继续按已失效的排除判 0% —— 这是**少报**方向，四类错误里风险最高的那个
-    （多收只是多花钱，少报要被 CBP 追补加罚）。而当前生效的排除只剩两个标目，
-    且是同一天到期，等于整个排除判定有一个统一的悬崖。
+    **到期本身不会让工具算错**：_excl_status 按查询当天重算，过了到期日
+    exclusion_lookup 就不再判免、改按满额加征。真正的风险在两侧——
 
-    今天重算而不是用提取那天的 status：数据可能是几个月前提的。
+      · 到期后不重抓：USTR 若延期或新发了排除，你享受不到 → **该免的没免，多收**。
+        多收只是客户多付钱，不违法，但一笔笔都是白花的。
+      · 任何时候都存在的另一侧：USTR **提前撤销**某条排除，而本地数据仍按原定
+        到期日判它有效 → 继续判 0% → **少报**，要被 CBP 追补加罚。
+        这一侧与到期日无关，只能靠定期重抓兜住。
 
-    返回 {最早到期, 剩余天数, 标目, 生效中标目数, 告警} —— 没有任何生效中的
-    排除时返回 None（此时不是"安全"，是"本来就没排除可判"）。
+    （早先这里写成"到期后会继续按失效的排除判 0%"，方向是反的——代码本来就
+    按查询日重算。这段注释与界面提示当时都错了，一并改正。）
+
+    当前带日期的排除只剩两个标目且同一天到期，等于整个排除判定有一个统一的悬崖，
+    所以值得单独拎出来做一个函数。
+
+    返回 {状态, 最早到期, 剩余天数, 标目, 生效中标目数, 告警}。
+    状态为「已全部过期」时 剩余天数 为负——**不返回 None**：调用方拿到 None
+    很容易当成"没问题"，而全部过期恰恰是最该喊的时刻。
     """
     ex = db.get("exclusions") or {}
     notes = ex.get("notes") or {}
     if not notes:
         return None
     today = today or _dt.date.today().isoformat()
-    live = {c99: n for c99, n in notes.items()
-            if _excl_status(n, today) == "生效中" and n.get("effective_to")}
+    dated = {c99: n for c99, n in notes.items() if n.get("effective_to")}
+    if not dated:
+        return None            # 一条带日期的排除都没有，无从谈到期
+    live = {c99: n for c99, n in dated.items() if _excl_status(n, today) == "生效中"}
+
+    def _days(d):
+        try:
+            return (_dt.date.fromisoformat(d) - _dt.date.fromisoformat(today)).days
+        except ValueError:
+            return None
+
     if not live:
-        return None
+        # 全部过期：此刻工具已不再判任何免，等于 301 排除这条链路整个失效。
+        # 必须报出来——返回 None 会被调用方读成"没问题"。
+        latest = max(n["effective_to"] for n in dated.values())
+        d = _days(latest)
+        return {
+            "状态": "已全部过期",
+            "最早到期": latest,
+            "剩余天数": d if d is not None else 0,
+            "标目": sorted(_fmt_c99(c) for c, n in dated.items()
+                          if n["effective_to"] == latest),
+            "生效中标目数": 0,
+            "告警": True,
+        }
     earliest = min(n["effective_to"] for n in live.values())
-    expiring = sorted(c99 for c99, n in live.items() if n["effective_to"] == earliest)
-    try:
-        days = (_dt.date.fromisoformat(earliest) - _dt.date.fromisoformat(today)).days
-    except ValueError:
+    days = _days(earliest)
+    if days is None:
         return None
     return {
+        "状态": "生效中",
         "最早到期": earliest,
         "剩余天数": days,
-        "标目": [_fmt_c99(c) for c in expiring],
+        "标目": sorted(_fmt_c99(c) for c, n in live.items()
+                      if n["effective_to"] == earliest),
         "生效中标目数": len(live),
         # 到期当天才报警来不及：重抓 + 重提 + 重建要人动手，得留出提前量
         "告警": days <= warn_days,

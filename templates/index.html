@@ -1583,7 +1583,12 @@ fetch('/api/info')
     // 排除到期优先于"数据就绪"显示：这是唯一会让工具**少报**的情形
     // （到期后不重抓数据，会继续按失效的排除判 0%），比构建日期重要得多。
     const ee = d.exclusion_expiry;
-    if (ee && ee.告警) {
+    if (ee && ee.状态 === '已全部过期') {
+      // 全部过期时工具已不再判任何 301 排除 —— 这是最该喊的时刻，
+      // 早先这里会因为后端返回 null 而退回绿色「数据就绪」，等于静默。
+      el.className = 'status-pill bad';
+      el.innerHTML = `<span class="dot"></span>301 排除数据已过期`;
+    } else if (ee && ee.告警) {
       el.className = 'status-pill bad';
       el.innerHTML = `<span class="dot"></span>301 排除 ${ee.剩余天数} 天后到期`;
     } else {
@@ -1592,9 +1597,15 @@ fetch('/api/info')
     el.title = `数据源：${srcs}\n301 映射 ${(d.sec301_mapping_count || 0).toLocaleString()} 条`
              + ` ｜ 8位子目 ${(d.rates_8_count || 0).toLocaleString()} 个`
              + (d.built_at ? `\n构建于 ${d.built_at}` : '')
-             + (ee ? `\n\n⚠ 当前生效的 301 排除（${ee.标目.join('、')}）于 ${ee.最早到期} 到期`
-                   + `，剩 ${ee.剩余天数} 天。到期后须重抓 Chapter 99 并重跑 extract_exclusions.py，`
-                   + `否则工具会继续按已失效的排除判 0%（少报方向）。` : '')
+             + (ee ? (ee.状态 === '已全部过期'
+                   ? `\n\n⚠ 301 排除已全部过期（最后一个到 ${ee.最早到期}）。`
+                     + `工具现已不再判任何排除，命中清单的一律按满额加征——`
+                     + `USTR 若已延期或新发排除，你会因此多缴。`
+                     + `请重抓 Chapter 99 并重跑 extract_exclusions.py。`
+                   : `\n\n当前生效的 301 排除（${ee.标目.join('、')}）于 ${ee.最早到期} 到期，`
+                     + `剩 ${ee.剩余天数} 天。到期日本身不会算错（有效期按查询当天重算，`
+                     + `过期即停止判免），但届时须重抓 Chapter 99 并重跑 extract_exclusions.py，`
+                     + `否则 USTR 的延期或新增排除你都享受不到。`) : '')
              + '\n\n点击查看数据来源';
   })
   .catch(() => {
@@ -3307,9 +3318,27 @@ function renderEstimate(data) {
 }
 
 async function exportGeneric(kind) {
-  const rows = { search: currentSearchRows, est: currentEstRows, list: currentListRows,
-                 changes: currentChangeRows }[kind];
+  let rows = { search: currentSearchRows, est: currentEstRows, list: currentListRows,
+               changes: currentChangeRows }[kind];
   if (!rows || !rows.length) return;
+  // 结构化字段不能原样进 CSV：/api/export 直接按 keys() 铺列，
+  // 一个 list of dict 会在 Excel 里变成 [{'编码': '8507.60.00', ...}] 这种 Python repr。
+  // 查询页的 doExport 早就做了同样的摊平，这里补上清单页新加的「候选」与「301排除明细」。
+  rows = rows.map(r => {
+    const o = { ...r };
+    if (Array.isArray(o['候选'])) {
+      o['候选'] = o['候选'].map(c => `${c['编码']}（${c['总税负估算'] || c['一般税率'] || ''}）`).join('；');
+    }
+    if (Array.isArray(o['301排除明细'])) {
+      o['301排除明细'] = o['301排除明细'].map(x =>
+        `${x['9903子目']} ${x['覆盖方式']} ${x['状态']} ${x['有效期']}`).join('；');
+    }
+    if (Array.isArray(o['存疑'])) o['存疑'] = o['存疑'].join('；');
+    if (Array.isArray(o['来源'])) {
+      o['来源'] = o['来源'].map(x => `${x['类型'] || ''}: ${x['文件'] || ''}`).join('；');
+    }
+    return o;
+  });
   const btn = document.getElementById(
     { search: 'btnSearchExport', est: 'btnEstExport', list: 'btnListExport',
       changes: 'btnChangesExport' }[kind]);
