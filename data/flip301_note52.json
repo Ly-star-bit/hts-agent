@@ -1,0 +1,708 @@
+{
+ "meta": {
+  "source": "Chapter 99_2026HTSRev18.pdf",
+  "extracted_at": "2026-09-15 07:28:26"
+ },
+ "subdivisions": {
+  "(head)": {
+   "pages": [
+    565
+   ],
+   "codes_count": 0,
+   "text": ""
+  },
+  "(a)": {
+   "pages": [
+    565
+   ],
+   "codes_count": 0,
+   "text": "(a) Except as provided in headings 9903.05.85–9903.06.21 and in subdivisions (b) through (k) of this note, and other than products for personal use included in accompanied baggage of persons arriving in the United States, headings 9903.05.20–9903.05.84 impose additional ad valorem rates of duty on imports of all products of the countries provided for in these headings. Notwithstanding U.S. note 1 to this subchapter, all products that are subject to the additional ad valorem rates of duty imposed by these headings shall also be subject to the general rates of duty imposed under subheadings in chapters 1 to 97 of the tariff schedule. Except as provided in subdivisions (b) through (k) of this note, all products that are subject to the additional ad valorem rates of duty imposed by headings 9903.05.20–9903.05.84 shall also be subject to any additional duty provided for in this subchapter or in subchapter IV of chapter 99. Products that are eligible for special tariff treatment under general note 3(c)(i) to the tariff schedule, or that are eligible for temporary duty exemptions or reductions under subchapter II to chapter 99, shall be subject to the additional ad valorem rates of duty imposed by headings 9903.05.20–9903.05.84, except as otherwise provided in this note. The additional duties imposed by headings 9903.05.20–9903.05.84 shall not apply to goods for which entry is properly claimed under a provision of chapter 98 of the tariff schedule pursuant to applicable regulations of U.S. Customs and Border Protection (“CBP”), and whenever CBP agrees that entry under such a provision is appropriate, except for goods entered under subheadings 9802.00.40, 9802.00.50 or 9802.00.60 or heading 9802.00.80. For goods entered under subheadings 9802.00.40, 9802.00.50 and 9802.00.60, the additional duties apply to the value of repairs, alterations or processing performed, as described in the applicable subheading. For goods entered under heading 9802.00.80, the additional duties apply to the value of the article assembled abroad, less the cost or value of such products of the United States, as described. Products that are provided for in this note shall continue to be subject to antidumping, countervailing or other duties, taxes, fees, exactions and charges."
+  },
+  "(b)": {
+   "pages": [
+    566,
+    567,
+    568,
+    569
+   ],
+   "codes_count": 863,
+   "text": "(b) As provided in heading 9903.05.86, the duties imposed by headings 9903.05.20–9903.05.84 shall not apply to articles that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(c)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(c) As provided in heading 9903.05.87, the duties imposed by headings 9903.05.20–9903.05.84 shall not apply to the following particular articles:"
+  },
+  "(c)(1)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(1) Etrogs (classifiable in subheading 0805.90.01);"
+  },
+  "(c)(2)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(2) Tropical fruit, nesoi, frozen, whether or not previously steamed or boiled (classifiable in subheading 0811.90.80);"
+  },
+  "(c)(3)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(3) Castor oil seeds, for sowing (classifiable in subheading 1207.30.00);"
+  },
+  "(c)(4)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(4) Sesame seeds, whether or not broken, for sowing (classifiable in subheading 1207.40.00);"
+  },
+  "(c)(5)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(5) Mustard seeds, whether or not broken, for sowing (classifiable in subheading 1207.50.00);"
+  },
+  "(c)(6)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(6) Safflower (Carthamus tintorius) seeds, for sowing (classifiable in subheading 1207.60.00);"
+  },
+  "(c)(7)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(7) Other oil seeds and oleaginous fruits whether or not broken, including niger seeds, hemp seeds and seeds nesoi, for sowing (classifiable in subheading 1207.99.03);"
+  },
+  "(c)(8)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(8) Bread, pastry, cakes, biscuits and similar baked products, nesoi, and puddings, whether or not containing chocolate, fruit, nuts or confectionery, for religious purposes only (classifiable in subheading 1905.90.10);"
+  },
+  "(c)(9)": {
+   "pages": [
+    569
+   ],
+   "codes_count": 0,
+   "text": "(9) Bakers’ wares, communion wafers, sealing wafers, rice paper and similar products, nesoi, for religious purposes only (classifiable in subheading 1905.90.90);"
+  },
+  "(c)(10)": {
+   "pages": [
+    570
+   ],
+   "codes_count": 0,
+   "text": "(10) Acai (classifiable in subheading 2008.99.21);"
+  },
+  "(c)(11)": {
+   "pages": [
+    570
+   ],
+   "codes_count": 0,
+   "text": "(11) Citrus juice of any single citrus fruit (other than orange, grapefruit or lime), of a Brix value not exceeding 20, concentrated, unfermented, except for lemon juice (classifiable in subheading 2009.31.60);"
+  },
+  "(c)(12)": {
+   "pages": [
+    570
+   ],
+   "codes_count": 0,
+   "text": "(12) Coconut water or juice of acai (classifiable in subheading 2009.89.70);"
+  },
+  "(c)(13)": {
+   "pages": [
+    570
+   ],
+   "codes_count": 0,
+   "text": "(13) Coconut water juice blends, not from concentrate, packaged for retail sale (classifiable in subheading 2009.90.40);"
+  },
+  "(c)(14)": {
+   "pages": [
+    570
+   ],
+   "codes_count": 0,
+   "text": "(14) Acai preparations for the manufacture of beverages (classifiable in subheading 2106.90.99);"
+  },
+  "(c)(15)": {
+   "pages": [
+    570
+   ],
+   "codes_count": 0,
+   "text": "(15) Essential oils other than those of citrus fruit, nesoi, for religious purposes only (classifiable in subheading 3301.29.51); and"
+  },
+  "(c)(16)": {
+   "pages": [
+    570
+   ],
+   "codes_count": 0,
+   "text": "(16) Eucalyptus plywood sheets not exceeding 6 mm in thickness, outer ply of specified nonconiferous wood including birch or walnut, surface covered beyond clear or transparent material (classifiable in subheading 4412.33.57)."
+  },
+  "(d)": {
+   "pages": [
+    571,
+    572,
+    573
+   ],
+   "codes_count": 535,
+   "text": "(d) As provided in heading 9903.05.88, the additional duties imposed by headings 9903.05.20–9903.05.84 shall not apply to articles that are civil aircraft (all aircraft other than military aircraft); their engines, parts and components; their other parts, components and subassemblies; and ground flight simulators and their parts and components, that otherwise meet the criteria of general note 6 of the HTSUS and are classifiable in the following provisions of the HTSUS, but regardless of whether a product is entered under a provision for which the rate of duty “Free (C)” appears in the “Special” sub-column:"
+  },
+  "(e)": {
+   "pages": [
+    574,
+    575,
+    576,
+    577
+   ],
+   "codes_count": 700,
+   "text": "(e) As provided in heading 9903.05.89, the additional duties imposed by headings 9903.05.20–9903.05.84 shall not apply to articles that are for use in pharmaceutical applications and that are classifiable in the following provisions of the HTSUS, but regardless of whether a product is entered under a provision for which the rate of duty “Free (K)” appears in the “Special” sub-column:"
+  },
+  "(f)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(f) As provided in heading 9903.05.90, the additional duties imposed by headings 9903.05.20–9903.05.84 shall not apply to:"
+  },
+  "(f)(1)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(1) articles of aluminum, of steel or of copper, nor to derivative aluminum or steel articles provided for in headings 9903.82.02 and 9903.82.04–9903.82.26;"
+  },
+  "(f)(2)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(2) passenger vehicles (sedans, sport utility vehicles, crossover utility vehicles, minivans and cargo vans) and light trucks provided for in headings 9903.94.01, 9903.94.02 (as applied to the U.S. content of passenger vehicles and light trucks described in subdivision 33(d) of this subchapter upon approval from the Secretary of Commerce), 9903.94.03,"
+  },
+  "(f)(3)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(3) parts of passenger vehicles (sedans, sport utility vehicles, crossover utility vehicles, minivans and cargo vans) and parts of light trucks provided for in headings 9903.94.05, 9903.94.06 (as applied to parts of passenger vehicles that are eligible for special tariff treatment under the United States-Mexico-Canada Agreement (USMCA) other than automobile knock-down kits or parts compilations), 9903.94.07, 9903.94.32, 9903.94.33, 9903.94.42, 9903.94.43, 9903.94.65, 9903.94.66, 9903.94.67, 9903.94.68 and 9903.94.69, and parts of passenger vehicles (sedans, sport utility vehicles, crossover utility vehicles, minivans and cargo vans) and parts of light trucks subject to an import adjustment offset pursuant to Proclamation 10925 of April 29, 2025 (90 FR 18899), as amended;"
+  },
+  "(f)(4)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(4) wood products provided for in headings 9903.76.01, 9903.76.02, 9903.76.03, 9903.76.20, 9903.76.21, 9903.76.22,"
+  },
+  "(f)(5)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(5) medium- and heavy-duty vehicles, buses and other vehicles provided for in headings 9903.74.01, 9903.74.02,"
+  },
+  "(f)(6)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(6) medium- and heavy-duty vehicle parts provided for in headings 9903.74.08, 9903.74.09 and 9903.74.10, and parts of medium- and heavy-duty vehicles subject to an import adjustment offset pursuant to Proclamation 10984 of October 17, 2025 (90 FR 48451);"
+  },
+  "(f)(7)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(7) semiconductor articles provided for in heading 9903.79.01; and"
+  },
+  "(f)(8)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(8) patented pharmaceutical articles provided for in headings 9903.04.60–9903.04.66"
+  },
+  "(g)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(g) As provided in heading 9903.05.93, the additional duties imposed by heading 9903.05.29 shall not apply to any products of Canada entered free of duty under the United States-Mexico-Canada Agreement, including any treatment set forth in subchapter XXIII of chapter 98 and subchapter XXII of chapter 99 of the HTSUS, but regardless of whether a product is entered under a provision for which the rate of duty “S or S+” appears in the “Special” sub-column."
+  },
+  "(h)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(h) As provided in heading 9903.05.94, the additional duties imposed by heading 9903.05.55 shall not apply to any products of Mexico entered free of duty under the United States-Mexico-Canada Agreement, including any treatment set forth in subchapter XXIII of chapter 98 and subchapter XXII of chapter 99 of the HTSUS, but regardless of whether a product is entered under a provision for which the rate of duty “S or S+” appears in the “Special” sub-column."
+  },
+  "(i)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(i) As provided in heading 9903.05.95, the additional duties imposed by headings 9903.05.33, 9903.05.34, 9903.05.37, 9903.05.40, 9903.05.42 and 9903.05.58 shall not apply to a textile or apparel good as defined in subdivision (d)(v) of general note 29 of the HTSUS which is the product of Costa Rica, the Dominican Republic, El Salvador, Guatemala, Honduras or Nicaragua, entered free of duty under the Dominican Republic-Central America-United States Free Trade Agreement, including any treatment set forth in subchapter XXII of chapter 98 of the HTSUS."
+  },
+  "(j)": {
+   "pages": [
+    577
+   ],
+   "codes_count": 0,
+   "text": "(j)"
+  },
+  "(j)(1)": {
+   "pages": [
+    578
+   ],
+   "codes_count": 49,
+   "text": "(1) As provided in heading 9903.05.96, the duty imposed by heading 9903.05.81 shall not apply to articles the product of the United Kingdom that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(2)": {
+   "pages": [
+    578
+   ],
+   "codes_count": 43,
+   "text": "(2) As provided in heading 9903.05.97, the duties imposed by headings 9903.05.38–9903.05.39 shall not apply to articles the product of a member state of the European Union that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(3)": {
+   "pages": [
+    578
+   ],
+   "codes_count": 134,
+   "text": "(3) As provided in heading 9903.05.98, the duties imposed by headings 9903.05.73–9903.05.74 shall not apply to articles the product of Switzerland that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(4)": {
+   "pages": [
+    578
+   ],
+   "codes_count": 0,
+   "text": "(4)"
+  },
+  "(j)(4)(i)": {
+   "pages": [
+    579
+   ],
+   "codes_count": 101,
+   "text": "(i) As provided in heading 9903.05.99, the duty imposed by heading 9903.05.54 shall not apply to articles the product of Malaysia that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(4)(ii)": {
+   "pages": [
+    579
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.01, the duty imposed by heading 9903.05.54 shall not apply to the following particular articles the product of Malaysia:"
+  },
+  "(j)(4)(ii)(A)": {
+   "pages": [
+    579
+   ],
+   "codes_count": 0,
+   "text": "(A) Psyllium seed husks (classifiable in subheading 1211.90.89);"
+  },
+  "(j)(4)(ii)(B)": {
+   "pages": [
+    579
+   ],
+   "codes_count": 0,
+   "text": "(B) Boswellia (classifiable in subheading 1301.90.91); and"
+  },
+  "(j)(4)(ii)(C)": {
+   "pages": [
+    579
+   ],
+   "codes_count": 0,
+   "text": "(C) Argan oil (classifiable in subheading 1515.90.81)"
+  },
+  "(j)(5)": {
+   "pages": [
+    579
+   ],
+   "codes_count": 0,
+   "text": "(5)"
+  },
+  "(j)(5)(i)": {
+   "pages": [
+    580
+   ],
+   "codes_count": 154,
+   "text": "(i) As provided in heading 9903.06.02, the duty imposed by heading 9903.05.28 shall not apply to articles the product of Cambodia that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(5)(ii)": {
+   "pages": [
+    580
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.03, the duty imposed by heading 9903.05.28 shall not apply to the following particular articles the product of Cambodia:"
+  },
+  "(j)(5)(ii)(A)": {
+   "pages": [
+    580
+   ],
+   "codes_count": 0,
+   "text": "(A) Psyllium seed husks (classifiable in subheading 1211.90.89);"
+  },
+  "(j)(5)(ii)(B)": {
+   "pages": [
+    580
+   ],
+   "codes_count": 0,
+   "text": "(B) Boswellia (classifiable in subheading 1301.90.91); and"
+  },
+  "(j)(5)(ii)(C)": {
+   "pages": [
+    580
+   ],
+   "codes_count": 0,
+   "text": "(C) Aloe, Tasmanian pepper, coconut and centella (classifiable in subheading 1302.19.91)"
+  },
+  "(j)(6)": {
+   "pages": [
+    580
+   ],
+   "codes_count": 0,
+   "text": "(6)"
+  },
+  "(j)(6)(i)": {
+   "pages": [
+    581
+   ],
+   "codes_count": 109,
+   "text": "(i) As provided in heading 9903.06.04, the duty imposed by heading 9903.05.40 shall not apply to articles the product of Guatemala that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(6)(ii)": {
+   "pages": [
+    581
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.05, the duty imposed by heading 9903.05.40 shall not apply to the following particular articles the product of Guatemala:"
+  },
+  "(j)(6)(ii)(A)": {
+   "pages": [
+    581
+   ],
+   "codes_count": 0,
+   "text": "(A) Psyllium seed husks (classifiable in subheading 1211.90.89);"
+  },
+  "(j)(6)(ii)(B)": {
+   "pages": [
+    581
+   ],
+   "codes_count": 0,
+   "text": "(B) Boswellia (classifiable in subheading 1301.90.91); and"
+  },
+  "(j)(6)(ii)(C)": {
+   "pages": [
+    581
+   ],
+   "codes_count": 0,
+   "text": "(C) Aloe, Tasmanian pepper, coconut and centella (classifiable in subheading 1302.19.91)"
+  },
+  "(j)(6)(iii)": {
+   "pages": [
+    582,
+    583,
+    584,
+    585,
+    586,
+    587,
+    588
+   ],
+   "codes_count": 1737,
+   "text": "(iii) As provided in heading 9903.06.06, the duty imposed by heading 9903.05.40 shall not apply to articles the product of Guatemala for which entry is claimed under the Dominican Republic-Central America-United States Free Trade Agreement consistent with general note 29 of the HTSUS, and classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(7)": {
+   "pages": [
+    588
+   ],
+   "codes_count": 0,
+   "text": "(7)"
+  },
+  "(j)(7)(i)": {
+   "pages": [
+    588
+   ],
+   "codes_count": 98,
+   "text": "(i) As provided in heading 9903.06.07, the duty imposed by heading 9903.05.37 shall not apply to articles the product of El Salvador that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(7)(ii)": {
+   "pages": [
+    588
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.08, the duty imposed by heading 9903.05.37 shall not apply to the following particular articles the product of El Salvador:"
+  },
+  "(j)(7)(ii)(A)": {
+   "pages": [
+    588
+   ],
+   "codes_count": 0,
+   "text": "(A) Aloe, Tasmanian pepper, coconut and centella (classifiable in subheading 1302.19.91)"
+  },
+  "(j)(7)(iii)": {
+   "pages": [
+    589,
+    590,
+    591,
+    592,
+    593,
+    594,
+    595
+   ],
+   "codes_count": 1707,
+   "text": "(iii) As provided in heading 9903.06.09, the duty imposed by heading 9903.05.37 shall not apply to articles the product of El Salvador for which entry is claimed under the Dominican Republic-Central America-United States Free Trade Agreement consistent with general note 29 of the HTSUS and which are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(8)": {
+   "pages": [
+    595
+   ],
+   "codes_count": 0,
+   "text": "(8)"
+  },
+  "(j)(8)(i)": {
+   "pages": [
+    595
+   ],
+   "codes_count": 90,
+   "text": "(i) As provided in heading 9903.06.10, the duty imposed by heading 9903.05.22 shall not apply to articles the product of Argentina that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(8)(ii)": {
+   "pages": [
+    595
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.11, the duty imposed by heading 9903.05.22 shall not apply to the following particular articles the product of Argentina:"
+  },
+  "(j)(8)(ii)(A)": {
+   "pages": [
+    595
+   ],
+   "codes_count": 0,
+   "text": "(A) Psyllium seed husks (classifiable in subheading 1211.90.89);"
+  },
+  "(j)(8)(ii)(B)": {
+   "pages": [
+    595
+   ],
+   "codes_count": 0,
+   "text": "(B) Aloe, Tasmanian pepper, coconut and centella (classifiable in subheading 1302.19.91); and"
+  },
+  "(j)(8)(ii)(C)": {
+   "pages": [
+    595
+   ],
+   "codes_count": 0,
+   "text": "(C) Argan oil (classifiable in subheading 1515.90.81)"
+  },
+  "(j)(9)": {
+   "pages": [
+    595
+   ],
+   "codes_count": 0,
+   "text": "(9)"
+  },
+  "(j)(9)(i)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 85,
+   "text": "(i) As provided in heading 9903.06.12, the duty imposed by heading 9903.05.26 shall not apply to articles the product of Bangladesh that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(9)(ii)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.13, the duty imposed by heading 9903.05.26 shall not apply to the following particular articles the product of Bangladesh:"
+  },
+  "(j)(9)(ii)(A)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 0,
+   "text": "(A) Psyllium seed husks (classifiable in subheading 1211.90.89); and"
+  },
+  "(j)(9)(ii)(B)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 0,
+   "text": "(B) Argan oil (classifiable in subheading 1515.90.81)"
+  },
+  "(j)(10)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 0,
+   "text": "(10)"
+  },
+  "(j)(10)(i)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 114,
+   "text": "(i) As provided in heading 9903.06.14, the duties imposed by headings 9903.05.75–9903.05.76 shall not apply to articles the product of Taiwan that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(10)(ii)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.15, the duties imposed by headings 9903.05.75–9903.05.76 shall not apply to the following particular articles the product of Taiwan:"
+  },
+  "(j)(10)(ii)(A)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 0,
+   "text": "(A) Psyllium seed husks (classifiable in subheading 1211.90.89);"
+  },
+  "(j)(10)(ii)(B)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 0,
+   "text": "(B) Boswellia (classifiable in subheading 1301.90.91);"
+  },
+  "(j)(10)(ii)(C)": {
+   "pages": [
+    596
+   ],
+   "codes_count": 0,
+   "text": "(C) Aloe, Tasmanian pepper, coconut and centella (classifiable in subheading 1302.19.91); and"
+  },
+  "(j)(10)(ii)(D)": {
+   "pages": [
+    597
+   ],
+   "codes_count": 0,
+   "text": "(D) Argan oil (classifiable in subheading 1515.90.81)"
+  },
+  "(j)(11)": {
+   "pages": [
+    597
+   ],
+   "codes_count": 0,
+   "text": "(11)"
+  },
+  "(j)(11)(i)": {
+   "pages": [
+    597
+   ],
+   "codes_count": 147,
+   "text": "(i) As provided in heading 9903.06.16, the duty imposed by heading 9903.05.45 shall not apply to articles the product of Indonesia that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(11)(ii)": {
+   "pages": [
+    597
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.17, the duty imposed by heading 9903.05.45 shall not apply to the following particular articles the product of Indonesia:"
+  },
+  "(j)(11)(ii)(A)": {
+   "pages": [
+    597
+   ],
+   "codes_count": 0,
+   "text": "(A) Aloe, Tasmanian pepper, coconut and centella (classifiable in subheading 1302.19.91)"
+  },
+  "(j)(12)": {
+   "pages": [
+    597
+   ],
+   "codes_count": 0,
+   "text": "(12)"
+  },
+  "(j)(12)(i)": {
+   "pages": [
+    598
+   ],
+   "codes_count": 150,
+   "text": "(i) As provided in heading 9903.06.18, the duty imposed by heading 9903.05.35 shall not apply to articles the product of Ecuador that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(12)(ii)": {
+   "pages": [
+    598
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.19, the duty imposed by heading 9903.05.35 shall not apply to the following particular articles the product of Ecuador:"
+  },
+  "(j)(12)(ii)(A)": {
+   "pages": [
+    598
+   ],
+   "codes_count": 0,
+   "text": "(A) Aloe, Tasmanian pepper, coconut and centella (classifiable in subheading 1302.19.91)"
+  },
+  "(j)(13)": {
+   "pages": [
+    598
+   ],
+   "codes_count": 0,
+   "text": "(13)"
+  },
+  "(j)(13)(i)": {
+   "pages": [
+    599,
+    600,
+    601,
+    602,
+    603,
+    604,
+    605
+   ],
+   "codes_count": 1887,
+   "text": "(i) As provided in heading 9903.06.20, the duty imposed by heading 9903.05.50 shall not apply to articles the product of Jordan that are classifiable in the following provisions of the HTSUS:"
+  },
+  "(j)(13)(ii)": {
+   "pages": [
+    605
+   ],
+   "codes_count": 0,
+   "text": "(ii) As provided in heading 9903.06.21, the duty imposed by heading 9903.05.50 shall not apply to the following particular articles the product of Jordan:"
+  },
+  "(j)(13)(ii)(A)": {
+   "pages": [
+    605
+   ],
+   "codes_count": 0,
+   "text": "(A) Psyllium seed husks (classifiable in subheading 1211.90.89); and"
+  },
+  "(j)(13)(ii)(B)": {
+   "pages": [
+    605
+   ],
+   "codes_count": 0,
+   "text": "(B) Aloe, Tasmanian pepper, coconut and centella (classifiable in subheading 1302.19.91)."
+  },
+  "(k)": {
+   "pages": [
+    606
+   ],
+   "codes_count": 0,
+   "text": "(k) As provided in headings 9903.05.38, 9903.05.39, 9903.05.48, 9903.05.49, 9903.05.70, 9903.05.71 and 9903.05.73–9903.05.76, for any good of a member state of the European Union, Japan, South Korea, Switzerland or Taiwan subject to a specific or compound rate of duty under column 1-General, the ad valorem equivalent rate of duty of such good shall be determined by dividing the amount of duty payable under column 1-General by the customs value of the good. For example, if a good were subject to a specific duty of 50 cents per kilogram, and one kilogram of the good were entered with a customs value of $10, then the ad valorem equivalent rate of duty would be obtained by dividing 50 cents by $10, yielding 5 percent. For any good of South Korea for which a specific or compound rate of duty under column 1-Special is properly claimed, the ad valorem equivalent rate of duty shall be determined in the same manner. For headings 9903.05.39 and 9903.05.76, articles for which the applicable column 1 duty rate is less than 10 percent, the sum of the column 1 duty rate and the additional ad valorem rate of duty is 10 percent ad valorem. For headings 9903.05.49, 9903.05.71 and 9903.05.74, articles for which the applicable column 1 duty rate is less than 12.5 percent, the sum of the column 1 duty rate and the additional ad valorem rate of duty is 12.5 percent ad valorem."
+  }
+ },
+ "note2_excerpt": {
+  "pages": [
+   173,
+   231
+  ],
+  "opening": "(a) For the purposes of heading 9903.01.01, products of Mexico, other than products described in headings 9903.01.02, 9903.01.03, 9903.01.04, 9903.01.05, 9903.76.01, 9903.76.02 or 9903.76.03 and other than products for personal use included in accompanied baggage of persons arriving in the United States, shall be subject to an additional 25% ad valorem rate of duty. Notwithstanding U.S. note 1 to this subchapter, all products of Mexico that are subject to the additional ad valorem rate of duty imposed by heading 9903.01.01 shall also be subject to the general rates of duty imposed on products of Mexico entered under subheadings in chapters 1 to 97 of the tariff schedule. The additional duties imposed by heading 9903.01.01 apply to products of Mexico including both goods of Mexico under the rules set forth in part 102, title 19 of the Code of Federal Regulations, as applicable, as well as goods for which Mexico was the last country of substantial transformation prior to importation into the United States. Products of Mexico that are eligible for special tariff treatment under general note 3(c)(i) to the tariff schedule, or that are eligible for temporary duty exemptions or reductions under subchapter II to chapter 99, shall be subject to the additional ad valorem rate of duty imposed by heading 9903.01.01. The additional duties imposed by heading 9903.01.01 shall not apply to goods for which entry is properly claimed under a provision of chapter 98 of the tariff schedule pursuant to applicable regulations of U.S. Customs and Border Protection (\"CBP\"), and whenever CBP agrees that entry under such a provision is appropriate, except for goods entered under heading 9802.00.80; and subheadings 9802.00.40, 9802.00.50, and 9802.00.60. For subheadings 9802.00.40, 9802.00.50, and 9802.00.60, the additional duties apply to the value of repairs, alterations, or processing performed (in Mexico), as described in the applicable subheading. For heading 9802.00.80, the additional duties apply to the value of the article assembled abroad (in Mexico), less the cost or value of such products of the United States, as described. Products of Mexico that are provided for in heading 9903.01.01 shall continue to be subject to antidumping, countervailing, or other duties, taxes, fees, exactions and charges that apply to such products, as well as to the additional ad valorem rate of duty imposed by heading 9903.01.01. (b) Heading 9903.01.02 covers only products of Mexico, that are d",
+  "status_sentences": [
+   "(xviii) [Compiler's note: Subdivisions (1)–(9) and (11)–(57) of this note and headings 9903.01.43–9903.01.62 and 9903.01.64–9903.01.76 are terminated as of August 7, 2025.",
+   "Subdivision (v)(xvii)(10) and heading 9903.01.63 are suspended.",
+   "Products shipped through the international postal network that are valued at or under $800 and that would otherwise qualify for the de minimis exemption authorized at 19 U.S.C. 1321(a)(2)(C) shall be subject to the duty rate provided in the Proclamation of February 20, 2026 (Imposing a Temporary Import Surcharge to Address Fundamental International Payments Problems) and shall be assessed on the v",
+   "Customs and Border Protection, whichever date occurs first.This note shall terminate at 12:01 a.m. on the effective date for the new postal entry process published in the Federal Register by U.S.",
+   "(z) (i) [Compiler’s note: Subdivision (z) of this note and headings 9903.01.84 through 9903.01.89 are terminated as of February 7, 2026.]",
+   "(aa) [Compiler’s note: Subdivisions (aa)(i) through (aa)(viii) of U.S. note 2 to this subchapter and headings 9903.03.01–9903.03.11 expired at the close of July 23, 2026.",
+   "(iv) As provided in heading 9903.03.05, the additional duty imposed by heading 9903.03.01 shall not apply to articles the product of any country that are civil aircraft (all aircraft other than military aircraft); their engines, parts and components; their other parts, components and subassemblies; and ground flight simulators and their parts and components, that otherwise meet the criteria of gen"
+  ]
+ }
+}
