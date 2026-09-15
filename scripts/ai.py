@@ -35,27 +35,89 @@ class AIProviderError(Exception):
 class BaseProvider:
     """Provider 基类：负责与模型端点通信"""
 
-    def __init__(self, model, temperature=0.2, timeout=60):
+    def __init__(self, model, temperature=0.2, timeout=60, seed=None):
         self.model = model
         self.temperature = temperature
         self.timeout = timeout
+        # 固定 seed + temperature 0 = 同一提示得到同一答案。只解决可复现，不提升准确率——
+        # 但报关工具要的就是"同一份清单今天跑和明天跑一样"，评测集也要它。
+        self.seed = seed
 
     def chat(self, messages):
         """发送对话消息，返回模型回复文本。子类必须实现。"""
         raise NotImplementedError
 
+    def chat_structured(self, messages):
+        """
+        要求模型按 JSON 出的调用。默认就是 chat()；真实 Provider 覆盖它开启服务端的
+        JSON 模式（Ollama 的 format / OpenAI 兼容端的 response_format），少一层正则兜底。
+        测试里的假 Provider 只实现 chat()，签名不变照样能用。
+        """
+        return self.chat(messages)
+
     def chat_json(self, messages, fallback=None):
         """发送对话并尝试解析 JSON 回复；解析失败返回 fallback 或抛 AIProviderError"""
-        text = self.chat(messages)
+        text = self.chat_structured(messages)
         return _extract_json(text, fallback)
+
+    def ping(self):
+        """
+        连通性探测。默认就是 chat()；真实 Provider 覆盖成**绕过缓存**的调用——
+        ping 的消息恒定，走缓存的话服务挂了「测试连接」还会返回上次的 pong。
+        """
+        return self.chat([{"role": "user", "content": "ping，请只回复 pong"}])
+
+
+# ---------- 调用缓存 ----------
+#
+# 同一份清单重跑一遍，三次批量 LLM 调用的提示词一字不差，答案却要再等十几秒。
+# 按（provider 类型、模型、温度、seed、是否 JSON 模式、消息）哈希落盘，命中零等待。
+# 只给真实 Provider 用：测试的假 Provider 不经过这里，否则上一轮真实回答会串进测试。
+# 缓存目录随时可删；AI_CACHE=0 关闭。
+
+CACHE_DIR = os.path.join(BASE_DIR, ".cache", "llm")
+
+
+def _cache_enabled():
+    return os.environ.get("AI_CACHE", "1") not in ("0", "false", "no")
+
+
+def _cache_key(kind, model, temperature, seed, json_mode, messages):
+    import hashlib
+    blob = json.dumps({"k": kind, "m": model, "t": temperature, "s": seed, "j": json_mode,
+                       "msgs": messages}, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _cache_get(key):
+    if not _cache_enabled():
+        return None
+    try:
+        with open(os.path.join(CACHE_DIR, key + ".json"), encoding="utf-8") as f:
+            return json.load(f).get("text")
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _cache_put(key, text, meta):
+    if not _cache_enabled() or not text:
+        return
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        tmp = os.path.join(CACHE_DIR, key + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"text": text, **meta}, f, ensure_ascii=False)
+        os.replace(tmp, os.path.join(CACHE_DIR, key + ".json"))
+    except OSError:
+        pass
 
 
 class OllamaProvider(BaseProvider):
     """本地 Ollama 服务（默认 http://127.0.0.1:11434）"""
 
     def __init__(self, model="qwen2.5:7b", base_url="http://127.0.0.1:11434", temperature=0.2, timeout=120,
-                 think=False):
-        super().__init__(model, temperature, timeout)
+                 think=False, seed=None):
+        super().__init__(model, temperature, timeout, seed=seed)
         self.base_url = base_url.rstrip("/")
         # 思考模式默认关。qwen3 这类模型默认先吐几百 token 的隐藏推理再给答案，
         # 本项目的每次调用都是"按格式出 JSON"，推理链只烧时间：实测同一提示
@@ -64,47 +126,92 @@ class OllamaProvider(BaseProvider):
         # Ollama 对不支持思考的模型也接受 think=false（0.31 实测不报错）。
         self.think = bool(think)
 
-    def chat(self, messages):
+    def _call(self, messages, json_mode, cache=True):
+        key = _cache_key(f"ollama:think={int(self.think)}", self.model, self.temperature,
+                         self.seed, json_mode, messages)
+        hit = _cache_get(key) if cache else None
+        if hit is not None:
+            return hit
+        options = {"temperature": self.temperature}
+        if self.seed is not None:
+            options["seed"] = int(self.seed)
+        payload = {"model": self.model, "messages": messages, "stream": False,
+                   "think": self.think, "options": options}
+        if json_mode:
+            payload["format"] = "json"     # 服务端约束输出为合法 JSON，少一层正则兜底
         try:
-            resp = httpx.post(
-                f"{self.base_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "stream": False,
-                    "think": self.think,
-                    "options": {"temperature": self.temperature},
-                },
-                timeout=self.timeout,
-            )
+            resp = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
-            return data.get("message", {}).get("content", "")
+            text = data.get("message", {}).get("content", "")
         except httpx.HTTPError as e:
             raise AIProviderError(f"Ollama 调用失败：{e}") from e
+        if cache:
+            _cache_put(key, text, {"model": self.model, "json": json_mode})
+        return text
+
+    def chat(self, messages):
+        return self._call(messages, json_mode=False)
+
+    def chat_structured(self, messages):
+        return self._call(messages, json_mode=True)
+
+    def ping(self):
+        return self._call([{"role": "user", "content": "ping，请只回复 pong"}], json_mode=False, cache=False)
 
 
 class OpenAICompatProvider(BaseProvider):
     """OpenAI 兼容 API（DeepSeek / 通义 / OpenAI / 硅基流动 等）"""
 
-    def __init__(self, model, base_url, api_key, temperature=0.2, timeout=60):
-        super().__init__(model, temperature, timeout)
+    def __init__(self, model, base_url, api_key, temperature=0.2, timeout=60, seed=None):
+        super().__init__(model, temperature, timeout, seed=seed)
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
-    def chat(self, messages):
+    def _post(self, payload):
+        resp = httpx.post(
+            f"{self.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json=payload, timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+    def _call(self, messages, json_mode, cache=True):
+        key = _cache_key("openai_compat", self.model, self.temperature, self.seed, json_mode, messages)
+        hit = _cache_get(key) if cache else None
+        if hit is not None:
+            return hit
+        payload = {"model": self.model, "messages": messages, "temperature": self.temperature}
+        if self.seed is not None:
+            payload["seed"] = int(self.seed)
         try:
-            resp = httpx.post(
-                f"{self.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={"model": self.model, "messages": messages, "temperature": self.temperature},
-                timeout=self.timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            if json_mode:
+                try:
+                    text = self._post({**payload, "response_format": {"type": "json_object"}})
+                except httpx.HTTPStatusError as e:
+                    # 不是所有兼容端都认 response_format（中转站常 400）：退回普通调用，
+                    # 提示词本身已要求只输出 JSON，_extract_json 还有兜底
+                    if 400 <= e.response.status_code < 500:
+                        text = self._post(payload)
+                    else:
+                        raise
+            else:
+                text = self._post(payload)
         except (httpx.HTTPError, KeyError, IndexError) as e:
             raise AIProviderError(f"AI API 调用失败：{e}") from e
+        if cache:
+            _cache_put(key, text, {"model": self.model, "json": json_mode})
+        return text
+
+    def chat(self, messages):
+        return self._call(messages, json_mode=False)
+
+    def chat_structured(self, messages):
+        return self._call(messages, json_mode=True)
+
+    def ping(self):
+        return self._call([{"role": "user", "content": "ping，请只回复 pong"}], json_mode=False, cache=False)
 
 
 def _extract_json(text, fallback=None):
@@ -164,6 +271,7 @@ def get_provider():
                     temperature=cfg.get("temperature", 0.2),
                     timeout=cfg.get("timeout", 120),
                     think=cfg.get("think", False),
+                    seed=cfg.get("seed", 42),
                 )
             elif kind == "openai_compat":
                 missing = [k for k in ("base_url", "api_key", "model") if not cfg.get(k)]
@@ -176,6 +284,7 @@ def get_provider():
                         api_key=cfg.get("api_key"),
                         temperature=cfg.get("temperature", 0.2),
                         timeout=cfg.get("timeout", 60),
+                        seed=cfg.get("seed", 42),
                     )
             elif kind in ("", "null"):
                 error = "未启用 AI（provider 为 null）"
@@ -212,9 +321,10 @@ DEFAULT_CONFIG = {
     "base_url": "",
     "api_key": "",
     "model": "",
-    "temperature": 0.2,
+    "temperature": 0.0,  # 报关工具要可复现：同一提示同一答案。想要多样性再调高
     "timeout": 60,
     "think": False,      # 仅 ollama：思考模式（qwen3 等），默认关，见 OllamaProvider
+    "seed": 42,          # 固定采样种子，与 temperature 0 一起保证可复现
 }
 
 
@@ -267,6 +377,11 @@ def save_config(updates):
                 v = float(v)
             except (TypeError, ValueError):
                 continue
+        elif k == "seed":
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                continue
         elif k == "think":
             v = v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
         else:
@@ -289,7 +404,7 @@ def test_connection(provider=None):
     if p is None:
         return {"ok": False, "message": _PROVIDER_CACHE["error"] or "AI 服务未配置"}
     try:
-        reply = p.chat([{"role": "user", "content": "ping，请只回复 pong"}])
+        reply = p.ping()      # 绕过缓存：探测的就是"现在"通不通
         return {"ok": True, "message": f"连接成功，模型响应：{str(reply)[:80]}"}
     except AIProviderError as e:
         return {"ok": False, "message": str(e)}
@@ -297,18 +412,23 @@ def test_connection(provider=None):
 
 # ---------- 本地召回 ----------
 
-def _recall_candidates(db, keywords, limit=40, unit_value=None, origin="CN"):
+def _recall_candidates(db, keywords, limit=40, unit_value=None, origin="CN", description=None):
     """
-    根据英文关键词在本地税率库召回候选 8 位子目。
+    召回候选 8 位子目：关键词 + 税则行语义 + 裁定先例三通道 RRF 融合（rate.hybrid_search）。
 
-    排序固定 relevance：这批行是要送进精排的候选池，按相关度取前 limit 条最合理。
-    unit_value / origin 只影响 rate.search 补的总税负列（每种排序都会补），
-    不影响召回顺序——但这些行会与本地行同表展示，口径必须跟着调用方走。
+    此前只有关键词一条通道，模型出的英文词在税则里对不上就召回为空，精排看不见的
+    东西救不回来。语义与先例通道拿**原始描述**（description，多为中文）检索，
+    关键词通道拿模型出的英文词；任一通道不可用自动只剩其余通道。
+    排序固定 relevance（融合序）：这批行是要送进精排的候选池。
+    unit_value / origin 只影响补的总税负列，不影响召回顺序——但这些行会与本地行
+    同表展示，口径必须跟着调用方走。
     """
     import rate
 
-    rows = rate.search(db, " ".join(keywords), limit=limit, sort="relevance",
-                       unit_value=unit_value, origin=origin)
+    kw = " ".join(keywords) if isinstance(keywords, (list, tuple)) else str(keywords or "")
+    rows, _status = rate.hybrid_search(db, kw, limit=limit, sort="relevance",
+                                       unit_value=unit_value, origin=origin,
+                                       description=description)
     return rows
 
 
@@ -419,14 +539,13 @@ def _candidate_line(db, i, row):
         crs = []
     cr_txt = "；".join(f"{c['类型']}:{c['原文'][:48]}" for c in crs[:3])
 
-    add = f"，附加税 {row['附加税']}" if row.get("附加税") else ""
     # FLIP 301 与 301 排除也要进候选行。此前只给"301: 是 +25%"，模型是拿一份
     # 残缺的税负信息在挑码：带 Aircraft/Pharma 范围限制的 FLIP 12.5%、
     # 以及整号排除掉的那 25%，模型都看不到。
     flip = f" | FLIP301: {row['FLIP 301加征']}" if row.get("FLIP 301加征") else ""
     excl = f" | 301排除: {row['301排除']}" if row.get("301排除") else ""
     line = (f"{i}. {row['编码']} | {path_txt} | 一般税率 {row['一般税率']} | "
-            f"301: {row['301判定']} {row['301加征']}{add}{flip}{excl}")
+            f"301: {row['301判定']} {row['301加征']}{flip}{excl}")
     if cr_txt:
         line += f" | 判定条件: {cr_txt}"
     return line
@@ -460,10 +579,10 @@ def classify_product(db, description, top_n=3, origin="CN"):
 
     # 本地召回。AI 关键词全落空时降级为原文检索（走同义词表），
     # 而不是直接报"库里没有"——那会把模型的失误说成数据的缺失。
-    rows = _recall_candidates(db, keywords)
+    rows = _recall_candidates(db, keywords, description=description)
     degraded = ""
     if not rows:
-        rows = _recall_candidates(db, [description])
+        rows = _recall_candidates(db, [description], description=description)
         if rows:
             degraded = (f"AI 给出的检索词（{' '.join(keywords)}）在税则库中无匹配，"
                         f"已降级为按原文检索，候选质量可能下降")
@@ -507,7 +626,6 @@ def classify_product(db, description, top_n=3, origin="CN"):
             "301判定": row["301判定"],
             "9903子目": row["9903子目"],
             "301加征": row["301加征"],
-            "附加税": row["附加税"],
             # 警示字段必须跟着数字一起走。只给"总税负 37.5%"而不说其中 12.5% 取决于
             # 用途、25% 可能已被整号排除，比给错数更糟——它看着像个确定的结论。
             "FLIP 301加征": (total or {}).get("FLIP 301加征", ""),
@@ -563,12 +681,12 @@ def assist_search(db, keyword, top_n=3, origin="CN", limit=40, sort="relevance",
     # origin / unit_value 决定总税负列怎么算。新增候选要和本地行同表并列、
     # 还要一起排序，两边必须用同一口径，否则表里会出现越南原产的行按中国
     # 口径加了 301 的情况——数字并排放着，看不出是两套算法。
-    local_rows = rate.search(db, keyword, limit=limit, sort=sort,
-                             unit_value=unit_value, origin=origin)
+    local_rows, _st = rate.hybrid_search(db, keyword, limit=limit, sort=sort,
+                                         unit_value=unit_value, origin=origin)
     local_codes = {re.sub(r"\D", "", str(r["编码"])) for r in local_rows}
 
     ai_rows = _recall_candidates(db, keywords, limit=limit,
-                                 unit_value=unit_value, origin=origin)
+                                 unit_value=unit_value, origin=origin, description=keyword)
     new_rows = [r for r in ai_rows
                 if re.sub(r"\D", "", str(r["编码"])) not in local_codes]
 
@@ -690,7 +808,8 @@ def interpret_results(results):
         lines.append(
             f"- {r.get('输入编码', '')} {r.get('商品描述', '')[:60]} | "
             f"一般税率 {r.get('一般税率', '')} | 301: {r.get('301判定', '')} "
-            f"{r.get('301加征', '')} | 附加税 {r.get('附加税', '')}"
+            f"{r.get('301加征', '')}"
+            + (f" | FLIP301: {r.get('FLIP 301加征')}" if r.get("FLIP 301加征") else "")
         )
     sys_prompt = (
         "你是为货代公司客户服务的美国关税解读专家。根据下面的查询结果，用简体中文写一段通俗解读："
@@ -835,7 +954,7 @@ def analyze_list_stream(db, items, origin="CN"):
     for i, it in enumerate(items, 1):
         name = it.get("name", "")
         kws, chs = kw_map.get(i, ([], []))
-        rows = _recall_candidates(db, kws, limit=20) if kws else []
+        rows = _recall_candidates(db, kws, limit=20, description=name) if kws else []
         # 章号只加权不过滤（同 classify_product）。硬过滤时模型猜错章会把正确
         # 候选整条滤掉，然后这一行报"本地库未匹配"——清单里几十行，用户看到的
         # 是"库里没有"，真实原因却是模型猜错了章。
@@ -843,7 +962,7 @@ def analyze_list_stream(db, items, origin="CN"):
         note = ""
         if not rows and name:
             # AI 关键词全落空时退回按原文检索，而不是直接判这行无解
-            rows = _recall_candidates(db, [name], limit=20)
+            rows = _recall_candidates(db, [name], limit=20, description=name)
             if rows:
                 note = f"AI 检索词（{' '.join(kws)}）无匹配，已降级为按品名原文检索"
         if not rows:
@@ -866,13 +985,22 @@ def analyze_list_stream(db, items, origin="CN"):
     # 第二轮：批量精排
     details_map = {}
     if pending:
+        # 候选行与单条归类走同一个 _candidate_line：带归类路径、判定条件、FLIP 与排除。
+        # 此前批量模式只给"编码(描述前 40 字, 税率)"且只给 6 条——末级品名大量是 Other，
+        # 等于让模型盲选；单条模式早就不这么干了，批量却一直没跟上。
         batch_lines = []
         for i, rows, it, _note, _chs in pending:
-            tops = "; ".join(f"{r['编码']}({r['商品描述'][:40]}, {r['一般税率']})" for r in rows[:6])
-            batch_lines.append(f"{i}. 商品「{it.get('name', '')}」候选: {tops}")
+            batch_lines.append(f"{i}. 商品「{it.get('name', '')}」候选：")
+            batch_lines.extend("   " + _candidate_line(db, f"{i}-{j}", r)
+                               for j, r in enumerate(rows[:12], 1))
         sys_prompt2 = (
-            "为下列每个商品从候选编码中选择最匹配的一个 8 位编码。"
-            "只输出 JSON：{\"picks\": [{\"index\": 1, \"code\": \"8位编码\", \"confidence\": 0.9, \"reason\": \"一句话理由\"}]}"
+            "你是美国 HTS 归类专家。下面按商品序号列出每个商品的候选子目，"
+            "每个候选行格式：商品序号-候选序号. 编码 | 归类路径（父级 > 子级，判定条件多在父级上）"
+            "| 税率 | 301 | 判定条件。为每个商品选择最匹配的一个 8 位编码。"
+            "选择时必须依据归类路径中的实际措辞（材质、织法、含量阈值、涂层、重量/尺寸/价值门槛），"
+            "不要只看末级品名——末级常常只是 'Other'。reason 引用候选行原文。"
+            "只输出 JSON：{\"picks\": [{\"index\": 商品序号, \"code\": \"8位编码\", "
+            "\"confidence\": 0.9, \"reason\": \"引用原文的一句话理由\"}]}，code 必须来自该商品的候选。"
         )
         try:
             r2 = provider.chat_json(

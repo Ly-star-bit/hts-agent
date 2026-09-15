@@ -821,6 +821,107 @@ def split_ruling_sections(text):
     return out
 
 
+# ---------- 裁定 kNN 投票（归类召回的第三条通道） ----------
+
+_RENUMBER_FILE = os.path.join(os.path.dirname(DB_PATH), "hs_renumber.json")
+_renumber_cache = None
+
+
+def _load_renumber():
+    """老裁定的 6 位子目整体换号后落到哪个现行子目（data/hs_renumber.json，人工核实）"""
+    global _renumber_cache
+    if _renumber_cache is None:
+        try:
+            with open(_RENUMBER_FILE, encoding="utf-8") as f:
+                m = (json.load(f) or {}).get("map") or {}
+            _renumber_cache = {k: list((v or {}).get("to") or []) for k, v in m.items()}
+        except (OSError, json.JSONDecodeError):
+            _renumber_cache = {}
+    return _renumber_cache
+
+
+def _recency_weight(date):
+    """
+    裁定年份权重。老裁定的归类逻辑通常仍成立，但编码与税则用词都在漂，
+    投票时新裁定的一票要比 90 年代的一票值钱。分档是启发式，不是法定规则。
+    """
+    try:
+        y = int(str(date or "")[:4])
+    except ValueError:
+        return 0.5
+    if y >= 2017:
+        return 1.0
+    if y >= 2007:
+        return 0.6
+    return 0.35
+
+
+def code_votes(query, limit=20, n_rulings=20, alive_codes=None, db_path=None,
+               _embed=None, _precedents=None):
+    """
+    语义召回的裁定按编码投票，得到"CBP 实际把同类货判给了哪些现行子目"。
+
+    这是三条归类召回通道里最强的一条（2026-09 探针：22 组常见商品前三票含正确
+    品目 19 组，关键词检索约 5 组）。索引、模型、接口原本就有，只是没接进归类链路。
+
+    三件必须做的事，都是在探针里踩出来的：
+      · 老裁定的编码常已换号（8471.30.00 → 8471.30.01）：8 位查不到按 6 位回退到
+        现行子目，票平分给同 6 位的现行子目；
+      · 6 位也没了的（8471.20 已并入 8471.30）：查 data/hs_renumber.json；
+        再查不到计入「未落位」，不静默；
+      · 按裁定年份加权：90 年代"无 CPU 的未完成笔记本"判在零件，不该与 2020 年
+        的整机裁定一票等重。撤销/修改件不投票。
+
+    只做召回、不做结论：返回的候选进现有精排，税率与判定条件仍来自本地税则。
+    alive_codes 为现行 8 位编码集合（1–97 章）；_precedents / _embed 供测试注入。
+    返回 {"候选": [{"编码", "票", "裁定": [...]}], "先例数", "未落位": [...]}，失败 {"error"}。
+    """
+    query = (query or "").strip()
+    if not query:
+        return {"error": "请输入商品描述"}
+    fetch = _precedents or (lambda q, n: semantic_precedents(
+        q, [], limit=n, db_path=db_path, alive_codes=alive_codes, _embed=_embed))
+    res = fetch(query, n_rulings)
+    if not isinstance(res, dict) or res.get("error"):
+        return {"error": (res or {}).get("error", "裁定库检索失败") if isinstance(res, dict) else "裁定库检索失败"}
+    alive = set(alive_codes or [])
+    by6 = {}
+    for c in alive:
+        by6.setdefault(c[:6], []).append(c)
+    renumber = _load_renumber()
+    votes, support, unplaced = {}, {}, []
+    for r in res.get("先例") or []:
+        if r.get("状态") != "现行":
+            continue
+        w = _recency_weight(r.get("日期"))
+        num = r.get("裁定号", "")
+        for c in r.get("编码") or []:
+            d = _norm_code(c)
+            c8, c6 = d[:8], d[:6]
+            if len(c8) < 8:
+                continue
+            if c8 in alive:
+                targets = [c8]
+            elif by6.get(c6):
+                targets = by6[c6]
+            elif any(by6.get(t) for t in renumber.get(c6, [])):
+                targets = [x for t in renumber.get(c6, []) for x in by6.get(t, [])]
+            else:
+                unplaced.append(f"{num}:{c}")
+                continue
+            for t in targets:
+                votes[t] = votes.get(t, 0.0) + w / len(targets)
+                lst = support.setdefault(t, [])
+                if num and num not in lst:
+                    lst.append(num)
+    ranked = sorted(votes.items(), key=lambda kv: (-kv[1], kv[0]))
+    return {
+        "候选": [{"编码": c, "票": round(v, 2), "裁定": support[c][:5]} for c, v in ranked[:limit]],
+        "先例数": len(res.get("先例") or []),
+        "未落位": unplaced[:10],
+    }
+
+
 # ---------- 命令行自查 ----------
 
 def _main(argv):

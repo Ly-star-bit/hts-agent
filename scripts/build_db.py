@@ -57,6 +57,8 @@ def parse_hts_csv():
     desc_10 = {}
     add_duty = {}
     c99_rates = {}
+    # 9903 标目正文与税率：FLIP 301 逐经济体标目从这里推导，未建模措施的探测也读它
+    c99_rows = {}
     stack = []          # [(indent, desc)]，维护当前所在的层级路径
     # 计量单位（Unit of Quantity）：8 位行上基本是空的（6857 条里 6839 条空），
     # 单位写在 10 位统计行上。估算页要按数量算钱，必须告诉用户"这行该按什么计数"，
@@ -114,6 +116,9 @@ def parse_hts_csv():
                     rates_8[n[:8]] = entry
             if n.startswith("9903"):
                 c99_rates[n] = general
+                if len(n) == 8 or n[:8] not in c99_rows:
+                    c99_rows[n[:8]] = {"desc": re.sub(r"\s+", " ", desc), "general": general,
+                                       "line": line_no}
 
     # 路径节点重复率约 89%（34814 次引用 / 3815 个不同字符串），直接内联会让
     # 数据库多出 2.8MB。改存字符串表 + 下标引用，降到 0.5MB。
@@ -131,7 +136,214 @@ def parse_hts_csv():
     # 全存一遍会给库白加几百 KB。查不到就回落到 8 位。
     units_10 = {k: v for k, v in units_10.items()
                 if len(k) == 10 and units_8.get(k[:8]) != v}
-    return rates_8, desc_10, add_duty, c99_rates, path_nodes, units_8, units_10
+    return rates_8, desc_10, add_duty, c99_rates, path_nodes, units_8, units_10, c99_rows
+
+
+# ---------- Chapter 99 标目：FLIP 301 官方标目推导 + 未建模措施探测 ----------
+
+# 9903 标目正文里出现过的国家/经济体写法 → 代码。只收 htsdata.csv 实测出现的写法，
+# 匹配时按最长名优先整词匹配（"Hong Kong, China" 先命中 Hong Kong，不再算成 China）。
+# 没映射上的名字不会被静默丢掉：探测结果里带"未识别名称"，人工补表。
+NAME_TO_ISO = {
+    "Afghanistan": "AF", "Algeria": "DZ", "Angola": "AO", "Argentina": "AR", "Australia": "AU",
+    "Bahamas": "BS", "Bahrain": "BH", "Bangladesh": "BD", "Belarus": "BY", "Bolivia": "BO",
+    "Bosnia and Herzegovina": "BA", "Botswana": "BW", "Brazil": "BR", "Brunei": "BN",
+    "Cambodia": "KH", "Cameroon": "CM", "Canada": "CA", "Chad": "TD", "Chile": "CL",
+    "China": "CN", "Colombia": "CO", "Costa Rica": "CR", "Cuba": "CU",
+    "Democratic Republic of the Congo": "CD", "Dominican Republic": "DO", "Ecuador": "EC",
+    "Egypt": "EG", "El Salvador": "SV", "Equatorial Guinea": "GQ", "European Union": "EU",
+    "Falkland Islands": "FK", "Fiji": "FJ", "Ghana": "GH", "Guatemala": "GT", "Guyana": "GY",
+    "Honduras": "HN", "Hong Kong, China": "HK", "Hong Kong": "HK", "Iceland": "IS", "India": "IN", "Indonesia": "ID",
+    "Iraq": "IQ", "Israel": "IL", "Japan": "JP", "Jordan": "JO", "Kazakhstan": "KZ",
+    "Kuwait": "KW", "Laos": "LA", "Lesotho": "LS", "Libya": "LY", "Liechtenstein": "LI",
+    "Madagascar": "MG", "Malawi": "MW", "Malaysia": "MY", "Mauritius": "MU", "Mexico": "MX",
+    "Moldova": "MD", "Morocco": "MA", "Mozambique": "MZ", "Myanmar": "MM", "Namibia": "NA",
+    "Nauru": "NR", "New Zealand": "NZ", "Nicaragua": "NI", "Nigeria": "NG",
+    "North Korea": "KP", "North Macedonia": "MK", "Norway": "NO", "Oman": "OM",
+    "Pakistan": "PK", "Papua New Guinea": "PG", "Peru": "PE", "Philippines": "PH",
+    "Qatar": "QA", "Russian Federation": "RU", "Russia": "RU", "Saudi Arabia": "SA",
+    "Serbia": "RS", "Singapore": "SG", "South Africa": "ZA", "South Korea": "KR",
+    "Sri Lanka": "LK", "Switzerland": "CH", "Syria": "SY", "Taiwan": "TW", "Thailand": "TH",
+    "Trinidad and Tobago": "TT", "Tunisia": "TN", "Türkiye": "TR", "Turkey": "TR",
+    "United Arab Emirates": "AE", "United Kingdom": "GB", "Uruguay": "UY", "Vanuatu": "VU",
+    "Venezuela": "VE", "Vietnam": "VN", "Zimbabwe": "ZW",
+}
+_NAME_PATTERNS = [(re.compile(r"(?<![A-Za-z])" + re.escape(k) + r"(?![A-Za-z])"), v)
+                  for k, v in sorted(NAME_TO_ISO.items(), key=lambda kv: -len(kv[0]))]
+_NOTE_RE = re.compile(r"U\.S\. note (\d+)")
+# 中国 301 计划的三组标目（USTR 清单 + 排除 + 2024/2026 新增档位），工具已建模
+MODELED_301_PREFIXES = ("990388", "990391", "990392")
+# 按产品触发的措施在标目正文里的关键词，只用来给未建模组打"产品类"标签
+PRODUCT_TERMS = ("steel", "aluminum", "copper", "passenger vehicles", "light trucks",
+                 "medium- and heavy-duty", "semiconductor", "lumber", "timber",
+                 "civil aircraft", "pharmaceutical", "quartz", "tires", "leather")
+
+
+def _fmt_c99(h):
+    return f"{h[:4]}.{h[4:6]}.{h[6:8]}"
+
+
+def origins_in(desc):
+    """标目正文提及的经济体代码列表（去重保序）。只认 NAME_TO_ISO 里的写法。"""
+    text, found = desc, []
+    for pat, iso in _NAME_PATTERNS:
+        if pat.search(text):
+            text = pat.sub(" ", text)
+            if iso not in found:
+                found.append(iso)
+    return found
+
+
+def derive_flip301_headings(c99_rows):
+    """
+    从 htsdata.csv 的 9903.05/9903.06 标目推导 FLIP 301 逐经济体档位与报关标目。
+
+    官方表里每个经济体一行："articles the product of X, as provided for in U.S. note 52"，
+    税率写在 General 栏（"… + 12.5%"）；EU/TW/JP/KR/CH 这类 net-of-MFN 档是两行：
+    MFN ≥ 上限的那行不加征，MFN < 上限的那行 General 栏直接写 "10%"（合计封顶）。
+    .85–.92 与 9903.06.xx 是例外标目（在途、232 产品、民用航空器、医药、USMCA 货等）。
+
+    此前档位靠手抄 JSON（data/flip301_forced_labor.json）。手抄会漂，而且报关要填的
+    9903.05.xx 标目从没输出过——301 那边是输出 9903.88.xx 的。JSON 保留作交叉校验。
+    返回 {"by_origin": {ISO: {...}}, "exceptions": [...], "exceptions_by_origin": {ISO: [...]},
+          "unparsed": [...]}
+    """
+    by_origin, general_ex, ex_by_origin, unparsed = {}, [], {}, []
+    for h in sorted(c99_rows):
+        row = c99_rows[h]
+        d, g = row["desc"], row["general"]
+        # .85–.92 是 FLIP 通用例外（在途 / 捐赠 / 信息材料等），有几行正文不引用 note 52，
+        # 只能按标目号归属；9903.06 整组都是 note 52 的经济体例外
+        in_flip_block = ((h.startswith("990305") and 85 <= int(h[6:8]) <= 99)
+                         or h.startswith("990306"))
+        if 52 not in {int(n) for n in _NOTE_RE.findall(d)} and not in_flip_block:
+            continue
+        origins = origins_in(d)
+        item = {"标目": _fmt_c99(h), "描述": d[:220], "line": row["line"]}
+        is_exception = ("subdivision" in d or h.startswith("990306")
+                        or (h.startswith("990305") and 85 <= int(h[6:8]) <= 99))
+        if is_exception:
+            if origins:
+                for o in origins:
+                    ex_by_origin.setdefault(o, []).append(item)
+            else:
+                general_ex.append(item)
+            continue
+        if len(origins) != 1:
+            unparsed.append(item)
+            continue
+        o = origins[0]
+        rec = by_origin.setdefault(o, {"origin": o})
+        m_add = re.search(r"\+\s*(\d+(?:\.\d+)?)\s*%", g)
+        m_flat = re.fullmatch(r"(\d+(?:\.\d+)?)\s*%", g.strip())
+        m_lt = re.search(r"less than (\d+(?:\.\d+)?) percent", d)
+        if m_add and not m_lt:
+            rec.update(mode="flat", rate=float(m_add.group(1)), heading=h, line=row["line"])
+        elif m_lt and m_flat:
+            rec.update(mode="net_mfn", cap=float(m_flat.group(1)), heading_below=h,
+                       line_below=row["line"])
+        elif "equal to or greater than" in d:
+            rec.update(mode="net_mfn", heading_at_or_above=h, line_at_or_above=row["line"])
+        else:
+            unparsed.append(item)
+    return {"by_origin": by_origin, "exceptions": general_ex,
+            "exceptions_by_origin": ex_by_origin, "unparsed": unparsed}
+
+
+# 按产品触发的 Chapter 99 措施（业内叫 232 类：钢铝铜 note 16、乘用车 note 33、软木 37、
+# 中重型车 38、半导体 39；加拿大特定产品 note 51 兼有原产地条件）。清单由
+# scripts/extract_c99_products.py 从 Chapter 99 PDF 提取；note 正文不出现 "section 232"
+# 字样，"232" 是按措辞与公告号的推断。这里只编译成"编码 → 命中哪条 note 哪个子条"的索引，
+# 查询时探测并标注，不计税。
+PRODUCT_NOTES = {"16": "", "33": "", "37": "", "38": "", "39": "", "51": "CA"}
+
+
+def compile_product_scopes(scopes):
+    """
+    c99_product_scopes.json → {"entries": [...], "exact": {code: [i]}, "prefix": {code: [i]},
+    "ranges": [{"from","to","i"}]}。entries 去重存一份，各编码只引下标，否则 2500 个编码
+    各挂一份说明字典会让库白多 500KB。
+    """
+    entries, exact, prefix, ranges = [], {}, {}, []
+    for n, origin_cond in PRODUCT_NOTES.items():
+        note = (scopes.get("notes") or {}).get(n)
+        if not note:
+            continue
+        base = {"note": n, "措施": (note.get("measure") or "")[:160],
+                "状态": [x[:200] for x in (note.get("status_sentences") or [])[:2]],
+                "标目": [h for h in (note.get("headings") or []) if not h.startswith("9903.01")][:6],
+                "原产地条件": origin_cond}
+        for sub, g in (note.get("groups") or {}).items():
+            # 子条标签开头常重复编号（"(iii) Articles of steel"），去掉再拼
+            label = re.sub(r"^\s*\([A-Za-z0-9]+\)\s*", "", g.get("label") or "")[:70]
+            ent = {**base, "子条": f"{sub} {label}".strip(),
+                   "页": (g.get("pages") or [None])[0]}
+            entries.append(ent)
+            i = len(entries) - 1
+            for c in g.get("list") or []:
+                d = norm(str(c))
+                if len(d) in (8, 10):
+                    exact.setdefault(d, []).append(i)
+                elif len(d) in (4, 6):
+                    prefix.setdefault(d, []).append(i)
+            for pair in g.get("ranges") or []:
+                if len(pair) == 2:
+                    a, b = norm(str(pair[0])), norm(str(pair[1]))
+                    if a and b and len(a) == len(b):
+                        ranges.append({"from": a, "to": b, "i": i})
+    return {"entries": entries, "exact": exact, "prefix": prefix, "ranges": ranges}
+
+
+def group_unmodeled(c99_rows, flip_headings, note_status=None):
+    """
+    把工具没建模的 9903 标目按前 6 位分组，记录每组提及了哪些原产地、哪些是
+    "any country"、正文里出现了哪些产品词，供查询时探测"总税负不完整"。
+
+    这里只做**探测**不做判定：标目正文提及某原产地（含出现在例外从句里）就记一笔，
+    查询时按原产地报"另有 N 个标目以该原产地为条件、本工具未建模"，由人核实。
+    """
+    groups = {}
+    for h in sorted(c99_rows):
+        if h[:6] in MODELED_301_PREFIXES or h in flip_headings:
+            continue
+        row = c99_rows[h]
+        d = row["desc"]
+        g = groups.setdefault(h[:6], {
+            "组": f"{h[:4]}.{h[4:6]}", "标目数": 0, "依据": set(), "按原产地": {},
+            "任何国家": {"数量": 0, "示例": []}, "产品词": set(), "示例": None})
+        g["标目数"] += 1
+        g["依据"].update(f"U.S. note {n}" for n in _NOTE_RE.findall(d))
+        sample = {"标目": _fmt_c99(h), "税率": row["general"][:60], "描述": d[:160]}
+        if g["示例"] is None:
+            g["示例"] = sample
+        for o in origins_in(d):
+            ent = g["按原产地"].setdefault(o, {"数量": 0, "示例": []})
+            ent["数量"] += 1
+            if len(ent["示例"]) < 4:
+                ent["示例"].append(sample)
+        if "any country" in d:
+            g["任何国家"]["数量"] += 1
+            if len(g["任何国家"]["示例"]) < 4:
+                g["任何国家"]["示例"].append(sample)
+        low = d.lower()
+        g["产品词"].update(t for t in PRODUCT_TERMS if t in low)
+    out = []
+    for key in sorted(groups):
+        g = groups[key]
+        g["依据"] = sorted(g["依据"], key=lambda s: int(s.rsplit(" ", 1)[1]))
+        g["产品词"] = sorted(g["产品词"])
+        # Chapter 99 编者注（"headings 9903.03.01–9903.03.11 expired at the close of July 23, 2026"）：
+        # 探测出来的组是否还在执行，PDF 里其实写了，带上它，提示才不会沦为噪音
+        notes_cited = [s.rsplit(" ", 1)[1] for s in g["依据"]]
+        pool = [x for n in notes_cited for x in (note_status or {}).get(n, [])]
+        # 先挑点名本组标目的（"headings 9903.03.01–9903.03.11 expired…"），再挑带状态词的；
+        # 一条 note 的编者注可能有七八句，与本组无关的不要占位
+        mine = [x for x in pool if g["组"] in x]
+        status_words = ("terminated", "expired", "suspended", "Compiler")
+        rest = [x for x in pool if x not in mine and any(w in x for w in status_words)]
+        g["编者注"] = (mine + rest)[:2]
+        out.append(g)
+    return out
 
 
 def parse_ustr_pdf():
@@ -236,6 +448,9 @@ SANITY_MINIMUMS = {
     "desc_10": 15000,
     "sec301_map": 9000,
     "c99_percent": 350,
+    # FLIP 301 官方表 60 个经济体（Rev18 实测 60）；9903 标目 636（Rev18）
+    "flip301_headings": 50,
+    "c99_headings": 500,
 }
 
 
@@ -258,9 +473,9 @@ def build():
     os.makedirs(DATA_DIR, exist_ok=True)
     print("① 解析 htsdata.csv ...")
     (rates_8, desc_10, add_duty, c99_rates, path_nodes,
-     units_8, units_10) = parse_hts_csv()
-    print(f"   8位子目: {len(rates_8)} | 10位描述: {len(desc_10)} | 附加税行: {len(add_duty)} "
-          f"| 9903子目: {len(c99_rates)} | 归类路径节点: {len(path_nodes)}")
+     units_8, units_10, c99_rows) = parse_hts_csv()
+    print(f"   8位子目: {len(rates_8)} | 10位描述: {len(desc_10)} | 附加关税栏行: {len(add_duty)} "
+          f"| 9903子目: {len(c99_rates)} | 9903标目: {len(c99_rows)} | 归类路径节点: {len(path_nodes)}")
 
     print("② 解析 USTR China Tariffs PDF ...")
     sec301_map, sec301_map_10, sec301_partial_8, sec301_pages = parse_ustr_pdf()
@@ -282,6 +497,14 @@ def build():
     flip301 = load_json_data("flip301_forced_labor.json", {})
     flip301_exemptions = load_json_data("flip301_exemptions.json", {})
     exclusions = load_json_data("sec301_exclusions.json", {})
+    product_scopes = load_json_data("c99_product_scopes.json", {})
+    c99_product_index = compile_product_scopes(product_scopes)
+    print(f"   按产品触发的 Chapter 99 清单: note {sorted(PRODUCT_NOTES)} → 子条 "
+          f"{len(c99_product_index['entries'])} 个 | 精确编码 {len(c99_product_index['exact'])} | "
+          f"前缀 {len(c99_product_index['prefix'])} | 区间 {len(c99_product_index['ranges'])}")
+    if not c99_product_index["entries"]:
+        print("   ⚠ 未找到 data/c99_product_scopes.json —— 232 类产品探测将整体缺失，"
+              "请先跑 python scripts/extract_c99_products.py")
     # UFLPA 强迫劳动检查维度已移除（v1.5），不再摄入 uflpa_entities.json
     ex_univ = len(flip301_exemptions.get("universal", []))
     ex_econ = {k: len(v) for k, v in (flip301_exemptions.get("by_economy") or {}).items()}
@@ -290,6 +513,44 @@ def build():
           f"FLIP 301: 10%档 {len((flip301.get('rates') or {}).get('10', []))} | "
           f"12.5%档 {len((flip301.get('rates') or {}).get('125', []))} | "
           f"FLIP 301 豁免: 通用 {ex_univ} | 按经济体 {ex_econ}")
+    print("③c 从 9903 标目推导 FLIP 301 官方标目，并探测未建模措施 ...")
+    flip_headings = derive_flip301_headings(c99_rows)
+    fh = flip_headings["by_origin"]
+    modes = Counter(v.get("mode", "?") for v in fh.values())
+    print(f"   FLIP 301 经济体标目: {len(fh)} 个（{dict(modes)}）| 通用例外标目 "
+          f"{len(flip_headings['exceptions'])} | 经济体例外 "
+          f"{sum(len(v) for v in flip_headings['exceptions_by_origin'].values())} | "
+          f"未解析 {len(flip_headings['unparsed'])}")
+    for it in flip_headings["unparsed"][:5]:
+        print(f"     ⚠ 未解析: {it['标目']} {it['描述'][:80]}")
+    # 与手抄 JSON 交叉校验：两边不一致要喊出来——官方表是主，JSON 只是校验用
+    json_tier = {}
+    for tier, lst in ((flip301.get("rates") or {}).items()):
+        for o in lst:
+            json_tier[o] = tier
+    for o, rec in sorted(fh.items()):
+        exp = json_tier.get(o)
+        got = (f"{rec.get('rate'):g}".replace(".", "") if rec.get("mode") == "flat"
+               else f"net_mfn_{rec.get('cap', 0):g}".replace(".", ""))
+        if exp is None:
+            print(f"     ⚠ 官方表有 {o}（{got}）但 flip301_forced_labor.json 无此经济体")
+        elif exp != got:
+            print(f"     ⚠ {o} 档位不一致：官方表 {got} / JSON {exp}，以官方表为准")
+    for o in sorted(set(json_tier) - set(fh)):
+        print(f"     ⚠ JSON 有 {o}（{json_tier[o]}）但官方表未推导出该经济体")
+    flip_heading_set = set()
+    for rec in fh.values():
+        flip_heading_set.update(x for x in (rec.get("heading"), rec.get("heading_below"),
+                                            rec.get("heading_at_or_above")) if x)
+    for lst in [flip_headings["exceptions"], *flip_headings["exceptions_by_origin"].values()]:
+        flip_heading_set.update(norm(it["标目"]) for it in lst)
+    note_status = {n: [x for x in (v.get("status_sentences") or []) if x]
+                   for n, v in (product_scopes.get("notes") or {}).items()}
+    c99_unmodeled = group_unmodeled(c99_rows, flip_heading_set, note_status)
+    n_unmodeled = sum(g["标目数"] for g in c99_unmodeled)
+    print(f"   未建模 9903 标目: {n_unmodeled} 个，分 {len(c99_unmodeled)} 组："
+          + "、".join(f"{g['组']}×{g['标目数']}" for g in c99_unmodeled))
+
     ex_notes = exclusions.get("notes") or {}
     ex_live = [c for c, v in ex_notes.items() if v.get("status") == "生效中"]
     print(f"   301 排除（U.S. note 20）: 标目 {len(ex_notes)} 个 | 生效中 {len(ex_live)} 个"
@@ -331,6 +592,12 @@ def build():
         "flip301": flip301,          # FLIP 301 强迫劳动调查关税（60 经济体税率表 + 豁免）
         "flip301_exemptions": flip301_exemptions,  # FLIP 301 ANNEX II 豁免编码清单
         "exclusions": exclusions,    # 301 排除（U.S. note 20）：notes 标目元信息 + by_code 逐编码
+        # 9903 标目正文与税率（来源追溯 + 探测用）；FLIP 301 官方标目；未建模措施分组
+        "c99_headings": c99_rows,
+        "flip301_headings": flip_headings,
+        "c99_unmodeled": c99_unmodeled,
+        # 按产品触发的 Chapter 99 清单索引（232 类）：编码 → note/子条，查询时探测
+        "c99_product_index": c99_product_index,
     }
     print("④ 产出下限校验 ...")
     failures = sanity_check({
@@ -338,6 +605,8 @@ def build():
         "desc_10": len(desc_10),
         "sec301_map": len(sec301_map),
         "c99_percent": len(c99_percent),
+        "flip301_headings": len(fh),
+        "c99_headings": len(c99_rows),
     })
     if failures:
         print("   ✗ 校验未通过，已中止构建，未写入数据库（保留上一版）：")

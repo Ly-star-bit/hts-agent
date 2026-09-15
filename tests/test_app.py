@@ -65,7 +65,9 @@ class TestQueryAPI(unittest.TestCase):
         self.assertEqual(len(row["301 flip历史"]), 1)  # 锂电池有 flip 历史
         # 8507.60.00 锂电池在 ANNEX II Part A，但带 Aircraft 范围限制（FRN 页 225）：
         # 只有民用航空器用锂电池豁免，普通锂电池照加 12.5%，故不是无条件"豁免"
-        self.assertEqual(row["FLIP 301加征"], "+12.5%(范围存疑)")
+        # ANNEX II 带 Aircraft 范围限制，且落在 note 33 汽车零件清单（232 类）——两个存疑并列
+        self.assertIn("+12.5%(范围存疑", row["FLIP 301加征"])
+        self.assertIn("232 存疑", row["FLIP 301加征"])
         self.assertNotIn("强迫劳动", row)
         self.assertNotIn("强迫劳动提示", row)
         # 非豁免编码（光伏）仍按 12.5% 加征
@@ -116,11 +118,11 @@ class TestQueryAPI(unittest.TestCase):
         r = self.client.post("/api/query", json={"text": "8507.60.00", "origin": "IN"})
         self.assertEqual(r.status_code, 200)
         row = r.json()["results"][0]
-        self.assertEqual(row["原产地"], "其他国家")
+        self.assertEqual(row["原产地"], "印度")     # 有中文名的经济体按名显示
         self.assertIn("不适用", row["301判定"])
         self.assertEqual(row["301加征"], "")
         self.assertIn("其他国家通用轨道", row["越南措施"])
-        self.assertEqual(r.json()["stats"]["origin"], "其他国家")
+        self.assertEqual(r.json()["stats"]["origin"], "印度")
 
 
 class TestSearchAPI(unittest.TestCase):
@@ -779,3 +781,47 @@ class TestCrossTextViewer(unittest.TestCase):
     def test_bad_number_rejected(self):
         r = self.client.get("/api/cross/text/%2E%2E", params={"collection": "ny", "date": "2026"})
         self.assertEqual(r.status_code, 400)
+
+
+class TestOriginsAPIAndUI(unittest.TestCase):
+    """原产地下拉必须从数据出：写死 CN/VN/OTHER 会让界面上的非中越报价静默漏掉 FLIP 301"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(app_mod.app)
+
+    def test_origins_endpoint(self):
+        r = self.client.get("/api/origins")
+        self.assertEqual(r.status_code, 200)
+        origins = r.json()["origins"]
+        codes = [o["code"] for o in origins]
+        self.assertGreaterEqual(len(codes), 62)
+        self.assertEqual(codes[0], "CN")
+        self.assertIn("MX", codes)
+        self.assertIn("OTHER", codes)
+        self.assertTrue(all(o["label"] for o in origins))
+
+    def test_ui_selects_are_data_driven(self):
+        # 界面里不能再有写死的 OTHER 选项；四个下拉都要挂 data-origins 由 /api/origins 填充
+        with open(os.path.join(os.path.dirname(__file__), "..", "templates", "index.html"),
+                  encoding="utf-8") as f:
+            html = f.read()
+        self.assertNotIn('value="OTHER"', html)
+        self.assertIn("/api/origins", html)
+        for sid in ("queryOrigin", "searchOrigin", "estOrigin", "listOrigin"):
+            self.assertRegex(html, rf'<select id="{sid}"[^>]*data-origins')
+
+    def test_query_with_unspecified_origin(self):
+        r = self.client.post("/api/query", json={"text": "6109.10.00", "origin": "OTHER"})
+        row = r.json()["results"][0]
+        self.assertEqual(row["原产地"], "未指定")
+        self.assertIn("未计入", row["备注"])
+        self.assertEqual(r.json()["stats"]["origin"], "未指定")
+
+    def test_export_carries_data_version(self):
+        r = self.client.post("/api/export", json={"results": [{"输入编码": "6109.10.00", "备注": "x"}], "fmt": "csv"})
+        self.assertEqual(r.status_code, 200)
+        body = r.content.decode("utf-8-sig")
+        self.assertIn("数据版本", body)
+        self.assertIn("构建 ", body)
+        self.assertIn("htsdata.csv ", body)

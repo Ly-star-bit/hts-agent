@@ -36,13 +36,28 @@ MAX_UPLOAD = 20 * 1024 * 1024  # 上传限制 20MB
 app = FastAPI(title="HTS 301 关税查询工具", version="1.1.0")
 
 _db = None
+_db_key = None      # (mtime_ns, size)：数据库文件变了就重读，不用重启服务
+
+
+def _db_stat_key():
+    try:
+        st = os.stat(core.DB_JSON)
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
 
 
 def get_db():
-    """懒加载数据库（带缓存），数据文件更新后重启服务即可"""
-    global _db
-    if _db is None:
+    """
+    懒加载数据库（带缓存）。缓存键是文件的 mtime/size：check_sources --apply --rebuild
+    或手动 build_db 之后，下一次请求自动换成新库——此前要手动重启进程，而这个进程是
+    nohup 起的，重建完忘了重启就一直用旧库，页面上的构建时间还显示着旧的。
+    """
+    global _db, _db_key
+    key = _db_stat_key()
+    if _db is None or key != _db_key:
         _db = core.load_db()
+        _db_key = key
     return _db
 
 
@@ -272,6 +287,42 @@ def _defuse(value):
     return value
 
 
+_stamp_cache = {"key": None, "value": ""}
+
+
+def data_version_stamp():
+    """
+    数据版本戳：构建时间 + 四份官方源文件的内容哈希前 8 位。
+    哈希按文件 mtime/size 缓存，导出时不用每次重算 20MB。
+    """
+    import hashlib
+    meta = get_db().get("meta") or {}
+    parts = [f"构建 {meta.get('built_at', '?')}"]
+    key = []
+    for k, info in SOURCE_FILES.items():
+        path = os.path.join(BASE_DIR, info["path"])
+        try:
+            st = os.stat(path)
+            key.append((k, st.st_mtime_ns, st.st_size))
+        except OSError:
+            key.append((k, None, None))
+    key = tuple(key)
+    if _stamp_cache["key"] == key:
+        return _stamp_cache["value"]
+    for k, info in SOURCE_FILES.items():
+        path = os.path.join(BASE_DIR, info["path"])
+        if not os.path.exists(path):
+            parts.append(f"{info['path']} 缺失")
+            continue
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        parts.append(f"{info['path']} {h.hexdigest()[:8]}")
+    _stamp_cache["key"], _stamp_cache["value"] = key, "｜".join(parts)
+    return _stamp_cache["value"]
+
+
 def _defuse_rows(rows):
     """对导出行的每个值做公式中和；非 dict 行原样保留"""
     out = []
@@ -291,6 +342,11 @@ def api_export(req: ExportRequest):
     if not isinstance(req.results[0], dict):
         raise HTTPException(status_code=400, detail="导出数据格式错误：results 应为对象列表")
     rows = _defuse_rows(req.results)
+    # 每行带数据版本：报关用的表格转发出去后，收件人得知道它基于哪一版税则与清单
+    stamp = data_version_stamp()
+    for row in rows:
+        if isinstance(row, dict) and "数据版本" not in row:
+            row["数据版本"] = stamp
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     if req.fmt == "xlsx":
         buf = io.BytesIO()
@@ -329,6 +385,7 @@ class SearchRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=500)
     unit_value: Optional[float] = Field(default=None, description="单位货值 USD，用于折算从量税（可选）")
     include_special: bool = Field(default=False, description="是否包含第 98/99 章（特殊/临时条款，默认排除）")
+    semantic: bool = Field(default=True, description="是否启用语义 / 先例两条召回通道（需本地索引与 ollama；不可用自动降级为关键词）")
 
 
 class EstimateRequest(BaseModel):
@@ -375,6 +432,19 @@ class AIConfigRequest(BaseModel):
 
 class MeasuresConfigRequest(BaseModel):
     measures: dict = Field(default_factory=dict, description="加征开关，如 {'cn301': true, 'flip301': false}")
+
+
+@app.get("/api/origins")
+def api_origins():
+    """
+    原产地下拉的数据源：中国、越南、FLIP 301 的 60 个经济体、第二栏国家、
+    「其他国家（不在名单）」与「未指定」。
+
+    下拉此前写死 CN / VN / OTHER 三项，OTHER 落到「不在 60 名单」——界面上任何
+    非中越原产的报价都静默少了 10%–12.5% 的 FLIP 301。列表从数据出，
+    数据里多一个经济体，下拉就多一项。
+    """
+    return {"origins": core.origin_options(get_db())}
 
 
 @app.get("/api/measures/config")
@@ -457,9 +527,13 @@ def api_search(req: SearchRequest):
         import rate
 
         db = get_db()
-        rows = rate.search(db, req.keyword, limit=req.limit, sort=req.sort,
-                           include_special=req.include_special,
-                           unit_value=req.unit_value, origin=req.origin)
+        # 三通道召回（关键词 + 税则行语义 + 裁定 kNN）按 RRF 融合；语义 / 先例通道
+        # 不可用时 status 写明原因、自动只剩关键词——主链路不依赖 ollama
+        channels = None if req.semantic else ("keyword",)   # None = rate.DEFAULT_CHANNELS（可由环境变量收窄）
+        rows, channel_status = rate.hybrid_search(
+            db, req.keyword, limit=req.limit, sort=req.sort,
+            include_special=req.include_special, unit_value=req.unit_value,
+            origin=req.origin, channels=channels)
         # 同义词扩展信息：未映射的中文片段必须回报，否则用户会以为已完整检索
         _expanded, applied, leftover = rate.expand_query(req.keyword)
         # 「先例数」列：CROSS 本地镜像的预聚合键查。镜像没建时 counts 为空、
@@ -474,6 +548,7 @@ def api_search(req: SearchRequest):
         return {"results": rows, "count": len(rows), "keyword": req.keyword,
                 "检索词": _expanded if applied else "",
                 "同义词映射": applied, "未识别": leftover,
+                "召回通道": channel_status,
                 "归类分歧": dispute,
                 # 大量候选同分时，"第一条"并不代表最匹配。与其伪造排序，
                 # 不如把决定分类的那几个属性问回去

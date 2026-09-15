@@ -5,7 +5,7 @@ rate.py —— 税率解析与总税负计算引擎（Web / 命令行共用）
 在 core.py 的 301 判定基础上扩展：
   1. parse_rate()            将任意税率文本解析为结构化形态（Free/百分比/从量/复合/引用/复杂）
   2. estimate_ad_valorem()   折算等效从价税率（百分比），从量部分需单位货值参数
-  3. calc_total()            计算单编码总税负（基础 + 301 加征 + 附加税）
+  3. calc_total()            计算单编码总税负（基础 + 301 加征 + FLIP 301；明示未含 AD/CVD 与未建模措施）
   4. search()                关键词搜索（英文品名 + 编码）+ 按总税负排序
 
 税率形态说明（USITC 官方数据实测）：
@@ -175,21 +175,22 @@ def estimate_ad_valorem(text, unit_value=None):
 
 def calc_total(db, code, unit_value=None, origin="CN"):
     """
-    计算单个 HTS 编码在指定原产地下的总税负（基础税率 + 适用措施 + 附加税）。
+    计算单个 HTS 编码在指定原产地下的总税负（基础税率 + 301 + FLIP 301）。
 
-    origin：
-      - CN（默认）：总税负 = 基础 + 301 加征 + 附加税
-      - VN：总税负 = 基础 + 附加税（越南原产不适用中国 301）
+    基础税率取 core.query_one 给出的「适用基础税率」：一般税率，第二栏国家为第二栏。
+    总税负文本永远带"不含"说明：AD/CVD 本工具没有数据，232 等按产品触发的 9903
+    标目未建模；若该原产地还命中了未建模的原产地类标目（note 2 墨加、note 50 巴西等），
+    文本再标"另有 N 组待核"——此前这个数字看起来像个完整的总额。
+
     加征叠加受 measures_config.json 配置控制：禁用项由 core.query_one 裁剪，
     本函数读取裁剪后的字段，自动不叠加禁用项。
 
     返回在 core.query_one 结果基础上扩展的字典，新增字段：
       - 税率类型:     Free / 从价 / 从量 / 复合 / 引用 / 复杂 / 未知
       - 基础等效从价: 折算后的基础税率百分比文本（'6.5%' / '需折算' / '无法解析'）
-      - 301加征数值:  百分比数值（越南为 0）
+      - 301加征数值:  百分比数值（非中国为 0）
       - FLIP 301加征数值: FLIP 301 百分比数值
-      - 附加税等效:   附加税折算百分比文本
-      - 总税负估算:   总税负文本（'31.5%' / '需人工'）
+      - 总税负估算:   总税负文本（'31.5%（含…；不含…）' / '需人工'）
     """
     import core  # 延迟导入，避免循环依赖
 
@@ -201,24 +202,26 @@ def calc_total(db, code, unit_value=None, origin="CN"):
     code = re.sub(r"\D", "", str(code or ""))
 
     base = core.query_one(db, code, origin=origin)
-    gen = base.get("一般税率", "")
+    gen = base.get("适用基础税率") or base.get("一般税率", "")
     p = parse_rate(gen)
     base_av = estimate_ad_valorem(gen, unit_value)
 
-    # 301 加征百分比（仅中国原产适用；配置禁用时 query_one 已不输出该字段 → 0）
-    if (origin or "CN").strip().upper() == "VN":
-        pct301 = 0.0
-    else:
-        m = re.search(r"([\d.]+)\s*%", base.get("301加征", ""))
-        pct301 = float(m.group(1)) if m else 0.0
+    # 301 加征百分比（仅中国原产适用；非中国 / 配置禁用时 query_one 不输出该字段 → 0）
+    m = re.search(r"([\d.]+)\s*%", base.get("301加征", "") or "")
+    pct301 = float(m.group(1)) if m else 0.0
 
     # FLIP 301 强迫劳动关税（2026-07-24 生效，按原产地查表；配置禁用 → 无档位 → 0）
-    pct_flip, flip_note = _flip_amount(base.get("FLIP 301档位"), base_av)
+    spec = base.get("FLIP 301档位") or {}
+    pct_flip, flip_note = _flip_amount(spec, base_av)
 
-    # 附加税
-    add_text = base.get("附加税", "") or ""
-    add_av = estimate_ad_valorem(add_text, unit_value) if add_text else 0.0
-    add_unresolved = bool(add_text) and add_av is None
+    # 总税负文本里的"不含"是常驻说明，不是可选后缀：AD/CVD 没数据、232 类未建模。
+    # 原产地类未建模标目（note 2 墨加、note 50 巴西等）命中时再点名组数。
+    unmodeled = base.get("未建模措施") or []
+    caveat = "含 301/FLIP 301；不含 AD/CVD、232 等未建模措施"
+    if unmodeled:
+        caveat += f"；另有 {len(unmodeled)} 组原产地类未建模标目待核"
+    if base.get("产品类未建模措施"):
+        caveat += "；落在 232 类产品清单，该税未计且 FLIP 存疑"
 
     # 汇总：任一分项无法折算，就不能给出确定的总额
     if base_av is None:
@@ -226,15 +229,12 @@ def calc_total(db, code, unit_value=None, origin="CN"):
         total_txt = ("需人工（复合/从量税，请提供单位货值）"
                      if p["kind"] in ("specific", "compound", "complex")
                      else "需人工（无法解析）")
-    elif add_unresolved:
-        total = None
-        total_txt = "需人工（附加税为从量税，请提供单位货值）"
     elif flip_note:
         total = None
         total_txt = f"需人工（{flip_note}）"
     else:
-        total = round(base_av + pct301 + pct_flip + (add_av or 0.0), 4)
-        total_txt = f"{total:g}%（含301/FLIP301/附加税估算）"
+        total = round(base_av + pct301 + pct_flip, 4)
+        total_txt = f"{total:g}%（{caveat}）"
 
     kind_names = {
         "free": "免税", "percent": "从价", "specific": "从量",
@@ -246,9 +246,17 @@ def calc_total(db, code, unit_value=None, origin="CN"):
         "基础等效从价": _fmt_av(base_av),
         "301加征数值": pct301,
         "FLIP 301加征数值": pct_flip,
-        "附加税等效": _fmt_av(add_av),
         "总税负估算": total_txt,
     })
+    # net-of-MFN 档：知道了 MFN 就能定报关标目是"低于上限"那一个还是"不加征"那一个
+    eff = spec
+    while (eff or {}).get("mode") == "conditional":     # 范围存疑 / 232 存疑可以套两层
+        eff = eff.get("fallback") or {}
+    eff = eff or {}
+    if eff.get("mode") == "net_mfn" and base_av is not None and eff.get("heading_below"):
+        h = (eff["heading_below"] if base_av < float(eff.get("cap", 0))
+             else eff.get("heading_at_or_above") or eff["heading_below"])
+        result["FLIP 301标目"] = core._fmt_c99(h)
     return result
 
 
@@ -644,46 +652,18 @@ def _stem_match(a, b):
     return n >= 5
 
 
-def search(db, keyword, limit=100, sort="relevance", include_special=False,
-           unit_value=None, origin="CN"):
+def _keyword_candidates(db, keyword, include_special=False):
     """
-    关键词搜索 8 位子目：匹配英文品名 + 编码。
+    关键词通道：返回 ([(code, score), ...], kw)，未排序。
 
-    sort:
-      - relevance  按匹配相关度（默认）
-      - total_asc  按**总税负**升序（基础 + 301 + FLIP + 附加税）
-      - tax_asc    按基础等效从价升序
-      - tax_desc   按基础等效从价降序
-      - code_asc   按编码升序
-
-    默认从 tax_asc 改为 relevance：基础税率最低 ≠ 总税负最低。
-    实测 8215.99.30 基础 14%、不在 301 清单，总税负 26.5%；
-    8215.99.35 基础 6.8%、+7.5% 301 + 12.5% FLIP，总税负 26.8%——
-    按基础税率排序会把更贵的那个排在前面，而这页原本的说法是"找税率最低的编码"。
-    要按成本挑请用 total_asc。
-
-    unit_value / origin 仅 total_asc 用到：从量税要有单位货值才能折算成
-    百分比，301/FLIP 要有原产地才知道加不加。
-
-    include_special：是否包含第 98/99 章，默认否。
-      98 章是特殊归类条款（复进口、随身物品免税等），99 章是临时立法条款
-      （9902 临时减免、9903 加征/配额）。两者都不是"给商品定编码"时的答案——
-      它们要么是附加适用，要么是特殊情形，正式归类必须落在第 1-97 章。
-      而 99 章品名往往写得极其具体（如 "Boys' woven man-made fiber coats,
-      containing 36 percent..."），词组匹配得分很高，不排除会霸占结果首位，
-      诱导用户拿一个不能用于常规申报的编码去报关。
-
-    返回:
-      [{'编码', '商品描述', '一般税率', '税率类型', '等效从价', '等效从价数值',
-        '301判定', '9903子目', '301加征', '附加税', '相关度'}, ...]
+    search() 与 hybrid_search() 共用这一段——前者只有这一条通道，后者把它和
+    语义 / 先例两条通道按 RRF 融合。打分逻辑与此前 search() 完全一致。
     """
     raw_kw = (keyword or "").strip()
     kw, _applied, _leftover = expand_query(raw_kw)
     kw = kw.strip().lower()
     if not kw:
-        return []
-    import core as _core
-    measures = _core.load_measures_config()  # cn301 禁用时 301 加征列不输出
+        return [], kw
     index, desc_map, prefix5, path_index = build_search_index(db)
 
     # 编码直接匹配
@@ -695,7 +675,7 @@ def search(db, keyword, limit=100, sort="relevance", include_special=False,
             if norm_kw and code.startswith(norm_kw):
                 codes.add(code)
 
-    # 词匹配：先 AND（所有词都命中）；AND 为空时降级为加权 OR（至少命中 2 个词）。
+    # 词匹配：先 AND（所有词都命中）；AND 为空时降级为加权 OR（至少命中 2 个概念）。
     # 原因：AI 归类链路中 LLM 可能给出宽泛关键词（如 electric storage），
     # 纯 AND 会因官方品名不含这些词而召回为空，纯 OR 又会被宽泛词淹没精确词。
     tokens = [t for t in re.findall(r"[a-z0-9]+", kw)
@@ -731,10 +711,6 @@ def search(db, keyword, limit=100, sort="relevance", include_special=False,
             # OR 降级按**概念**计数而不是按词：battery / accumulator / cell 是
             # 同一概念在税则里的并列写法（固定搭配 "primary cells, primary
             # batteries and electric accumulators"），按词计数它们会互相凑数。
-            # 实测 'lithium battery accumulator'（AI 对"锂电池"的改写）：
-            # 8549 废电池 10 条 + 8601 蓄电池机车 2 条全靠 battery+accumulator
-            # 凑满 2 词混进补召回，而这 12 条与锂电池毫无关系。
-            # 处理方式与 _weave_bias 对 knitted/crocheted 一致：同概念计一次。
             n_concepts = len({_concept_of(t) for t in tokens})
             min_hits = 2 if n_concepts >= 2 else 1
             hit_groups = {}
@@ -744,21 +720,15 @@ def search(db, keyword, limit=100, sort="relevance", include_special=False,
                     hit_groups.setdefault(c, set()).add(g)
             codes |= {c for c, gs in hit_groups.items() if len(gs) >= min_hits}
 
-    # 打分排序
+    # 打分
     import math
     N = max(len(desc_map), 1)
     # idf 权重：罕见词（lithium）权重大，宽泛词（electric）权重小
     weights = {tok: math.log(N / (len(index.get(tok, set())) + 1)) + 0.5 for tok in tokens}
     weave = _weave_bias(tokens)
-    rows = []
+    scored = []
     for code in codes:
         desc = desc_map.get(code, "")
-        info = db["rates_8"].get(code, {})
-        gen = info.get("general", "")
-        p = parse_rate(gen)
-        av = estimate_ad_valorem(gen)  # 无单位货值：纯从价可比较，从量返回 None
-        # 相关度：自身品名命中满权重，祖先品名命中按 PATH_WEIGHT 折算，
-        # 再加描述开头命中与编码命中的加权
         desc_low = desc.lower()
         words = re.findall(r"[a-z0-9]+", desc_low)
         anc = path_of(db, code)
@@ -785,65 +755,78 @@ def search(db, keyword, limit=100, sort="relevance", include_special=False,
             score += 8
         # 织法偏置：61 章按定义就是针织，查"梭织"时它不该与 62 章并列
         score += weave.get(code[:2], 0.0)
-        c99 = db["sec301_map"].get(code)
-        pct301 = db["c99_percent"].get(c99) if c99 else None
-        if pct301:
-            judge301, pct_txt = "是", f"+{pct301:g}%"
-        elif c99:
-            judge301, pct_txt = "是(豁免)", "0%(豁免)"
-        else:
-            judge301, pct_txt = "否", ""
-        # 配置裁剪：cn301 禁用时 301 加征列不输出（与查询/估算路径一致）
-        if not measures.get("cn301", True):
-            pct_txt = ""
-        rows.append({
-            "编码": core_fmt(code),
-            "商品描述": desc,
-            # 归类路径：子目品名多为 'Other'，判定条件（材质/织法/含量阈值）写在祖先上，
-            # 归类争议场景下这才是能拿来论证的依据
-            "归类路径": [a.rstrip(":").strip() for a in anc],
-            "完整品名": full_desc(db, code),
-            "章": code[:2],
-            "一般税率": gen,
-            "税率类型": {"free": "免税", "percent": "从价", "specific": "从量",
-                         "compound": "复合", "reference": "引用", "complex": "复杂",
-                         "unknown": "未知"}.get(p["kind"], p["kind"]),
-            "等效从价": _fmt_av(av),
-            "等效从价数值": av,
-            "301判定": judge301,
-            "9903子目": core_fmt(c99) if c99 else "",
-            "301加征": pct_txt,
-            "附加税": db["add_duty"].get(code, ""),
-            "相关度": round(score, 2),
-        })
+        scored.append((code, score))
+    return scored, kw
 
-    # 排序。每种排序都以编码作次级键打破平局——rows 的初始顺序来自 set 迭代，
-    # 受 Python 字符串哈希随机化影响，同分项在不同进程里顺序不同。没有次级键时
-    # 同一个查询两次会返回不同的候选（"梭织涂层夹克"相关度 6.45 那一档，五次跑出
-    # 五组不同编码），limit 截断更把这种抖动放大成"结果里有没有这条"。
-    # 报关工具的结果必须可复现，也才对得起页面上"确定性结果"的说法。
-    # 总税负列对每一行都补。此前只在调用方给了单位货值时才有值，其余情况表格里
-    # 是"—"——而基础税率单独看会误导人（8215.99.30 基础 14% 比 8215.99.35 的
-    # 6.8% 贵，总税负却更便宜），这恰恰是这张表最该给出的信息。
-    # calc_total 单次约 0.04ms，但 rows 在截断前可能有几千行，所以只有 total_asc
-    # 需要全量算（要拿它排序），其余排序等排完序截断后再补。
-    def _fill_total(items):
-        for r in items:
-            t = calc_total(db, r["编码"], unit_value=unit_value, origin=origin)
-            r["总税负估算"] = t["总税负估算"]
-            r["总税负数值"] = _total_num(t["总税负估算"])
-            r["301加征数值"] = t["301加征数值"]
-            # 上面那段自建的 301 判定不认排除、也不含 FLIP。calc_total 走的是
-            # core.query_one 那套完整判定，这里直接覆盖回来，让搜索表与查询表口径一致——
-            # 否则被整号排除的编码在搜索里仍显示 "+25%"，而查询页显示 "0%(排除)"。
-            for k in ("301判定", "301加征", "9903子目", "备注",
-                      "FLIP 301加征", "FLIP 301说明", "301排除", "301排除明细"):
-                if k in t:
-                    r[k] = t[k]
-        return items
 
+def _make_row(db, code, score, measures):
+    """搜索结果的一行。关键词 / 语义 / 先例三条通道召回的编码都走这里，列一致。"""
+    info = db["rates_8"].get(code, {})
+    desc = info.get("desc", "")
+    gen = info.get("general", "")
+    p = parse_rate(gen)
+    av = estimate_ad_valorem(gen)  # 无单位货值：纯从价可比较，从量返回 None
+    anc = path_of(db, code)
+    c99 = db["sec301_map"].get(code)
+    pct301 = db["c99_percent"].get(c99) if c99 else None
+    if pct301:
+        judge301, pct_txt = "是", f"+{pct301:g}%"
+    elif c99:
+        judge301, pct_txt = "是(豁免)", "0%(豁免)"
+    else:
+        judge301, pct_txt = "否", ""
+    # 配置裁剪：cn301 禁用时 301 加征列不输出（与查询/估算路径一致）
+    if not measures.get("cn301", True):
+        pct_txt = ""
+    return {
+        "编码": core_fmt(code),
+        "商品描述": desc,
+        # 归类路径：子目品名多为 'Other'，判定条件（材质/织法/含量阈值）写在祖先上，
+        # 归类争议场景下这才是能拿来论证的依据
+        "归类路径": [a.rstrip(":").strip() for a in anc],
+        "完整品名": full_desc(db, code),
+        "章": code[:2],
+        "一般税率": gen,
+        "税率类型": {"free": "免税", "percent": "从价", "specific": "从量",
+                     "compound": "复合", "reference": "引用", "complex": "复杂",
+                     "unknown": "未知"}.get(p["kind"], p["kind"]),
+        "等效从价": _fmt_av(av),
+        "等效从价数值": av,
+        "301判定": judge301,
+        "9903子目": core_fmt(c99) if c99 else "",
+        "301加征": pct_txt,
+        "相关度": round(score, 2),
+    }
+
+
+def _fill_total(db, items, unit_value=None, origin="CN"):
+    """
+    给行补总税负。上面那段自建的 301 判定不认排除、也不含 FLIP。calc_total 走的是
+    core.query_one 那套完整判定，这里直接覆盖回来，让搜索表与查询表口径一致——
+    否则被整号排除的编码在搜索里仍显示 "+25%"，而查询页显示 "0%(排除)"。
+    """
+    for r in items:
+        t = calc_total(db, r["编码"], unit_value=unit_value, origin=origin)
+        r["总税负估算"] = t["总税负估算"]
+        r["总税负数值"] = _total_num(t["总税负估算"])
+        r["301加征数值"] = t["301加征数值"]
+        for k in ("301判定", "301加征", "9903子目", "备注",
+                  "FLIP 301加征", "FLIP 301说明", "FLIP 301标目", "301排除", "301排除明细",
+                  "基础税率栏", "适用基础税率", "特殊税率提示", "未建模措施"):
+            if k in t:
+                r[k] = t[k]
+    return items
+
+
+def _sort_and_fill(db, rows, sort, limit, unit_value, origin):
+    """
+    排序 + 截断 + 补总税负。每种排序都以编码作次级键打破平局——rows 的初始顺序
+    可能来自 set 迭代，受字符串哈希随机化影响，同分项在不同进程里顺序不同；
+    报关工具的结果必须可复现。calc_total 单次约 0.04ms，但 rows 在截断前可能有
+    几千行，所以只有 total_asc 需要全量算（要拿它排序），其余排序等截断后再补。
+    """
     if sort == "total_asc":
-        _fill_total(rows)
+        _fill_total(db, rows, unit_value, origin)
         # 折算不出的（从量/复合税未给单位货值）排最后，与 tax_asc 的处理一致
         rows.sort(key=lambda r: (r["总税负数值"] is None,
                                  r["总税负数值"] if r["总税负数值"] is not None else 0,
@@ -860,11 +843,173 @@ def search(db, keyword, limit=100, sort="relevance", include_special=False,
         rows.sort(key=lambda r: r["编码"])
     else:
         rows.sort(key=lambda r: (-r["相关度"], r["编码"]))
-
     out = rows[:limit]
     if sort != "total_asc":
-        _fill_total(out)
+        _fill_total(db, out, unit_value, origin)
     return out
+
+
+def search(db, keyword, limit=100, sort="relevance", include_special=False,
+           unit_value=None, origin="CN"):
+    """
+    关键词搜索 8 位子目：匹配英文品名 + 编码（单通道、离线、确定性）。
+
+    sort:
+      - relevance  按匹配相关度（默认）
+      - total_asc  按**总税负**升序（基础 + 301 + FLIP）
+      - tax_asc    按基础等效从价升序
+      - tax_desc   按基础等效从价降序
+      - code_asc   按编码升序
+
+    默认从 tax_asc 改为 relevance：基础税率最低 ≠ 总税负最低。
+    实测 8215.99.30 基础 14%、不在 301 清单，总税负 26.5%；
+    8215.99.35 基础 6.8%、+7.5% 301 + 12.5% FLIP，总税负 26.8%——
+    按基础税率排序会把更贵的那个排在前面。要按成本挑请用 total_asc。
+
+    include_special：是否包含第 98/99 章，默认否。98 章是特殊归类条款，99 章是
+    临时立法条款，都不是"给商品定编码"时的答案；而 99 章品名往往写得极其具体，
+    词组匹配得分很高，不排除会霸占结果首位。
+
+    要三通道（关键词 + 语义 + 先例）融合召回用 hybrid_search。
+    """
+    scored, _kw = _keyword_candidates(db, keyword, include_special)
+    if not scored:
+        return []
+    import core as _core
+    measures = _core.load_measures_config()  # cn301 禁用时 301 加征列不输出
+    rows = [_make_row(db, c, s, measures) for c, s in scored]
+    return _sort_and_fill(db, rows, sort, limit, unit_value, origin)
+
+
+# RRF 常数：标准取值 60。排名靠前的贡献 1/61，第 50 名 1/110，不同通道的名次可直接相加，
+# 不需要把关键词分（idf 和，1–15）与余弦相似度（0–1）、先例票数（0–5）拉到同一量纲。
+RRF_K = 60
+SEMANTIC_LIMIT = 50      # 语义通道取前 50 条税则行
+PRECEDENT_LIMIT = 30     # 先例通道取前 30 个投票编码
+FUSED_POOL_FOR_SORT = 30  # 非相关度排序时参与排序的候选池（融合序前 N）
+# 通道权重（score = Σ w/(60+名次)）。2026-09-15 用 300 条 2023+ NY 裁定留一法评测：
+#   单通道 r@5：关键词 0.07、语义 0.31、先例 0.71；等权融合 0.60（被关键词拖低）；
+#   (0.25, 1, 3) 融合 r@5 0.67、r@20 0.82（r@20 各配置里最高）。
+# 没有把语义权重也压到 0：这份金标集的描述本身来自 CROSS subject，天然偏向先例通道；
+# 用户的中文口语描述上语义通道更重要（22 组探针里两者互补，并集才覆盖全部）。
+CHANNEL_WEIGHTS = {"关键词": 0.25, "语义": 1.0, "先例": 3.0}
+# 纯编码 / 编码前缀查询（"8507"、"8507.60"）只走关键词通道：把 "8507" 当文本去嵌入
+# 得到的是一堆无关近邻，反而把编码前缀命中的行挤下去。
+_CODE_QUERY_RE = re.compile(r"^[\d.\s,，、]+$")
+# 默认启用的通道。环境变量 HTS_RECALL_CHANNELS=keyword 可收窄到只用离线关键词——
+# 测试套件就这么跑：假 Provider 的归类测试不该因为本机 ollama 在不在而变结果。
+DEFAULT_CHANNELS = tuple(
+    c.strip() for c in os.environ.get("HTS_RECALL_CHANNELS", "keyword,semantic,precedent").split(",")
+    if c.strip()) or ("keyword",)
+
+
+def _default_semantic(text, limit):
+    try:
+        import hts_embed
+        return hts_embed.search_codes(text, limit=limit)
+    except Exception as e:      # sqlite-vec 缺失 / 模块异常都只影响本通道
+        return {"error": f"语义索引不可用：{e}"}
+
+
+def _default_votes(db, text, limit):
+    try:
+        import cross
+        alive = {c for c in db["rates_8"] if c[:2] not in ("98", "99")}
+        return cross.code_votes(text, limit=limit, alive_codes=alive)
+    except Exception as e:
+        return {"error": f"裁定库不可用：{e}"}
+
+
+def hybrid_search(db, keyword, limit=100, sort="relevance", include_special=False,
+                  unit_value=None, origin="CN", description=None,
+                  channels=None, _semantic=None, _votes=None):
+    """
+    三通道召回 + RRF 融合：关键词（离线）、税则行语义（hts_embed）、裁定 kNN 投票（cross）。
+
+    为什么要三条：关键词检索是精确匹配，'bluetooth speaker' 在税则里一个词都不出现
+    （官方写 loudspeakers），'电热水壶' 词表没收就是 0 条；2026-09 实测 26 组常见商品
+    关键词约 5 组命中，语义（8b）前五 18 组，先例前三 19 组，三者并集覆盖全部。
+    融合用 Reciprocal Rank Fusion：每条通道给出名次，score = Σ 1/(60+名次)。
+    多条通道都召回的编码自然浮到最前——'不锈钢菜刀' 关键词通道排第一的是 7204
+    废碎料，但只有它这一条通道这么认为，8211.92 在语义与先例两条里都在前列。
+
+    任一通道不可用（索引未建 / ollama 离线 / 裁定库未建）只影响该通道，status 里
+    写明原因；三条全空返回 ([], status)。description 给语义与先例通道用：
+    AI 归类链路传的是英文检索词，而语义通道拿原始中文描述效果更好。
+    返回 (rows, status)，rows 与 search() 同结构，另带「召回来源」「融合分」等字段；
+    relevance 排序即融合序，其他排序与 search() 一致。
+    """
+    text = (description or keyword or "").strip()
+    if channels is None:
+        channels = DEFAULT_CHANNELS
+    if text and _CODE_QUERY_RE.match(text):
+        channels = tuple(c for c in channels if c == "keyword") or ("keyword",)
+    status = {}
+    ranked = {}
+    kw_scores, sem_sim, vote_map, support = {}, {}, {}, {}
+
+    if "keyword" in channels:
+        scored, _kw = _keyword_candidates(db, keyword, include_special)
+        scored.sort(key=lambda cs: (-cs[1], cs[0]))
+        ranked["关键词"] = [c for c, _ in scored]
+        kw_scores = dict(scored)
+        status["关键词"] = {"数量": len(scored)}
+
+    alive = db["rates_8"]
+    if "semantic" in channels and text:
+        sem = (_semantic or _default_semantic)(text, SEMANTIC_LIMIT)
+        if isinstance(sem, dict):
+            status["语义"] = {"数量": 0, "原因": sem.get("error", "语义索引不可用")}
+        else:
+            codes = [r["编码"] for r in sem
+                     if r["编码"] in alive and (include_special or r["编码"][:2] not in ("98", "99"))]
+            ranked["语义"] = codes
+            sem_sim = {r["编码"]: r.get("相似度") for r in sem}
+            status["语义"] = {"数量": len(codes)}
+
+    if "precedent" in channels and text:
+        votes = (_votes or _default_votes)(db, text, PRECEDENT_LIMIT)
+        if not isinstance(votes, dict) or votes.get("error"):
+            status["先例"] = {"数量": 0, "原因": (votes or {}).get("error", "裁定库不可用")
+                            if isinstance(votes, dict) else "裁定库不可用"}
+        else:
+            cands = [c for c in votes.get("候选") or []
+                     if c["编码"] in alive and (include_special or c["编码"][:2] not in ("98", "99"))]
+            ranked["先例"] = [c["编码"] for c in cands]
+            vote_map = {c["编码"]: c["票"] for c in cands}
+            support = {c["编码"]: c.get("裁定") or [] for c in cands}
+            status["先例"] = {"数量": len(cands), "先例数": votes.get("先例数", 0)}
+
+    fused, sources = {}, {}
+    for ch, codes in ranked.items():
+        w = CHANNEL_WEIGHTS.get(ch, 1.0)
+        for i, c in enumerate(codes):
+            fused[c] = fused.get(c, 0.0) + w / (RRF_K + i + 1)
+            sources.setdefault(c, []).append(ch)
+    if not fused:
+        return [], status
+
+    import core as _core
+    measures = _core.load_measures_config()
+    order = sorted(fused, key=lambda c: (-fused[c], -kw_scores.get(c, 0.0), c))
+    rows = []
+    for c in order:
+        r = _make_row(db, c, kw_scores.get(c, 0.0), measures)
+        r["关键词分"] = r["相关度"]
+        # 融合分替代相关度：三条通道里的名次之和才是这一行"有多可能是答案"
+        r["相关度"] = round(fused[c] * 100, 2)
+        r["召回来源"] = sources[c]
+        if c in sem_sim:
+            r["语义相似度"] = sem_sim[c]
+        if c in vote_map:
+            r["先例票"] = vote_map[c]
+            r["先例裁定"] = support.get(c, [])[:3]
+        rows.append(r)
+    if sort != "relevance":
+        # 按税率/编码排序时先把候选池收到融合序的前一段：语义通道给的第 50 个近邻
+        # 只是"最不像"的那个，按税率排序它会和真正的候选并排出现。
+        rows = rows[:max(limit, FUSED_POOL_FOR_SORT)]
+    return _sort_and_fill(db, rows, sort, limit, unit_value, origin), status
 
 
 def core_fmt(code):

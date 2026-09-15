@@ -4,8 +4,10 @@ core.py —— HTS 多措施查询核心逻辑（命令行工具与 Web 前端�
 
 提供：数据库加载、编码解析、单条多措施判定。
 查询按「原产地 × 措施栈」泛化：
-  - 中国（CN）：基础税率 + Section 301 加征（含 flip 历史）+ 附加税 + FLIP 301 强迫劳动关税
-  - 越南（VN）：基础税率（MFN）+ 附加税 + FLIP 301 强迫劳动关税；不适用中国 301 加征
+  - 中国（CN）：基础税率 + Section 301 加征（含 flip 历史 + 排除）+ FLIP 301 强迫劳动关税
+  - 越南 / 其他经济体：基础税率（MFN，第二栏国家按第二栏）+ FLIP 301（按经济体查官方标目）；不适用中国 301
+  - 未指定原产地：仅 MFN，明示未计入任何原产地措施
+  不在模型里的 9903 标目（232 等）按原产地探测并标注「总税负不完整」，AD/CVD 明示未覆盖。
 输出字段保持向后兼容（既有中国 301 字段名不变），并新增：
   原产地 / 301 flip历史 / 301 flip变化 / 越南措施 / FLIP 301加征
 各加征措施（cn301 / flip301）可由 measures_config.json 配置启用/禁用（默认全启用，
@@ -268,12 +270,14 @@ def flip_info(db, code8, c99, pct):
 
 def vietnam_info(db, code8, origin="VN"):
     """
-    非中国原产地的适用措施说明：MFN 一般税率，不适用中国 301 加征。
+    非中国原产地的适用措施说明：MFN 一般税率（第二栏国家为第二栏），不适用中国 301。
       - VN：越南轨道，覆盖编码给出具体说明，未覆盖标注「数据未覆盖具体说明」
-      - 其他：通用 MFN 轨道（任何其他国家）
+      - 未指定：只按 MFN 计，明说未计入任何原产地措施
+      - 其他：通用轨道（任何其他国家），带中文名
     """
     v = db.get("vietnam") or {}
-    if origin == "VN":
+    o = normalize_origin(origin)
+    if o == "VN":
         if not v:
             return "数据未覆盖（缺越南措施数据源）"
         base = "适用美国 MFN 一般税率；不适用中国 301 加征。"
@@ -282,8 +286,12 @@ def vietnam_info(db, code8, origin="VN"):
             extra = (v.get("notes_per_code") or {}).get(code8, "")
             return base + (" " + extra if extra else "")
         return base + " 该编码暂无具体说明（数据未覆盖具体说明）。"
-    # 其他国家：固定通用轨道（MFN）
-    return "适用美国 MFN 一般税率；不适用中国 301 加征（其他国家通用轨道）。"
+    if o == ORIGIN_UNSPECIFIED:
+        return "未指定原产地：仅按 MFN 一般税率计，未计入任何原产地相关措施（301 / FLIP 301 / 第二栏等）。"
+    name = origin_label(o)
+    if o in COLUMN2_ORIGINS:
+        return f"{name}原产：适用美国第二栏税率（暂停正常贸易关系）；不适用中国 301 加征（其他国家通用轨道）。"
+    return f"{name}原产：适用美国 MFN 一般税率；不适用中国 301 加征（其他国家通用轨道）。"
 
 
 # ---------- FLIP 301 强迫劳动关税（2026-07-24 生效） ----------
@@ -301,15 +309,109 @@ ORIGIN_ALIASES = {m: "EU" for m in _EU_MEMBERS}
 ORIGIN_ALIASES.update({
     "EUR": "EU", "EU27": "EU",
     "TWN": "TW", "CT": "TW",          # CT 为 HTS 中台湾的传统代码
-    "CHN": "CN", "HKG": "HK", "VNM": "VN", "JPN": "JP", "KOR": "KR",
-    "CHE": "CH", "GBR": "GB", "CAN": "CA", "MEX": "MX", "IND": "IN", "BRA": "BR",
+    # ISO 3166 alpha-3 → alpha-2（FLIP 60 经济体 + 第二栏国家）
+    "DZA": "DZ", "AGO": "AO", "ARG": "AR", "AUS": "AU", "BHS": "BS", "BHR": "BH", "BGD": "BD",
+    "BRA": "BR", "KHM": "KH", "CAN": "CA", "CHL": "CL", "CHN": "CN", "COL": "CO", "CRI": "CR",
+    "DOM": "DO", "ECU": "EC", "EGY": "EG", "SLV": "SV", "GTM": "GT", "GUY": "GY", "HND": "HN",
+    "HKG": "HK", "IND": "IN", "IDN": "ID", "IRQ": "IQ", "ISR": "IL", "JPN": "JP", "JOR": "JO",
+    "KAZ": "KZ", "KWT": "KW", "LBY": "LY", "MYS": "MY", "MEX": "MX", "MAR": "MA", "NZL": "NZ",
+    "NIC": "NI", "NGA": "NG", "NOR": "NO", "OMN": "OM", "PAK": "PK", "PER": "PE", "PHL": "PH",
+    "QAT": "QA", "RUS": "RU", "SAU": "SA", "SGP": "SG", "ZAF": "ZA", "KOR": "KR", "LKA": "LK",
+    "CHE": "CH", "THA": "TH", "TTO": "TT", "TUR": "TR", "ARE": "AE", "GBR": "GB", "UKG": "GB",
+    "UK": "GB", "URY": "UY", "VEN": "VE", "VNM": "VN", "BLR": "BY", "CUB": "CU", "PRK": "KP",
 })
+
+# 「未指定」与「其他国家」是两个不同的回答：
+#   OTHER 未指定原产地 —— 仅按 MFN 一般税率计，不叠加任何原产地相关措施，备注必须说明未计入
+#   XX    明确不在 FLIP 60 名单、也不在第二栏名单的其他国家 —— MFN 轨道，FLIP 不适用
+# 此前网页版下拉只有 CN / VN / OTHER，OTHER 落到「不在 60 名单」，于是界面上任何非中越
+# 原产的报价都静默少了 10%–12.5% 的 FLIP 301。
+ORIGIN_UNSPECIFIED = "OTHER"
+ORIGIN_OTHER_LISTED = "XX"
+_UNSPECIFIED_WORDS = {"", "OTHER", "OTHERS", "UNSPECIFIED", "NONE", "N/A", "NA", "未指定", "不详", "其他", "其它"}
+
+# 第二栏国家（HTSUS General Note 3(b)：古巴、朝鲜；俄罗斯、白俄罗斯自 2022-04 暂停正常贸易关系）
+COLUMN2_ORIGINS = {"CU", "KP", "RU", "BY"}
+
+# 经济体代码 → 中文名（FLIP 301 的 60 个 + 第二栏 4 个）。下拉与结果表都用它。
+ORIGIN_NAMES = {
+    "CN": "中国", "VN": "越南", "HK": "香港", "TW": "台湾", "JP": "日本", "KR": "韩国",
+    "EU": "欧盟", "GB": "英国", "CH": "瑞士", "NO": "挪威", "CA": "加拿大", "MX": "墨西哥",
+    "IN": "印度", "ID": "印度尼西亚", "MY": "马来西亚", "TH": "泰国", "SG": "新加坡",
+    "PH": "菲律宾", "KH": "柬埔寨", "BD": "孟加拉国", "PK": "巴基斯坦", "LK": "斯里兰卡",
+    "AU": "澳大利亚", "NZ": "新西兰", "BR": "巴西", "AR": "阿根廷", "CL": "智利", "CO": "哥伦比亚",
+    "PE": "秘鲁", "EC": "厄瓜多尔", "UY": "乌拉圭", "VE": "委内瑞拉", "GY": "圭亚那",
+    "CR": "哥斯达黎加", "DO": "多米尼加", "SV": "萨尔瓦多", "GT": "危地马拉", "HN": "洪都拉斯",
+    "NI": "尼加拉瓜", "TT": "特立尼达和多巴哥", "BS": "巴哈马", "IL": "以色列", "JO": "约旦",
+    "TR": "土耳其", "SA": "沙特阿拉伯", "AE": "阿联酋", "QA": "卡塔尔", "KW": "科威特",
+    "BH": "巴林", "OM": "阿曼", "IQ": "伊拉克", "KZ": "哈萨克斯坦", "RU": "俄罗斯",
+    "EG": "埃及", "MA": "摩洛哥", "DZ": "阿尔及利亚", "LY": "利比亚", "NG": "尼日利亚",
+    "AO": "安哥拉", "ZA": "南非",
+    "BY": "白俄罗斯", "CU": "古巴", "KP": "朝鲜",
+}
+_NAME_TO_CODE = {v: k for k, v in ORIGIN_NAMES.items()}
+_NAME_TO_CODE.update({"中国大陆": "CN", "香港特别行政区": "HK", "中国香港": "HK", "中国台湾": "TW",
+                      "南韩": "KR", "大韩民国": "KR", "美国": "US", "德国": "EU", "法国": "EU",
+                      "意大利": "EU", "西班牙": "EU", "荷兰": "EU", "波兰": "EU", "比利时": "EU"})
 
 
 def normalize_origin(origin_code):
-    """把成员国 / 三字母代码归一到 FLIP 301 税率表使用的经济体代码"""
-    o = (origin_code or "").strip().upper()
+    """
+    把用户给的原产地归一到判定用的经济体代码：
+      成员国 / 三字母 / 中文名 → 代码（DE → EU，CHN → CN，"墨西哥" → MX）；
+      空值 / OTHER / "未指定" → OTHER（未指定）；其余原样大写返回。
+    301 判定与 FLIP 判定必须用同一个归一化结果——此前只有 FLIP 走这里，
+    传 CHN 会得到"301 不适用 + FLIP 12.5%"这种自相矛盾的答案。
+    """
+    raw = str(origin_code or "").strip()
+    o = raw.upper()
+    if o in _UNSPECIFIED_WORDS or raw in _UNSPECIFIED_WORDS:
+        return ORIGIN_UNSPECIFIED
+    if raw in _NAME_TO_CODE:
+        return _NAME_TO_CODE[raw]
     return ORIGIN_ALIASES.get(o, o)
+
+
+def origin_label(origin_code):
+    """经济体代码 → 界面/导出用的中文名。未指定 → 未指定；不在表内 → 其他国家。"""
+    o = normalize_origin(origin_code)
+    if o == ORIGIN_UNSPECIFIED:
+        return "未指定"
+    return ORIGIN_NAMES.get(o, "其他国家")
+
+
+def origin_options(db):
+    """
+    供网页下拉使用的原产地列表：中国、越南在前，其余 FLIP 经济体 + 第二栏国家按名排，
+    末尾是「其他国家（不在名单）」与「未指定」。每项带 FLIP 档位文本，让人在选的时候
+    就看见这个原产地会不会被加征。
+    """
+    out = []
+    seen = set()
+
+    def _add(code, name, extra=""):
+        if code in seen:
+            return
+        seen.add(code)
+        pct, note, _src, spec = flip301_judge(db, code)
+        tier = pct or ("不适用" if spec.get("mode") == "none" else "")
+        out.append({"code": code, "name": name, "flip301": tier, "column2": code in COLUMN2_ORIGINS,
+                    "label": f"{name}（{extra or ('FLIP 301 ' + tier if tier else 'MFN')}）"})
+
+    _add("CN", "中国", "301 + FLIP 301 +12.5%")
+    _add("VN", "越南", "FLIP 301 +12.5%，无 301")
+    tiers = ((db.get("flip301_headings") or {}).get("by_origin") or {})
+    codes = set(tiers) | set(ORIGIN_NAMES)
+    for code in sorted(codes, key=lambda c: ORIGIN_NAMES.get(c, c)):
+        if code in COLUMN2_ORIGINS:
+            _add(code, ORIGIN_NAMES.get(code, code), "第二栏税率" + ("，FLIP 301 +12.5%" if code in tiers else ""))
+        else:
+            _add(code, ORIGIN_NAMES.get(code, code))
+    out.append({"code": ORIGIN_OTHER_LISTED, "name": "其他国家", "flip301": "不适用", "column2": False,
+                "label": "其他国家（不在 FLIP 60 名单，仅 MFN）"})
+    out.append({"code": ORIGIN_UNSPECIFIED, "name": "未指定", "flip301": "", "column2": False,
+                "label": "未指定原产地（仅 MFN，不计任何原产地措施）"})
+    return out
 
 
 # ANNEX II "Scope Limitations" 三档的官方定义（FRN 物理页 137 原文，逐条转述）。
@@ -324,13 +426,38 @@ FLIP_SCOPE_DEFS = {
 }
 
 
-def _flip_tier(o, rates):
+def _flip_tier(db, o):
     """
     按经济体取 FLIP 301 档位，返回 (显示文本, 说明, 来源Part文本, spec)。
 
     从 flip301_judge 里拆出来，是因为豁免判定要用到它：ANNEX II 里带范围限制的
     子目，范围外照旧按本档加征，得先知道本档是多少才能给出"不豁免时是多少"。
+
+    档位优先取 build_db 从 htsdata.csv 推导的官方标目（flip301_headings）：
+    每个经济体一行 9903.05.xx，税率写在 General 栏，报关要填的就是这个标目——
+    此前只有手抄 JSON，档位会漂，标目从没输出过。老库没有推导表时退回 JSON。
+    spec 里带 heading（flat）或 heading_below / heading_at_or_above（net-of-MFN）
+    与 htsdata 行号，供来源追溯直接定位到官方表那一行。
     """
+    derived = ((db.get("flip301_headings") or {}).get("by_origin") or {}).get(o) or {}
+    mode = derived.get("mode")
+    if mode == "flat" and derived.get("heading"):
+        r, h = float(derived["rate"]), derived["heading"]
+        return (f"+{r:g}%",
+                f"FLIP 301 强迫劳动关税 {r:g}%（在 MFN 之上加征；报关标目 {_fmt_c99(h)}；"
+                f"已适用 Section 232 或 Annex 豁免产品除外）",
+                f"htsdata.csv 9903 标目 {_fmt_c99(h)}（U.S. note 52，{r:g}% 档）",
+                {"mode": "flat", "rate": r, "heading": h, "line": derived.get("line")})
+    if mode == "net_mfn" and derived.get("cap") is not None and derived.get("heading_below"):
+        cap, hb, ha = float(derived["cap"]), derived["heading_below"], derived.get("heading_at_or_above", "")
+        return (f"≤+{cap:g}%",
+                f"FLIP 301 与 MFN 合计封顶 {cap:g}%（MFN≥{cap:g}% 则本税 0；报关标目：MFN<{cap:g}% 时 "
+                f"{_fmt_c99(hb)}、否则 {_fmt_c99(ha)}；已适用 Section 232 或 Annex 豁免产品除外）",
+                f"htsdata.csv 9903 标目 {_fmt_c99(hb)} / {_fmt_c99(ha)}（U.S. note 52，net-of-MFN {cap:g}%）",
+                {"mode": "net_mfn", "cap": cap, "heading_below": hb, "heading_at_or_above": ha,
+                 "line": derived.get("line_below")})
+    # 老库没有推导表：退回手抄 JSON（data/flip301_forced_labor.json）
+    rates = (db.get("flip301") or {}).get("rates") or {}
     if o in rates.get("10", []):
         return ("+10%",
                 "FLIP 301 强迫劳动关税 10%（在 MFN 之上加征；已适用 Section 232 或 Annex 豁免产品除外）",
@@ -377,7 +504,7 @@ def flip301_judge(db, origin_code, code8=""):
     来源dict：{"文件", "位置", "Part", "范围限制"}，供 Web 端来源追溯弹窗使用。
     """
     f = db.get("flip301") or {}
-    rates = f.get("rates") or {}
+    derived = (db.get("flip301_headings") or {}).get("by_origin") or {}
     ex = db.get("flip301_exemptions") or {}
     o = normalize_origin(origin_code)
     frn_file = (db.get("meta") or {}).get(
@@ -393,12 +520,29 @@ def flip301_judge(db, origin_code, code8=""):
             "范围限制": scope or "无",
         }
 
+    def _tier_src(spec, part):
+        """档位来源：推导自官方表时直接指向 htsdata.csv 的那一行（可查看原文），否则指向 FRN"""
+        if spec.get("line"):
+            return {
+                "key": "htsdata",
+                "文件": f"{(db.get('meta') or {}).get('hts_csv', 'htsdata.csv')}（USITC 全量税率表，9903 标目）",
+                "位置": f"第 {spec['line']} 行",
+                "Part": part,
+                "范围限制": "无",
+            }
+        return _src("", part, "")
+
     # ⓪ 数据源可用性先于任何判定：缺税率表时无法确定该经济体是否在 60 名单内，
     #    此时若因命中 ANNEX II 而返回"豁免"，等于把"缺数据"说成"不加征"——必须显式标注未覆盖。
-    if not f:
+    if not f and not derived:
         return "", "数据未覆盖（缺 FLIP 301 数据源）", _src("", "", ""), {"mode": "none"}
 
-    tier_txt, tier_note, tier_part, tier_spec = _flip_tier(o, rates)
+    # 未指定原产地：不是"不在名单"，是"没告诉我"。两者税额都是 0，但前者要提醒人去选。
+    if o == ORIGIN_UNSPECIFIED:
+        return ("", "未指定原产地，FLIP 301 未计入；请选择具体经济体后重查",
+                _src("", "FRN 税率表（按经济体）", ""), {"mode": "none", "unspecified": True})
+
+    tier_txt, tier_note, tier_part, tier_spec = _flip_tier(db, o)
 
     # ① 不在 60 经济体名单 → 本措施对该原产地根本不适用，是否收录进 ANNEX II 无意义。
     #    此前 ANNEX II 判在档位之前，非被调查经济体命中清单会被答成"官方豁免"：
@@ -455,7 +599,38 @@ def flip301_judge(db, origin_code, code8=""):
                 ((ex.get("by_economy_ex_desc") or {}).get("CAFTA_DR") or {}).get(code8, ""))
 
     # ③ 未命中 ANNEX II：按经济体档位加征
-    return tier_txt, tier_note, _src("", tier_part, ""), tier_spec
+    return tier_txt, tier_note, _tier_src(tier_spec, tier_part), tier_spec
+
+
+def flip_heading_of(spec):
+    """
+    档位 spec → 报关要填的 FLIP 301 标目文本。
+    flat 一个标目；net-of-MFN 两个（MFN 低于上限填前者，否则后者，calc_total 知道 MFN
+    之后会收成一个）；conditional 用 fallback 的；豁免 / 不适用 / 未指定为空。
+    """
+    spec = spec or {}
+    mode = spec.get("mode")
+    if mode == "conditional":
+        return flip_heading_of(spec.get("fallback"))
+    if mode == "flat" and spec.get("heading"):
+        return _fmt_c99(spec["heading"])
+    if mode == "net_mfn" and spec.get("heading_below"):
+        ha = spec.get("heading_at_or_above", "")
+        return _fmt_c99(spec["heading_below"]) + (f" / {_fmt_c99(ha)}" if ha else "")
+    return ""
+
+
+def flip_exceptions_of(db, origin_code):
+    """
+    该经济体适用的 FLIP 301 例外标目（通用 .85–.92 + 经济体专属），供来源弹窗展示。
+    这些标目写的是"不加征的条件"（在途、232 产品、民用航空器、医药、USMCA 货等），
+    工具判不了商品是否落在其中，只能把条件原文交给人看。
+    """
+    fh = db.get("flip301_headings") or {}
+    o = normalize_origin(origin_code)
+    items = list(fh.get("exceptions") or [])
+    items += (fh.get("exceptions_by_origin") or {}).get(o) or []
+    return [{"标目": it.get("标目", ""), "描述": it.get("描述", "")} for it in items]
 
 
 # ---------- 301 排除（U.S. note 20）----------
@@ -620,6 +795,117 @@ def _criteria_of(db, code8):
         return []
 
 
+# ---------- 未建模措施探测 / Special 栏提示 ----------
+
+def unmodeled_measures(db, origin_code):
+    """
+    该原产地会触发哪些**本工具未建模**的 9903 标目组（只探测、不判定）。
+
+    htsdata.csv 里 636 个 9903 标目，工具只建模了中国 301（9903.88/.91/.92）与
+    FLIP 301（9903.05.20–.99、9903.06）。其余 451 个——note 2 的墨加等原产地标目、
+    note 50 巴西、9903.02/.03 的转运与全球档、232 类产品标目——一律不在总税负里。
+    此前对此一字不提，总税负看起来像个完整的数。这里按原产地把"标目正文提及该
+    原产地"的组报出来，让总税负带上"不完整"的标记；法律状态与是否适用由人核实。
+
+    以"任何国家"为条件的标目只在 note 2 那一族（9903.01/.02/.03）里报；
+    9903.45 石英台面这类按产品触发的 any-country 标目归产品类探测，不在这里凑数。
+    未指定原产地不报：没有原产地，谈不上原产地类措施。
+    """
+    o = normalize_origin(origin_code)
+    if o == ORIGIN_UNSPECIFIED:
+        return []
+    out = []
+    for g in db.get("c99_unmodeled") or []:
+        notes = g.get("依据") or []
+        hit = (g.get("按原产地") or {}).get(o)
+        anyc = g.get("任何国家") or {}
+        common = {"标目组": g["组"], "依据": "、".join(notes) or "—",
+                  "产品词": g.get("产品词") or [],
+                  # Chapter 99 编者注（如"9903.03.01–.11 已于 2026-07-23 到期"），
+                  # 让人一眼看出这组是否还在执行，而不是每次都去翻 PDF
+                  "编者注": g.get("编者注") or []}
+        if hit:
+            out.append({**common, "触发": f"标目正文提及原产地 {o}", "标目数": hit["数量"],
+                        "示例": hit.get("示例") or []})
+        elif anyc.get("数量") and "U.S. note 2" in notes:
+            out.append({**common, "触发": "以任何国家为条件", "标目数": anyc["数量"],
+                        "示例": anyc.get("示例") or []})
+    return out
+
+
+def product_measures(db, code, code8, origin_code):
+    """
+    该编码落在哪些**按产品触发**的 Chapter 99 清单里（note 16 钢铝铜、33 乘用车、
+    37 软木、38 中重型车、39 半导体、51 加拿大特定产品），只探测、不计税。
+
+    清单来自 Chapter 99 PDF 各 note 的子条（extract_c99_products.py 提取，4/6 位为前缀、
+    8/10 位精确、区间按同长前缀比较）。命中说明"这类产品有一套本工具没算的关税"，
+    而且 FLIP 301 按 note 52(f) 对这些产品不适用——两件事都要人核实：
+    清单只是必要条件，note 里还有含量、用途、技术参数等条件（note 39 半导体尤其），
+    编码本身判不出。
+    """
+    idx = db.get("c99_product_index") or {}
+    ents = idx.get("entries") or []
+    if not ents:
+        return []
+    hit = set()
+    for key in {code8, code if len(code) == 10 else None} - {None}:
+        hit.update(idx.get("exact", {}).get(key, []))
+    for k in (code8[:4], code8[:6]):
+        hit.update(idx.get("prefix", {}).get(k, []))
+    for r in idx.get("ranges") or []:
+        L = len(r["from"])
+        c = (code if len(code) >= L else code8)[:L]
+        if len(c) == L and r["from"] <= c <= r["to"]:
+            hit.add(r["i"])
+    o = normalize_origin(origin_code)
+    out, seen = [], set()
+    for i in sorted(hit):
+        e = ents[i]
+        if e.get("原产地条件") and o != e["原产地条件"]:
+            continue
+        key = (e["note"], e["子条"])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(e)
+    return out
+
+
+# Special 栏的协定代码（SPI）→ 协定名与适用原产地。只收现行自贸协定；GSP（A/A+/A*）
+# 早已过期、AGOA（D）等状态需另核，都不列——列了会被当成"可以享受"。
+SPI_PROGRAMS = {
+    "S": ("USMCA 美墨加协定", {"CA", "MX"}), "S+": ("USMCA 美墨加协定", {"CA", "MX"}),
+    "KR": ("美韩自贸协定", {"KR"}), "AU": ("美澳自贸协定", {"AU"}), "SG": ("美新自贸协定", {"SG"}),
+    "CL": ("美智自贸协定", {"CL"}), "IL": ("美以自贸协定", {"IL"}), "JO": ("美约自贸协定", {"JO"}),
+    "BH": ("美巴林自贸协定", {"BH"}), "OM": ("美阿曼自贸协定", {"OM"}), "MA": ("美摩洛哥自贸协定", {"MA"}),
+    "PE": ("美秘鲁自贸协定", {"PE"}), "CO": ("美哥伦比亚自贸协定", {"CO"}), "PA": ("美巴拿马自贸协定", {"PA"}),
+    "P": ("CAFTA-DR", {"CR", "DO", "SV", "GT", "HN", "NI"}),
+    "P+": ("CAFTA-DR", {"CR", "DO", "SV", "GT", "HN", "NI"}),
+}
+_SPECIAL_SEG_RE = re.compile(r"([^()]*?)\(([^)]*)\)")
+
+
+def special_rate_hint(special, origin_code):
+    """
+    Special 栏对该原产地的提示文本；不适用则空串。
+
+    **只提示、不套用**：Special 栏能否享受取决于原产地规则与原产地证明，编码本身
+    答不了。此前这一栏完全没用，墨西哥、韩国的货照一般税率报，多算十几个点。
+    """
+    o = normalize_origin(origin_code)
+    if not special or o in (ORIGIN_CN, ORIGIN_UNSPECIFIED):
+        return ""
+    for rate_txt, codes in _SPECIAL_SEG_RE.findall(special):
+        for spi in (c.strip() for c in codes.split(",")):
+            prog = SPI_PROGRAMS.get(spi)
+            if prog and o in prog[1]:
+                rate_txt = rate_txt.strip() or "Free"
+                return (f"Special 栏含 {spi}（{prog[0]}）：{rate_txt}。符合该协定原产地规则并具备"
+                        f"原产地证明时可按此申报；本工具按{'第二栏' if o in COLUMN2_ORIGINS else '一般'}税率计，未自动套用")
+    return ""
+
+
 # ---------- 主查询 ----------
 
 def query_one(db, code, origin="CN"):
@@ -628,20 +914,24 @@ def query_one(db, code, origin="CN"):
     code 为规范化后的纯数字（8位或10位）。origin 为国家代码（CN / VN / 其他）。
     加征措施（cn301 / flip301）按 measures_config.json 配置裁剪：禁用时输出不含
     该加征字段（如"301加征"、"FLIP 301加征"）、总税负不叠加该项。
+
+    原产地在入口统一归一化（CHN → CN、DE → EU、"墨西哥" → MX、空 → 未指定），
+    301 与 FLIP 用同一个结果——此前只有 FLIP 归一化，传 CHN 会得到
+    "301 不适用 + FLIP 12.5%"这种自相矛盾的答案。
     """
     rates_8 = db["rates_8"]
     desc_10 = db["desc_10"]
-    add_duty = db["add_duty"]
-    sec301_map = db["sec301_map"]
     c99_percent = db["c99_percent"]
 
     measures = load_measures_config()
     cn301_on = measures.get("cn301", True)
     flip301_on = measures.get("flip301", True)
 
-    origin_raw = (origin or ORIGIN_CN).strip().upper()
-    origin_code = origin_raw  # 保留国家代码（供 FLIP 301 查表）
-    is_china = origin_raw == ORIGIN_CN
+    origin_code = normalize_origin(origin)
+    is_china = origin_code == ORIGIN_CN
+    unspecified = origin_code == ORIGIN_UNSPECIFIED
+    column2 = origin_code in COLUMN2_ORIGINS
+    origin_name = origin_label(origin_code)
 
     n = len(code)
     code8 = code[:8] if n >= 8 else code
@@ -654,7 +944,7 @@ def query_one(db, code, origin="CN"):
         flip301_pct, flip301_note, flip301_src = "", "FLIP 301 已禁用（配置）", {}
         flip301_spec = {"mode": "none"}
 
-    # 基础信息（两种原产地共用）
+    # 基础信息（所有原产地共用）
     base = rates_8.get(code8, {})
     desc = desc_10.get(code) or base.get("desc", "")
     # 归类路径：祖先品名承载材质/织法/含量阈值等判定条件，供归类论证与人工复核
@@ -664,9 +954,12 @@ def query_one(db, code, origin="CN"):
     general = base.get("general", "")
     special = base.get("special", "")
     col2 = base.get("col2", "")
-    add = add_duty.get(code) or add_duty.get(code8, "")
+    # 基础税率栏：古巴/朝鲜/俄罗斯/白俄罗斯按第二栏，其余按一般税率。
+    # 此前俄罗斯也按一般税率算，6109.10.00 给到 16.5%，第二栏其实是 90%。
+    applied_rate = col2 if column2 else general
+    rate_col = "第二栏" if column2 else "一般税率"
 
-    # 中国：301 判定（既有逻辑）；非中国：MFN 通用轨道（不叠加中国 301）
+    # 中国：301 判定（既有逻辑）；非中国：MFN / 第二栏轨道（不叠加中国 301）
     if is_china:
         c99, undetermined_note = _sec301_lookup(db, code, code8)
         if undetermined_note:
@@ -734,13 +1027,22 @@ def query_one(db, code, origin="CN"):
             note = "⚠ 未在2026现行HTS税率表中找到该子目，可能为旧版编码" + ("；" + note if note else "")
         flip_hist, flip_change = flip_info(db, code8, c99, pct)
         vn_measures = ""
-    else:  # 越南及其他国家：MFN 通用轨道（不叠加中国 301）
+    else:  # 越南 / 其他国家 / 未指定：不叠加中国 301
         if origin_code == ORIGIN_VN:
             is301 = "不适用（越南原产）"
             note = "越南原产：不适用中国 301 加征，适用美国 MFN 一般税率"
+        elif unspecified:
+            is301 = "不适用（未指定原产地）"
+            note = ("未指定原产地：仅按 MFN 一般税率计，未计入 301 / FLIP 301 等任何"
+                    "原产地相关措施，请选择具体原产地后重查")
+        elif column2:
+            is301 = "不适用（其他国家原产）"
+            note = (f"{origin_name}原产：不适用中国 301 加征；适用第二栏税率"
+                    f"（{col2 or '—'}）而非一般税率")
         else:
             is301 = "不适用（其他国家原产）"
-            note = f"{origin_code} 原产：不适用中国 301 加征，适用美国 MFN 一般税率"
+            _who = f"{origin_name}（{origin_code}）" if origin_name != "其他国家" else origin_code
+            note = f"{_who} 原产：不适用中国 301 加征，适用美国 MFN 一般税率"
         c99_fmt = ""
         pct_txt = ""
         if n < 8:
@@ -749,7 +1051,30 @@ def query_one(db, code, origin="CN"):
             note = "⚠ 未在2026现行HTS税率表中找到该子目，可能为旧版编码" + ("；" + note if note else "")
         flip_hist, flip_change = [], ""
         excl_auto, excl_items = None, []   # 301 排除只对中国原产有意义
-        vn_measures = vietnam_info(db, code8, "VN" if origin_code == ORIGIN_VN else "OTHER")
+        vn_measures = vietnam_info(db, code8, origin_code)
+
+    # Special 栏提示（只提示不套用）与未建模措施探测（只探测不判定）
+    special_hint = special_rate_hint(special, origin_code) if base else ""
+    if special_hint:
+        note = (note + "；" if note else "") + special_hint.split("。")[0] + "，见「特殊税率提示」"
+    unmodeled = unmodeled_measures(db, origin_code)
+    if unmodeled:
+        _u = "、".join(f"{u['标目组']}×{u['标目数']}" for u in unmodeled)
+        note = (note + "；" if note else "") + (
+            f"⚠ 另有未建模 9903 标目以该原产地为条件（{_u}），总税负不完整，请核实")
+    # 按产品触发的清单（232 类）：命中即标注，且 FLIP 301 按 note 52(f) 对这些产品不适用。
+    # 税额仍按不豁免计（少收比多收危险），文本标"232 存疑"要人核实。
+    product_hits = product_measures(db, code, code8, origin_code) if base else []
+    if product_hits:
+        _p = "、".join(f"note {h['note']} {h['子条'].split(' ')[0]}" for h in product_hits[:3])
+        note = (note + "；" if note else "") + (
+            f"⚠ 落在按产品触发的 Chapter 99 清单（{_p}，232 类），该措施本工具未计；"
+            f"FLIP 301 对此类产品按 note 52(f) 不适用，两者均需人工核实")
+        if flip301_on and (flip301_spec or {}).get("mode") in ("flat", "net_mfn", "conditional"):
+            # "+12.5%(范围存疑)" 已带括号时并进去，不叠成两个括号
+            flip301_pct = (flip301_pct[:-1] + "；232 存疑)" if (flip301_pct or "").endswith(")")
+                           else (flip301_pct or "") + "(232 存疑)")
+            flip301_spec = {"mode": "conditional", "scope": "232", "fallback": flip301_spec}
 
     # 配置裁剪：禁用加征时备注标注，且不输出加征字段
     if not cn301_on:
@@ -757,7 +1082,11 @@ def query_one(db, code, origin="CN"):
     if "范围存疑" in (flip301_pct or ""):
         # 备注是列表页唯一能看全的文字列，范围限制这种"结论有条件"的信息必须进来，
         # 否则一眼扫过去只看到一个百分比，看不出这笔税还取决于商品用途。
-        _scope = (flip301_spec or {}).get("scope", "")
+        # 232 存疑可能又套了一层 conditional，ANNEX II 的范围名在最内层
+        _s = flip301_spec or {}
+        while _s.get("mode") == "conditional" and _s.get("scope") == "232":
+            _s = _s.get("fallback") or {}
+        _scope = _s.get("scope", "")
         _t = f"FLIP 301 命中 ANNEX II 但带范围限制“{_scope}”，已按不豁免计（{flip301_pct}），需人工核实用途"
         note = (note + "；" + _t) if note else _t
     elif flip301_pct and flip301_pct != "豁免":
@@ -777,16 +1106,23 @@ def query_one(db, code, origin="CN"):
         "一般税率": general,
         "特殊税率": special,
         "第二栏税率": col2,
+        # 本次计算实际采用的基础税率栏（第二栏国家用 col2），rate.calc_total 读它
+        "基础税率栏": rate_col,
+        "适用基础税率": applied_rate,
+        "特殊税率提示": special_hint,
         "301判定": is301,
         "9903子目": c99_fmt,
-        "附加税": add,
         "备注": note,
         # ---- v1.3 新增字段 ----
-        "原产地": "中国" if is_china else ("越南" if origin_code == ORIGIN_VN else "其他国家"),
+        "原产地": origin_name,
         "原产地代码": origin_code,
         "301 flip历史": flip_hist,
         "301 flip变化": flip_change,
         "越南措施": vn_measures,
+        # 以该原产地为条件、本工具未建模的 9903 标目组（探测结果，供人核实）
+        "未建模措施": unmodeled,
+        # 按产品触发的 Chapter 99 清单命中（232 类；探测结果，供人核实）
+        "产品类未建模措施": product_hits,
     }
     # 加征字段：仅启用时输出（禁用则不输出、总税负不叠加）
     if cn301_on:
@@ -811,6 +1147,8 @@ def query_one(db, code, origin="CN"):
         result["FLIP 301说明"] = flip301_note
         # 供 rate.calc_total 做数值计算；net-of-MFN 档不能按显示文本直接相加
         result["FLIP 301档位"] = flip301_spec
+        # 报关要填的 9903.05.xx 标目（301 那边一直输出 9903.88.xx，FLIP 此前没有）
+        result["FLIP 301标目"] = flip_heading_of(flip301_spec)
 
     # 来源追溯：每条税负判定的官方出处（文件 + 位置 + 说明），供 Web 端弹窗展示
     sources = []
@@ -821,9 +1159,15 @@ def query_one(db, code, origin="CN"):
         "类型": "基础税率",
         "文件": f"{meta.get('hts_csv', 'htsdata.csv')}（USITC 全量税率表）",
         "位置": f"第 {line} 行" if line else "",
-        "说明": f"一般税率 {general or '—'}" + (f"；特殊 {special}" if special else "") + (f"；第二栏 {col2}" if col2 else ""),
+        "说明": f"一般税率 {general or '—'}" + (f"；特殊 {special}" if special else "")
+                + (f"；第二栏 {col2}" if col2 else "")
+                + (f"；本次按第二栏计（{origin_name}）" if column2 else ""),
     })
-    if is_china and c99:
+    if special_hint:
+        sources.append({"key": "htsdata", "类型": "Special 栏（协定税率提示）",
+                        "文件": f"{meta.get('hts_csv', 'htsdata.csv')}（USITC 全量税率表）",
+                        "位置": f"第 {line} 行" if line else "", "说明": special_hint})
+    if is_china and c99_fmt and not is301.startswith("无法判定"):
         # 10 位精确命中时定位到该 10 位行的页码，否则用 8 位子目的页码
         pages = db.get("sec301_pages") or {}
         matched = code if code in (db.get("sec301_map_10") or {}) else code8
@@ -838,7 +1182,16 @@ def query_one(db, code, origin="CN"):
         })
     if flip301_on and flip301_src:
         sources.append({"key": flip301_src.get("key", "flip_frn"), "类型": "FLIP 301", **flip301_src, "说明": flip301_note})
-    if is_china and c99:
+        if (flip301_spec or {}).get("mode") not in ("none", None):
+            _ex = flip_exceptions_of(db, origin_code)
+            if _ex:
+                sources.append({
+                    "key": "local", "类型": "FLIP 301 例外标目（条件需人工核对）",
+                    "文件": "htsdata.csv 9903.05.85–.99 / 9903.06（U.S. note 52 例外）", "位置": "",
+                    "说明": "；".join(f"{e['标目']} {e['描述'][:100]}" for e in _ex[:10])
+                            + (f"；另有 {len(_ex) - 10} 条" if len(_ex) > 10 else ""),
+                })
+    if is_china and c99_fmt and not is301.startswith("无法判定"):
         # 有历史就讲变化；没有就讲清楚"是没数据，不是没变过"。
         # 一片空白看起来像"该编码档位从没变过"，会让人放心地按当前档位报关——
         # 而事实只是这个人工维护的存根库没覆盖到它。
@@ -853,6 +1206,37 @@ def query_one(db, code, origin="CN"):
         })
     if vn_measures:
         sources.append({"key": "local", "类型": "适用措施说明", "文件": "data/vietnam_measures.json（本地转录）", "位置": "", "说明": vn_measures})
+    if unmodeled:
+        sources.append({
+            "key": "local", "类型": "未建模措施（探测，需人工核实）",
+            "文件": "htsdata.csv 9903 标目（本工具未建模的部分）", "位置": "",
+            "说明": "；".join(
+                f"{u['标目组']}（{u['依据']}，{u['触发']}，{u['标目数']} 个标目，如 "
+                + "、".join(f"{s['标目']} {s['税率']}" for s in u["示例"][:2])
+                + (f"；编者注：{' / '.join(x[:120] for x in u['编者注'][:2])}" if u.get("编者注") else "")
+                + "）"
+                for u in unmodeled)
+                + "。这些标目的法律状态与是否适用本工具无法判断，总税负未计入，请核实。",
+        })
+    if product_hits:
+        sources.append({
+            "key": "ch99_pdf", "类型": "未建模措施（按产品触发，232 类，探测）",
+            "文件": f"{meta.get('ch99_pdf', 'Chapter 99 PDF')}（subchapter III U.S. notes）",
+            "位置": f"第 {product_hits[0]['页']} 页" if product_hits[0].get("页") else "",
+            "说明": "；".join(
+                f"note {h['note']} {h['子条']}（{h['措施'][:60]}"
+                + (f"；编者注：{h['状态'][0][:80]}" if h.get("状态") else "") + "）"
+                for h in product_hits[:4])
+                + "。清单只是必要条件，note 内另有含量/用途/技术参数条件，编码判不出；"
+                  "该措施税额本工具未计，FLIP 301 对此类产品按 note 52(f) 不适用，请人工核实。",
+        })
+    # 这一条对每个编码都成立：不是"没查到"，是"本工具没有这份数据"。
+    # 此前有一列"附加税"永远为空（数据里只有 99 章标目有值），空格子被读成"没有反倾销"。
+    sources.append({
+        "key": "none", "类型": "反倾销/反补贴（AD/CVD）", "文件": "未覆盖", "位置": "",
+        "说明": "本工具不含 AD/CVD 案件数据。反倾销/反补贴按案件与出口商定税，不在 htsdata.csv 里，"
+                "请另查 ITA / ACE；此处空白不代表无案件。",
+    })
     result["来源"] = sources
     return result
 
@@ -887,6 +1271,5 @@ def batch_query(db, codes, origin="CN"):
             counts["undetermined"] += 1
         else:                             # 否
             counts["miss"] += 1
-    o = (origin or "CN").strip().upper()
-    origin_txt = "中国" if o in (ORIGIN_CN, "") else ("越南" if o == ORIGIN_VN else "其他国家")
-    return results, {"total": len(results), "origin": origin_txt, **counts}
+    return results, {"total": len(results), "origin": origin_label(origin),
+                     "origin_code": normalize_origin(origin), **counts}

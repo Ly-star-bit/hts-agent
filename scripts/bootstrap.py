@@ -109,6 +109,12 @@ def check_db():
     if not (db.get("units_8") or {}):
         say(WARN, "缺计量单位数据",
             "估算页的「计量单位」列会显示 —。重跑 scripts/build_db.py 可补上")
+    if not (db.get("c99_product_index") or {}).get("entries"):
+        say(WARN, "缺 232 类产品清单",
+            "data/c99_product_scopes.json 未摄入。跑 python scripts/extract_c99_products.py 再 build_db")
+    if not os.path.exists(os.path.join(BASE_DIR, "data", "hts_vec.db")):
+        say(WARN, "税则行语义索引未建",
+            "搜索与归类只剩关键词 + 先例两条通道。ollama 就绪后跑 python scripts/hts_embed.py（约 18 分钟）")
     return True
 
 

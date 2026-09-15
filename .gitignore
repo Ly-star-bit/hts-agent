@@ -53,6 +53,11 @@ data/cross.db
 data/cross.db-shm
 data/cross.db-wal
 
+# 税则行语义索引（55MB，scripts/hts_embed.py 约 18 分钟可重建）
+data/hts_vec.db
+data/hts_vec.db-shm
+data/hts_vec.db-wal
+
 # HTS 第 99 章全文（13MB）。另外三份官方源（htsdata.csv / China Tariffs / FLIP FRN）
 # 都跟踪，唯独这份不入 git —— 体积是它们加起来的两倍，而且判定并不直接读它：
 # 判定读的是它的产物 data/sec301_exclusions.json（已跟踪），PDF 只在重新提取排除清单时需要。

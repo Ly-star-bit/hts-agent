@@ -137,19 +137,22 @@ class TestFlip301ForcedLabor(unittest.TestCase):
         # 加拿大：10%
         r = core.query_one(self.db, "85414300", origin="CA")
         self.assertEqual(r["FLIP 301加征"], "+10%")
-        self.assertEqual(r["原产地"], "其他国家")
+        self.assertEqual(r["原产地"], "加拿大")      # 有中文名的经济体不再笼统叫"其他国家"
         self.assertEqual(r["原产地代码"], "CA")
+        self.assertEqual(r["FLIP 301标目"], "9903.05.29")   # 报关要填的官方标目
 
     def test_eu_net_mfn_10(self):
         r = core.query_one(self.db, "85414300", origin="EU")
         self.assertEqual(r["FLIP 301加征"], "≤+10%")  # 名义上限，实际额度取决于 MFN
         self.assertIn("MFN", r["FLIP 301说明"])
-        self.assertEqual(r["FLIP 301档位"], {"mode": "net_mfn", "cap": 10.0})
+        self.assertEqual((r["FLIP 301档位"]["mode"], r["FLIP 301档位"]["cap"]), ("net_mfn", 10.0))
+        # 两个官方标目：MFN 低于上限填 .39（合计 10%），否则 .38（不加征）
+        self.assertEqual(r["FLIP 301标目"], "9903.05.39 / 9903.05.38")
 
     def test_jp_net_mfn_125(self):
         r = core.query_one(self.db, "85414300", origin="JP")
         self.assertEqual(r["FLIP 301加征"], "≤+12.5%")
-        self.assertEqual(r["FLIP 301档位"], {"mode": "net_mfn", "cap": 12.5})
+        self.assertEqual((r["FLIP 301档位"]["mode"], r["FLIP 301档位"]["cap"]), ("net_mfn", 12.5))
 
     def test_not_investigated(self):
         # 美国（不在 60 名单）：不适用。
@@ -175,8 +178,8 @@ class TestFlip301ForcedLabor(unittest.TestCase):
         # 成员国代码必须归一到 EU，否则会落进"不在名单"而静默漏加
         for member in ("DE", "FR", "IT", "DEU", "FRA"):
             r = core.query_one(self.db, "85414300", origin=member)
-            self.assertEqual(r["FLIP 301档位"], {"mode": "net_mfn", "cap": 10.0},
-                             f"{member} 未被归一到 EU")
+            self.assertEqual((r["FLIP 301档位"]["mode"], r["FLIP 301档位"]["cap"]),
+                             ("net_mfn", 10.0), f"{member} 未被归一到 EU")
         self.assertEqual(core.normalize_origin("TWN"), "TW")
         self.assertEqual(core.normalize_origin("CT"), "TW")
 
@@ -221,7 +224,8 @@ class TestFlip301ForcedLabor(unittest.TestCase):
         self.assertEqual(r["FLIP 301加征"], "+12.5%(范围存疑)")
         self.assertEqual(r["FLIP 301档位"]["mode"], "conditional")
         self.assertEqual(r["FLIP 301档位"]["scope"], "Aircraft")
-        self.assertEqual(r["FLIP 301档位"]["fallback"], {"mode": "flat", "rate": 12.5})
+        self.assertEqual((r["FLIP 301档位"]["fallback"]["mode"], r["FLIP 301档位"]["fallback"]["rate"]),
+                         ("flat", 12.5))
         self.assertIn("范围限制 “Aircraft”", r["FLIP 301说明"])
         self.assertIn("民用航空器", r["FLIP 301说明"])   # FRN 页 137 的官方定义要给出来
         self.assertIn("FRN 物理页", r["FLIP 301说明"])
@@ -254,7 +258,8 @@ class TestFlip301ForcedLabor(unittest.TestCase):
         """
         r = core.query_one(self.db, "90251980", origin="EU")
         self.assertEqual(r["FLIP 301加征"], "≤+10%(范围存疑)")
-        self.assertEqual(r["FLIP 301档位"]["fallback"], {"mode": "net_mfn", "cap": 10.0})
+        fb = r["FLIP 301档位"]["fallback"]
+        self.assertEqual((fb["mode"], fb["cap"]), ("net_mfn", 10.0))
 
     def test_source_field_structure(self):
         # 来源字段：基础税率带 CSV 行号；301 加征带 USTR PDF 页码；flip 历史带本地文件
@@ -395,8 +400,12 @@ class TestChinaRegression(unittest.TestCase):
         # 既有字段全部保留
         r = core.query_one(self.db, "01012100", origin="CN")
         for k in ("输入编码", "8位子目", "商品描述", "一般税率", "特殊税率",
-                  "第二栏税率", "301判定", "9903子目", "301加征", "附加税", "备注"):
+                  "第二栏税率", "301判定", "9903子目", "301加征", "备注"):
             self.assertIn(k, r)
+        # "附加税"列已删：数据里只有 99 章标目有值，普通编码永远为空，
+        # 而 README 把它写成 ADD/CVD——空格子会被读成"没有反倾销"
+        self.assertNotIn("附加税", r)
+        self.assertIn("反倾销/反补贴（AD/CVD）", {s["类型"] for s in r["来源"]})
 
     def test_legacy_cn_judgement_unchanged(self):
         # 中国路径判定与既有逻辑一致
@@ -418,10 +427,21 @@ class TestFlip301DataAvailability(unittest.TestCase):
         # 无法确定该经济体是否在 60 名单，应报"数据未覆盖"而非"豁免"
         db = dict(self.db)
         db["flip301"] = {}
+        db["flip301_headings"] = {}
         pct, note, _src, spec = core.flip301_judge(db, "CN", code8="85076000")
         self.assertEqual(pct, "")
         self.assertIn("数据未覆盖", note)
         self.assertNotIn("豁免", pct)
+
+    def test_official_headings_beat_json(self):
+        # 档位以 htsdata.csv 推导的官方标目为主：只抽掉手抄 JSON 仍能判定
+        db = dict(self.db)
+        db["flip301"] = {}
+        pct, note, src, spec = core.flip301_judge(db, "VN", code8="61091000")
+        self.assertEqual(pct, "+12.5%")
+        self.assertEqual(spec["heading"], "99030584")
+        self.assertEqual(src["key"], "htsdata")           # 来源直指官方表那一行
+        self.assertRegex(src["位置"], r"第 \d+ 行")
 
     def test_rates_present_still_exempt(self):
         # 数据齐全时豁免判定不受影响（回归）。用无范围限制的条目——
@@ -562,8 +582,9 @@ class TestBuildSanityCheck(unittest.TestCase):
     def test_empty_mapping_fails(self):
         import build_db
         failures = build_db.sanity_check(
-            {"rates_8": 0, "desc_10": 0, "sec301_map": 0, "c99_percent": 0})
-        self.assertEqual(len(failures), 4)
+            {"rates_8": 0, "desc_10": 0, "sec301_map": 0, "c99_percent": 0,
+             "flip301_headings": 0, "c99_headings": 0})
+        self.assertEqual(len(failures), len(build_db.SANITY_MINIMUMS))
         self.assertTrue(any("sec301_map" in f for f in failures))
 
     def test_current_build_passes(self):
@@ -574,6 +595,8 @@ class TestBuildSanityCheck(unittest.TestCase):
             "desc_10": len(db["desc_10"]),
             "sec301_map": len(db["sec301_map"]),
             "c99_percent": len(db["c99_percent"]),
+            "flip301_headings": len(db["flip301_headings"]["by_origin"]),
+            "c99_headings": len(db["c99_headings"]),
         }), [])
 
     def test_partial_drop_detected(self):
@@ -585,6 +608,8 @@ class TestBuildSanityCheck(unittest.TestCase):
             "desc_10": len(db["desc_10"]),
             "sec301_map": len(db["sec301_map"]),
             "c99_percent": len(db["c99_percent"]),
+            "flip301_headings": len(db["flip301_headings"]["by_origin"]),
+            "c99_headings": len(db["c99_headings"]),
         })
         self.assertTrue(any("rates_8" in f for f in failures))
 
@@ -796,3 +821,160 @@ class TestSec301Exclusions(unittest.TestCase):
         q = core.query_one(self.db, "90251980", origin="CN")
         self.assertEqual(row["301加征"], q["301加征"])
         self.assertEqual(row["301排除"], q["301排除"])
+
+
+class TestOriginSemantics(unittest.TestCase):
+    """
+    原产地口径（2026-09 评估修的几处会直接算错的地方）：
+      - CHN / 中文名 / 空值 都要归一，301 与 FLIP 用同一个结果
+      - 「未指定」与「其他国家」是两个回答
+      - 第二栏国家按第二栏税率
+      - Special 栏只提示不套用
+      - 以该原产地为条件的未建模 9903 标目要探测出来，总税负标不完整
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_alias_chn_gets_301(self):
+        # 此前 CHN 走 FLIP 不走 301：得到"301 不适用 + FLIP 12.5%"这种自相矛盾的答案
+        a = core.query_one(self.db, "61091000", origin="CHN")
+        b = core.query_one(self.db, "61091000", origin="CN")
+        self.assertEqual(a["301判定"], "是")
+        self.assertEqual(a["301加征"], b["301加征"])
+        self.assertEqual(a["原产地代码"], "CN")
+        self.assertEqual(core.normalize_origin("墨西哥"), "MX")
+        self.assertEqual(core.normalize_origin("mex"), "MX")
+        self.assertEqual(core.normalize_origin(""), core.ORIGIN_UNSPECIFIED)
+        self.assertEqual(core.normalize_origin("other"), core.ORIGIN_UNSPECIFIED)
+
+    def test_unspecified_is_explicit(self):
+        # 未指定：只按 MFN，备注与 FLIP 说明都要明说"未计入"，不能说成"不在名单"
+        for o in ("", "OTHER", "未指定"):
+            r = core.query_one(self.db, "61091000", origin=o)
+            self.assertEqual(r["原产地"], "未指定")
+            self.assertEqual(r["301判定"], "不适用（未指定原产地）")
+            self.assertEqual(r["FLIP 301加征"], "")
+            self.assertIn("未指定原产地", r["FLIP 301说明"])
+            self.assertNotIn("不在 FLIP 301", r["FLIP 301说明"])
+            self.assertIn("未计入", r["备注"])
+            self.assertEqual(r["未建模措施"], [])
+        t = rate.calc_total(self.db, "61091000", origin="OTHER")
+        self.assertTrue(t["总税负估算"].startswith("16.5%"))
+
+    def test_other_listed_country_is_not_unspecified(self):
+        # XX / 不在名单的国家：明确"不在 60 名单"，与未指定分开
+        r = core.query_one(self.db, "61091000", origin="KE")
+        self.assertEqual(r["原产地"], "其他国家")
+        self.assertIn("不在 FLIP 301", r["FLIP 301说明"])
+        self.assertIn("其他国家通用轨道", r["越南措施"])
+
+    def test_column2_origin_uses_col2(self):
+        # 俄罗斯 2022 起适用第二栏：6109.10.00 第二栏 90%，一般 16.5%
+        r = core.query_one(self.db, "61091000", origin="RU")
+        self.assertEqual(r["基础税率栏"], "第二栏")
+        self.assertEqual(r["适用基础税率"], "90%")
+        self.assertIn("第二栏", r["备注"])
+        t = rate.calc_total(self.db, "61091000", origin="RU")
+        self.assertEqual(t["基础等效从价"], "90%")
+        self.assertTrue(t["总税负估算"].startswith("102.5%"), t["总税负估算"])  # 90 + FLIP 12.5
+        # 中国照旧走一般税率
+        self.assertEqual(core.query_one(self.db, "61091000", origin="CN")["基础税率栏"], "一般税率")
+
+    def test_special_column_hint_not_applied(self):
+        # 墨西哥：Special 栏 Free (…S…) 只提示，总税负仍按一般税率
+        r = core.query_one(self.db, "61091000", origin="MX")
+        self.assertIn("USMCA", r["特殊税率提示"])
+        self.assertIn("未自动套用", r["特殊税率提示"])
+        self.assertIn("Special 栏", r["备注"])
+        t = rate.calc_total(self.db, "61091000", origin="MX")
+        self.assertEqual(t["基础等效从价"], "16.5%")
+        # 韩国：KR 代码；中国 / 未指定：不提示
+        self.assertIn("美韩", core.query_one(self.db, "61091000", origin="KR")["特殊税率提示"])
+        self.assertEqual(core.query_one(self.db, "61091000", origin="CN")["特殊税率提示"], "")
+        self.assertEqual(core.query_one(self.db, "61091000", origin="OTHER")["特殊税率提示"], "")
+
+    def test_unmodeled_measures_detected_for_origin(self):
+        # 墨西哥：9903.01（note 2）里有提及墨西哥的标目，工具未建模 → 探测出来并标不完整
+        r = core.query_one(self.db, "61091000", origin="MX")
+        groups = {u["标目组"]: u for u in r["未建模措施"]}
+        self.assertIn("9903.01", groups)
+        self.assertIn("U.S. note 2", groups["9903.01"]["依据"])
+        self.assertTrue(groups["9903.01"]["示例"])
+        self.assertIn("总税负不完整", r["备注"])
+        t = rate.calc_total(self.db, "61091000", origin="MX")
+        self.assertIn("不含 AD/CVD", t["总税负估算"])
+        self.assertIn("原产地类未建模标目待核", t["总税负估算"])
+        self.assertIn("未建模措施（探测，需人工核实）", {s["类型"] for s in r["来源"]})
+        # 中国也有 note 2 的标目提及中国
+        self.assertIn("9903.01", {u["标目组"] for u in
+                                  core.query_one(self.db, "61091000", origin="CN")["未建模措施"]})
+
+    def test_total_text_always_states_exclusions(self):
+        # 总税负文本常驻"不含"说明：AD/CVD 没数据、232 未建模
+        t = rate.calc_total(self.db, "85076000", origin="CN")
+        self.assertRegex(t["总税负估算"], r"^\d")
+        self.assertIn("不含 AD/CVD、232", t["总税负估算"])
+        self.assertEqual(rate._total_num(t["总税负估算"]), 40.9)   # 3.4 + 25 + 12.5
+
+    def test_origin_options_cover_flip_economies(self):
+        opts = core.origin_options(self.db)
+        codes = [o["code"] for o in opts]
+        self.assertEqual(codes[:2], ["CN", "VN"])
+        self.assertEqual(codes[-2:], [core.ORIGIN_OTHER_LISTED, core.ORIGIN_UNSPECIFIED])
+        for c in ("MX", "EU", "JP", "KR", "TW", "GB", "RU", "BY", "CU", "KP"):
+            self.assertIn(c, codes)
+        by = {o["code"]: o for o in opts}
+        self.assertEqual(by["MX"]["flip301"], "+10%")
+        self.assertEqual(by["EU"]["flip301"], "≤+10%")
+        self.assertTrue(by["RU"]["column2"])
+        self.assertEqual(len(codes), len(set(codes)))
+
+
+class TestFlipOfficialHeadings(unittest.TestCase):
+    """FLIP 301 档位与报关标目从 htsdata.csv 的 9903.05/.06 标目推导，手抄 JSON 只作校验"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = core.load_db()
+
+    def test_derived_table_matches_json(self):
+        fh = self.db["flip301_headings"]["by_origin"]
+        self.assertEqual(len(fh), 60)
+        rates = self.db["flip301"]["rates"]
+        for o in rates["10"]:
+            self.assertEqual((fh[o]["mode"], fh[o]["rate"]), ("flat", 10.0), o)
+        for o in rates["125"]:
+            self.assertEqual((fh[o]["mode"], fh[o]["rate"]), ("flat", 12.5), o)
+        for o in rates["net_mfn_10"]:
+            self.assertEqual((fh[o]["mode"], fh[o]["cap"]), ("net_mfn", 10.0), o)
+        for o in rates["net_mfn_125"]:
+            self.assertEqual((fh[o]["mode"], fh[o]["cap"]), ("net_mfn", 12.5), o)
+        self.assertEqual(fh["CN"]["heading"], "99030531")
+        self.assertEqual(fh["HK"]["heading"], "99030543")
+        self.assertEqual(fh["VN"]["heading"], "99030584")
+
+    def test_heading_in_result_and_calc(self):
+        # 8507.60.00 命中 ANNEX II 但带 Aircraft 范围限制：说明讲范围，标目走 fallback 档
+        r = core.query_one(self.db, "85076000", origin="CN")
+        self.assertEqual(r["FLIP 301标目"], "9903.05.31")
+        # 普通命中（6109.10.00）：说明里直接写报关标目
+        r2 = core.query_one(self.db, "61091000", origin="CN")
+        self.assertEqual(r2["FLIP 301标目"], "9903.05.31")
+        self.assertIn("报关标目 9903.05.31", r2["FLIP 301说明"])
+        # net-of-MFN：calc_total 知道 MFN 后收成一个标目。EU 产 6109.10.00 MFN 16.5% ≥ 10 → .38
+        t = rate.calc_total(self.db, "61091000", origin="EU")
+        self.assertEqual(t["FLIP 301标目"], "9903.05.38")
+        self.assertEqual(t["FLIP 301加征数值"], 0.0)
+        # MFN 3.4% < 10 → .39，实际加 6.6
+        t2 = rate.calc_total(self.db, "85076000", origin="EU")
+        self.assertEqual(t2["FLIP 301标目"], "9903.05.39")
+        self.assertEqual(t2["FLIP 301加征数值"], 6.6)
+
+    def test_exceptions_listed_in_sources(self):
+        r = core.query_one(self.db, "85076000", origin="MX")
+        srcs = {s["类型"]: s for s in r["来源"]}
+        self.assertIn("FLIP 301 例外标目（条件需人工核对）", srcs)
+        self.assertIn("9903.05.94", srcs["FLIP 301 例外标目（条件需人工核对）"]["说明"])   # 墨西哥专属例外
+        self.assertIn("9903.05.85", srcs["FLIP 301 例外标目（条件需人工核对）"]["说明"])   # 通用在途例外

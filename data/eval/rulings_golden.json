@@ -1,0 +1,2112 @@
+{
+ "meta": {
+  "built_at": "2026-09-15T07:41:36",
+  "since": "2023-01-01",
+  "seed": 20260915,
+  "pool": 4310,
+  "n": 300,
+  "note": "NY 裁定，单一现行 8 位编码，留一法评测时剔除裁定号本身"
+ },
+ "items": [
+  {
+   "裁定号": "N330020",
+   "日期": "2023-01-10",
+   "描述": "trailer transition plate",
+   "金标": "87169050",
+   "subject": "The tariff classification of a trailer transition plate from China"
+  },
+  {
+   "裁定号": "N330102",
+   "日期": "2023-01-25",
+   "描述": "1996 Toyota HiLux",
+   "金标": "87042101",
+   "subject": "The tariff classification of a 1996 Toyota HiLux from Japan"
+  },
+  {
+   "裁定号": "N330272",
+   "日期": "2023-01-20",
+   "描述": "Christmas decoration",
+   "金标": "95051015",
+   "subject": "The tariff classification of a Christmas decoration from China."
+  },
+  {
+   "裁定号": "N330495",
+   "日期": "2023-02-08",
+   "描述": "incontinent underpad",
+   "金标": "63049101",
+   "subject": "The tariff classification of an incontinent underpad from Turkey"
+  },
+  {
+   "裁定号": "N330503",
+   "日期": "2023-02-09",
+   "描述": "1994 Bugatti EB 112 passenger vehicle",
+   "金标": "87032401",
+   "subject": "The tariff classification of a 1994 Bugatti EB 112 passenger vehicle from France"
+  },
+  {
+   "裁定号": "N330558",
+   "日期": "2023-02-15",
+   "描述": "3-tier utility cart",
+   "金标": "94032000",
+   "subject": "The tariff classification of a 3-tier utility cart from China"
+  },
+  {
+   "裁定号": "N330768",
+   "日期": "2023-02-13",
+   "描述": "Yard Maintenance Set",
+   "金标": "84331100",
+   "subject": "The tariff classification of a Yard Maintenance Set from Vietnam"
+  },
+  {
+   "裁定号": "N330816",
+   "日期": "2023-02-15",
+   "描述": "decorative photo holder",
+   "金标": "83062900",
+   "subject": "The tariff classification of a decorative photo holder from China"
+  },
+  {
+   "裁定号": "N330854",
+   "日期": "2023-03-01",
+   "描述": "Laundry Detergent Sheets",
+   "金标": "34011900",
+   "subject": "The tariff classification of Laundry Detergent Sheets from China"
+  },
+  {
+   "裁定号": "N330901",
+   "日期": "2023-03-01",
+   "描述": "ceramic candy bowl",
+   "金标": "69120048",
+   "subject": "The tariff classification of a ceramic candy bowl from China"
+  },
+  {
+   "裁定号": "N330907",
+   "日期": "2023-02-23",
+   "描述": "polypropylene cup",
+   "金标": "39239000",
+   "subject": "The tariff classification of polypropylene cup from Poland"
+  },
+  {
+   "裁定号": "N331015",
+   "日期": "2023-03-01",
+   "描述": "BBQ multi-feature spatula",
+   "金标": "82159950",
+   "subject": "The tariff classification of a BBQ multi-feature spatula from Vietnam."
+  },
+  {
+   "裁定号": "N331101",
+   "日期": "2023-03-01",
+   "描述": "alloy steel bars",
+   "金标": "72283080",
+   "subject": "The tariff classification of alloy steel bars from China"
+  },
+  {
+   "裁定号": "N331494",
+   "日期": "2023-03-17",
+   "描述": "window frame with wreath decor",
+   "金标": "44201900",
+   "subject": "The tariff classification of window frame with wreath decor from China"
+  },
+  {
+   "裁定号": "N331643",
+   "日期": "2023-03-30",
+   "描述": "ARR Series Silver Spring Aluminum Roll-Up Ramps with Carrying Bags",
+   "金标": "76169951",
+   "subject": "The tariff classification of ARR Series Silver Spring Aluminum Roll-Up Ramps with Carrying Bags made in China"
+  },
+  {
+   "裁定号": "N331707",
+   "日期": "2023-04-18",
+   "描述": "Hydrogen Fuel Cell Electric Tractors/Trucks",
+   "金标": "87012400",
+   "subject": "The tariff classification of Hydrogen Fuel Cell Electric Tractors/Trucks from South Korea"
+  },
+  {
+   "裁定号": "N331720",
+   "日期": "2023-04-20",
+   "描述": "Mycelium from the Netherlands",
+   "金标": "14049090",
+   "subject": "The tariff classification of Mycelium from the Netherlands"
+  },
+  {
+   "裁定号": "N331825",
+   "日期": "2023-11-13",
+   "描述": "bonded fabric consisting of a knit face fabric bonded to a woven backing fabric",
+   "金标": "60019200",
+   "subject": "The tariff classification of a bonded fabric consisting of a knit face fabric bonded to a woven backing fabric from China"
+  },
+  {
+   "裁定号": "N331852",
+   "日期": "2023-04-04",
+   "描述": "footed ceramic bowl",
+   "金标": "69120048",
+   "subject": "The tariff classification of a footed ceramic bowl from China"
+  },
+  {
+   "裁定号": "N332026",
+   "日期": "2024-08-27",
+   "描述": "coated fabric",
+   "金标": "59032025",
+   "subject": "The tariff classification of a coated fabric from China"
+  },
+  {
+   "裁定号": "N332157",
+   "日期": "2023-04-13",
+   "描述": "women’s raincoat",
+   "金标": "62103050",
+   "subject": "The tariff classification of a women’s raincoat from China"
+  },
+  {
+   "裁定号": "N332205",
+   "日期": "2023-04-24",
+   "描述": "outdoor PE wicker daybed",
+   "金标": "94037080",
+   "subject": "The tariff classification of an outdoor PE wicker daybed from China"
+  },
+  {
+   "裁定号": "N332317",
+   "日期": "2023-05-02",
+   "描述": "wood pallet collars",
+   "金标": "44152080",
+   "subject": "The tariff classification of wood pallet collars from Latvia"
+  },
+  {
+   "裁定号": "N332565",
+   "日期": "2023-05-11",
+   "描述": "electric seat motors",
+   "金标": "85013120",
+   "subject": "The tariff classification of electric seat motors from China"
+  },
+  {
+   "裁定号": "N332580",
+   "日期": "2023-05-08",
+   "描述": "Christmas decorations",
+   "金标": "95051015",
+   "subject": "The tariff classification of Christmas decorations from China."
+  },
+  {
+   "裁定号": "N332735",
+   "日期": "2023-06-01",
+   "描述": "chemical mixture",
+   "金标": "38249993",
+   "subject": "The tariff classification of a chemical mixture from Canada"
+  },
+  {
+   "裁定号": "N332742",
+   "日期": "2023-05-15",
+   "描述": "Smart Baby Bottle Monitor",
+   "金标": "90318080",
+   "subject": "The tariff classification of a Smart Baby Bottle Monitor from Canada"
+  },
+  {
+   "裁定号": "N332744",
+   "日期": "2023-05-17",
+   "描述": "Pentoxifylline (CAS No. 6493-05-6) in bulk crystalline powder form,",
+   "金标": "29395900",
+   "subject": "The tariff classification of Pentoxifylline (CAS No. 6493-05-6) in bulk crystalline powder form, from India"
+  },
+  {
+   "裁定号": "N332757",
+   "日期": "2023-05-17",
+   "描述": "product known as “ZZFountbio-Citrate Buffer-Bulk”",
+   "金标": "38249993",
+   "subject": "The tariff classification of product known as “ZZFountbio-Citrate Buffer-Bulk” from Canada"
+  },
+  {
+   "裁定号": "N332768",
+   "日期": "2024-08-27",
+   "描述": "MAPTAC 50% solution in water, CAS # 51410-72-1,",
+   "金标": "34029050",
+   "subject": "The tariff classification of MAPTAC 50% solution in water, CAS # 51410-72-1, from China"
+  },
+  {
+   "裁定号": "N332781",
+   "日期": "2023-05-18",
+   "描述": "Orphenadrine Citrate (CAS No. 4682-36-4) in bulk crystalline powder form,",
+   "金标": "29221909",
+   "subject": "The tariff classification of Orphenadrine Citrate (CAS No. 4682-36-4) in bulk crystalline powder form, from Italy"
+  },
+  {
+   "裁定号": "N333046",
+   "日期": "2023-06-20",
+   "描述": "compression garment",
+   "金标": "62122000",
+   "subject": "The tariff classification of a compression garment from Mexico"
+  },
+  {
+   "裁定号": "N333062",
+   "日期": "2023-06-15",
+   "描述": "Juice Drinks from the Philippines",
+   "金标": "22021000",
+   "subject": "The tariff classification of Juice Drinks from the Philippines"
+  },
+  {
+   "裁定号": "N333137",
+   "日期": "2023-11-20",
+   "描述": "polyester stable fiber yarn",
+   "金标": "55095300",
+   "subject": "The tariff classification of a polyester stable fiber yarn from Vietnam or Indonesia"
+  },
+  {
+   "裁定号": "N333360",
+   "日期": "2023-06-30",
+   "描述": "dried moringa leaf powder",
+   "金标": "12129992",
+   "subject": "The tariff classification of dried moringa leaf powder from India or Indonesia"
+  },
+  {
+   "裁定号": "N333409",
+   "日期": "2023-06-14",
+   "描述": "strobe lights",
+   "金标": "85437098",
+   "subject": "The tariff classification of strobe lights from China"
+  },
+  {
+   "裁定号": "N333732",
+   "日期": "2023-07-07",
+   "描述": "1,1,1,3,3,3-Hexafluoropropane (CAS # 690-39-1)",
+   "金标": "29034610",
+   "subject": "The tariff classification of 1,1,1,3,3,3-Hexafluoropropane (CAS # 690-39-1) from China"
+  },
+  {
+   "裁定号": "N333795",
+   "日期": "2023-07-27",
+   "描述": "adjustable threshold ramps",
+   "金标": "76169951",
+   "subject": "The tariff classification of adjustable threshold ramps from China"
+  },
+  {
+   "裁定号": "N333834",
+   "日期": "2023-07-25",
+   "描述": "new electric vehicles",
+   "金标": "87038000",
+   "subject": "The tariff classification of new electric vehicles from South Korea"
+  },
+  {
+   "裁定号": "N333991",
+   "日期": "2023-07-27",
+   "描述": "two cot pads",
+   "金标": "94042100",
+   "subject": "The tariff classification of two cot pads from China"
+  },
+  {
+   "裁定号": "N334048",
+   "日期": "2023-08-09",
+   "描述": "woven upholstery fabric",
+   "金标": "54076199",
+   "subject": "The tariff classification of a woven upholstery fabric from China"
+  },
+  {
+   "裁定号": "N334432",
+   "日期": "2023-08-14",
+   "描述": "lighting fixtures",
+   "金标": "94054900",
+   "subject": "The tariff classification of lighting fixtures from China"
+  },
+  {
+   "裁定号": "N334598",
+   "日期": "2023-08-31",
+   "描述": "Constant Spring Assembly",
+   "金标": "73269086",
+   "subject": "The tariff classification of the Constant Spring Assembly from Taiwan"
+  },
+  {
+   "裁定号": "N334643",
+   "日期": "2023-09-11",
+   "描述": "Prochlorperazine Maleate Tablets in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Prochlorperazine Maleate Tablets in dosage form, from India"
+  },
+  {
+   "裁定号": "N334760",
+   "日期": "2023-08-25",
+   "描述": "“Jumbo 3 in 1 Checker Rug Game”",
+   "金标": "95049060",
+   "subject": "The tariff classification of the “Jumbo 3 in 1 Checker Rug Game” from China"
+  },
+  {
+   "裁定号": "N334781",
+   "日期": "2023-08-29",
+   "描述": "self-inflating pillow",
+   "金标": "94049020",
+   "subject": "The tariff classification of a self-inflating pillow from China"
+  },
+  {
+   "裁定号": "N334784",
+   "日期": "2023-09-05",
+   "描述": "books containing temporary tattoos",
+   "金标": "49089000",
+   "subject": "The tariff classification of books containing temporary tattoos from China"
+  },
+  {
+   "裁定号": "N335016",
+   "日期": "2023-09-19",
+   "描述": "backseat car organizer",
+   "金标": "63079098",
+   "subject": "The tariff classification of a backseat car organizer from China"
+  },
+  {
+   "裁定号": "N335048",
+   "日期": "2023-09-19",
+   "描述": "textile dog crate cover",
+   "金标": "63079098",
+   "subject": "The tariff classification of a textile dog crate cover from China"
+  },
+  {
+   "裁定号": "N335058",
+   "日期": "2023-09-22",
+   "描述": "“RPG Ultimate Journey Miniatures”",
+   "金标": "95030000",
+   "subject": "The tariff classification of  the “RPG Ultimate Journey Miniatures” from China"
+  },
+  {
+   "裁定号": "N335134",
+   "日期": "2023-09-26",
+   "描述": "jewelry boxes",
+   "金标": "42029990",
+   "subject": "The tariff classification of jewelry boxes from China"
+  },
+  {
+   "裁定号": "N335367",
+   "日期": "2023-10-10",
+   "描述": "“Gumball Kidz” mini gumball machine",
+   "金标": "95030000",
+   "subject": "The tariff classification of the “Gumball Kidz” mini gumball machine from China"
+  },
+  {
+   "裁定号": "N335403",
+   "日期": "2023-10-11",
+   "描述": "Bendamustine Hydrochloride (CAS No. 3543-75-7) in bulk powder form,",
+   "金标": "29339975",
+   "subject": "The tariff classification of Bendamustine Hydrochloride (CAS No. 3543-75-7) in bulk powder form, from India"
+  },
+  {
+   "裁定号": "N335488",
+   "日期": "2024-08-21",
+   "描述": "girl’s upper body garment",
+   "金标": "62114210",
+   "subject": "The tariff classification of a girl’s upper body garment from Bangladesh"
+  },
+  {
+   "裁定号": "N335672",
+   "日期": "2023-10-18",
+   "描述": "Olanzapine Tablets in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Olanzapine Tablets in dosage form, from India"
+  },
+  {
+   "裁定号": "N335834",
+   "日期": "2023-10-25",
+   "描述": "hydration pack",
+   "金标": "42029204",
+   "subject": "The tariff classification of a hydration pack from China"
+  },
+  {
+   "裁定号": "N335949",
+   "日期": "2023-10-31",
+   "描述": "textile costume",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China."
+  },
+  {
+   "裁定号": "N336479",
+   "日期": "2023-11-22",
+   "描述": "growing rack",
+   "金标": "94032000",
+   "subject": "The tariff classification of a growing rack from China"
+  },
+  {
+   "裁定号": "N336481",
+   "日期": "2023-11-21",
+   "描述": "Fishing Rod kit",
+   "金标": "95071000",
+   "subject": "The tariff classification of Fishing Rod kit from China"
+  },
+  {
+   "裁定号": "N336571",
+   "日期": "2023-12-06",
+   "描述": "temperature probe steam wand",
+   "金标": "90251980",
+   "subject": "The tariff classification of a temperature probe steam wand from Switzerland"
+  },
+  {
+   "裁定号": "N336715",
+   "日期": "2023-12-11",
+   "描述": "Zoledronic Acid Injection in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Zoledronic Acid Injection in dosage form, from India"
+  },
+  {
+   "裁定号": "N336811",
+   "日期": "2023-12-07",
+   "描述": "sound recording and reproducing apparatus",
+   "金标": "85198141",
+   "subject": "The tariff classification of a sound recording and reproducing apparatus from China"
+  },
+  {
+   "裁定号": "N336889",
+   "日期": "2023-12-21",
+   "描述": "woman’s dress",
+   "金标": "62044340",
+   "subject": "The tariff classification of a woman’s dress from China"
+  },
+  {
+   "裁定号": "N336937",
+   "日期": "2023-12-14",
+   "描述": "woman’s jacket",
+   "金标": "62114310",
+   "subject": "The tariff classification of a woman’s jacket from Vietnam"
+  },
+  {
+   "裁定号": "N336967",
+   "日期": "2024-01-04",
+   "描述": "Vegan Pastry Puffs",
+   "金标": "19019091",
+   "subject": "The tariff classification of Vegan Pastry Puffs from Ireland"
+  },
+  {
+   "裁定号": "N337041",
+   "日期": "2023-12-29",
+   "描述": "textile storage bin",
+   "金标": "63079098",
+   "subject": "The tariff classification of a textile storage bin from China"
+  },
+  {
+   "裁定号": "N337043",
+   "日期": "2023-12-19",
+   "描述": "1982 Toyota Landcruiser FJ45 Troop Carrier",
+   "金标": "87029061",
+   "subject": "The tariff classification of a 1982 Toyota Landcruiser FJ45 Troop Carrier from Japan"
+  },
+  {
+   "裁定号": "N337222",
+   "日期": "2024-01-03",
+   "描述": "Suncatcher Kit",
+   "金标": "32131000",
+   "subject": "The tariff classification of a Suncatcher Kit from China"
+  },
+  {
+   "裁定号": "N337243",
+   "日期": "2024-01-20",
+   "描述": "Whitefish Powder",
+   "金标": "03091005",
+   "subject": "The tariff classification of Whitefish Powder from Norway"
+  },
+  {
+   "裁定号": "N337323",
+   "日期": "2024-01-08",
+   "描述": "textile costume",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China and Vietnam."
+  },
+  {
+   "裁定号": "N337357",
+   "日期": "2024-01-19",
+   "描述": "EVA foam kayak component",
+   "金标": "39269099",
+   "subject": "The tariff classification of an EVA foam kayak component from China."
+  },
+  {
+   "裁定号": "N337368",
+   "日期": "2024-01-22",
+   "描述": "textile costume",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China and Vietnam."
+  },
+  {
+   "裁定号": "N337433",
+   "日期": "2024-01-17",
+   "描述": "semiconductor test equipment",
+   "金标": "90308200",
+   "subject": "The tariff classification of semiconductor test equipment from Italy"
+  },
+  {
+   "裁定号": "N337440",
+   "日期": "2024-01-23",
+   "描述": "boy’s adaptive garment",
+   "金标": "61142000",
+   "subject": "The tariff classification of a boy’s adaptive garment from Vietnam"
+  },
+  {
+   "裁定号": "N337610",
+   "日期": "2024-01-29",
+   "描述": "galvanized steel sheets",
+   "金标": "72104900",
+   "subject": "The tariff classification of galvanized steel sheets from Vietnam"
+  },
+  {
+   "裁定号": "N337667",
+   "日期": "2024-02-06",
+   "描述": "half bale covers",
+   "金标": "63079098",
+   "subject": "The tariff classification of half bale covers from India"
+  },
+  {
+   "裁定号": "N337672",
+   "日期": "2024-02-20",
+   "描述": "three waterproof footwear fabrics",
+   "金标": "59032025",
+   "subject": "The tariff classification of three waterproof footwear fabrics from Germany"
+  },
+  {
+   "裁定号": "N337704",
+   "日期": "2024-02-15",
+   "描述": "kayak carrier",
+   "金标": "87082951",
+   "subject": "The tariff classification of a kayak carrier from China"
+  },
+  {
+   "裁定号": "N337942",
+   "日期": "2024-02-21",
+   "描述": "plastic drum port",
+   "金标": "39269099",
+   "subject": "The tariff classification of a plastic drum port from China."
+  },
+  {
+   "裁定号": "N338047",
+   "日期": "2024-02-22",
+   "描述": "children’s swim goggles",
+   "金标": "90049000",
+   "subject": "The tariff classification of children’s swim goggles from China"
+  },
+  {
+   "裁定号": "N338056",
+   "日期": "2024-02-28",
+   "描述": "plastic beverage chilling sleeve",
+   "金标": "39269099",
+   "subject": "The tariff classification of a plastic beverage chilling sleeve from China."
+  },
+  {
+   "裁定号": "N338069",
+   "日期": "2024-02-18",
+   "描述": "textile costume",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China."
+  },
+  {
+   "裁定号": "N338285",
+   "日期": "2024-03-04",
+   "描述": "textile costume",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China and Vietnam."
+  },
+  {
+   "裁定号": "N338338",
+   "日期": "2024-02-26",
+   "描述": "wooden décor item",
+   "金标": "44201900",
+   "subject": "The tariff classification of a wooden décor item from China"
+  },
+  {
+   "裁定号": "N338407",
+   "日期": "2024-03-14",
+   "描述": "collection bag",
+   "金标": "39269099",
+   "subject": "The tariff classification of a collection bag from China."
+  },
+  {
+   "裁定号": "N338461",
+   "日期": "2025-03-13",
+   "描述": "plain-woven polyester upholstery fabric",
+   "金标": "55121900",
+   "subject": "The tariff classification of plain-woven polyester upholstery fabric from China"
+  },
+  {
+   "裁定号": "N338812",
+   "日期": "2024-03-15",
+   "描述": "glass Christmas tree ornament",
+   "金标": "95051010",
+   "subject": "The tariff classification of a glass Christmas tree ornament from China."
+  },
+  {
+   "裁定号": "N338820",
+   "日期": "2024-04-05",
+   "描述": "Aripiprazole Oral Solution in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Aripiprazole Oral Solution in dosage form, from India"
+  },
+  {
+   "裁定号": "N338834",
+   "日期": "2024-04-09",
+   "描述": "Oxcarbazepine Oral Suspension in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Oxcarbazepine Oral Suspension in dosage form, from India"
+  },
+  {
+   "裁定号": "N339076",
+   "日期": "2024-04-18",
+   "描述": "Pirfenidone Tablets in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Pirfenidone Tablets in dosage form, from India"
+  },
+  {
+   "裁定号": "N339088",
+   "日期": "2024-10-22",
+   "描述": "onion products",
+   "金标": "20059920",
+   "subject": "The tariff classification of onion products from China"
+  },
+  {
+   "裁定号": "N339116",
+   "日期": "2024-04-05",
+   "描述": "scissor lift",
+   "金标": "84279000",
+   "subject": "The tariff classification of a scissor lift from China"
+  },
+  {
+   "裁定号": "N339136",
+   "日期": "2024-04-23",
+   "描述": "Celecoxib Capsules in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Celecoxib Capsules in dosage form, from India"
+  },
+  {
+   "裁定号": "N339348",
+   "日期": "2024-04-12",
+   "描述": "Christmas wreaths",
+   "金标": "95051025",
+   "subject": "The tariff classification of Christmas wreaths from China."
+  },
+  {
+   "裁定号": "N339563",
+   "日期": "2024-05-01",
+   "描述": "whiskey smoker",
+   "金标": "73218900",
+   "subject": "The tariff classification of a whiskey smoker from Italy"
+  },
+  {
+   "裁定号": "N339568",
+   "日期": "2024-05-10",
+   "描述": "boy’s upper body garment",
+   "金标": "61102020",
+   "subject": "The tariff classification of a boy’s upper body garment from Bangladesh."
+  },
+  {
+   "裁定号": "N339583",
+   "日期": "2024-05-08",
+   "描述": "surface covered plywood panels",
+   "金标": "44123357",
+   "subject": "The tariff classification of surface covered plywood panels from China"
+  },
+  {
+   "裁定号": "N339640",
+   "日期": "2024-04-30",
+   "描述": "Halloween decoration",
+   "金标": "95059060",
+   "subject": "The tariff classification of a Halloween decoration from China."
+  },
+  {
+   "裁定号": "N339643",
+   "日期": "2024-05-01",
+   "描述": "Halloween decoration",
+   "金标": "95059060",
+   "subject": "The tariff classification of a Halloween decoration from China."
+  },
+  {
+   "裁定号": "N340051",
+   "日期": "2024-05-20",
+   "描述": "Day of the Dead decorations",
+   "金标": "95059060",
+   "subject": "The tariff classification of a Day of the Dead decorations from China."
+  },
+  {
+   "裁定号": "N340218",
+   "日期": "2024-05-28",
+   "描述": "novelty Halloween glasses",
+   "金标": "95059060",
+   "subject": "The tariff classification of novelty Halloween glasses from China."
+  },
+  {
+   "裁定号": "N340492",
+   "日期": "2024-06-25",
+   "描述": "facial serum and a facial cream from the United Kingdom",
+   "金标": "33049950",
+   "subject": "The tariff classification of a facial serum and a facial cream from the United Kingdom"
+  },
+  {
+   "裁定号": "N340549",
+   "日期": "2024-06-06",
+   "描述": "miscellaneous edible preparation",
+   "金标": "21069099",
+   "subject": "The tariff classification of a miscellaneous edible preparation from Germany."
+  },
+  {
+   "裁定号": "N340554",
+   "日期": "2024-06-26",
+   "描述": "woman’s jacket",
+   "金标": "62114950",
+   "subject": "The tariff classification of a woman’s jacket from China"
+  },
+  {
+   "裁定号": "N340774",
+   "日期": "2024-06-27",
+   "描述": "dotting tool",
+   "金标": "73269086",
+   "subject": "The tariff classification of a dotting tool from China"
+  },
+  {
+   "裁定号": "N340835",
+   "日期": "2024-06-28",
+   "描述": "stainless steel pool gate safety latch",
+   "金标": "83024960",
+   "subject": "The tariff classification of a stainless steel pool gate safety latch from China"
+  },
+  {
+   "裁定号": "N340956",
+   "日期": "2024-07-17",
+   "描述": "candle warmer lamp",
+   "金标": "94052960",
+   "subject": "The tariff classification of a candle warmer lamp from China"
+  },
+  {
+   "裁定号": "N341076",
+   "日期": "2024-07-16",
+   "描述": "nonalloy steel coils",
+   "金标": "72107060",
+   "subject": "The tariff classification of nonalloy steel coils from Mexico"
+  },
+  {
+   "裁定号": "N341089",
+   "日期": "2024-07-17",
+   "描述": "manifold end covers",
+   "金标": "84819090",
+   "subject": "The tariff classification of manifold end covers from China"
+  },
+  {
+   "裁定号": "N341095",
+   "日期": "2024-07-18",
+   "描述": "nonalloy steel coils",
+   "金标": "72104900",
+   "subject": "The tariff classification of nonalloy steel coils from Canada"
+  },
+  {
+   "裁定号": "N341405",
+   "日期": "2024-08-06",
+   "描述": "Methylprednisolone Tablets in dosage form,",
+   "金标": "30043200",
+   "subject": "The tariff classification of Methylprednisolone Tablets in dosage form, from India"
+  },
+  {
+   "裁定号": "N341424",
+   "日期": "2024-07-29",
+   "描述": "nonalloy steel coils",
+   "金标": "72107060",
+   "subject": "The tariff classification of nonalloy steel coils from Canada"
+  },
+  {
+   "裁定号": "N341553",
+   "日期": "2024-08-20",
+   "描述": "trifold toiletry bag with plastic bottles",
+   "金标": "42029231",
+   "subject": "The tariff classification of a trifold toiletry bag with plastic bottles from China"
+  },
+  {
+   "裁定号": "N342015",
+   "日期": "2024-09-05",
+   "描述": "media player",
+   "金标": "85219000",
+   "subject": "The tariff classification of a media player from Taiwan or China"
+  },
+  {
+   "裁定号": "N342043",
+   "日期": "2024-08-21",
+   "描述": "printed decor",
+   "金标": "49119980",
+   "subject": "The tariff classification of printed decor from Vietnam"
+  },
+  {
+   "裁定号": "N342049",
+   "日期": "2024-08-27",
+   "描述": "cuticle manicure set",
+   "金标": "82142090",
+   "subject": "The tariff classification of a cuticle manicure set from China."
+  },
+  {
+   "裁定号": "N342330",
+   "日期": "2024-09-24",
+   "描述": "footwear form China",
+   "金标": "64029931",
+   "subject": "The tariff classification of footwear form China"
+  },
+  {
+   "裁定号": "N342336",
+   "日期": "2024-09-18",
+   "描述": "woman's metal belt",
+   "金标": "73269086",
+   "subject": "The tariff classification of a woman's metal belt from Cambodia"
+  },
+  {
+   "裁定号": "N342354",
+   "日期": "2025-11-07",
+   "描述": "polyester double knit fabric",
+   "金标": "60063300",
+   "subject": "The tariff classification of a polyester double knit fabric from China"
+  },
+  {
+   "裁定号": "N342376",
+   "日期": "2024-09-06",
+   "描述": "interactive outdoor kiosk",
+   "金标": "85437098",
+   "subject": "The tariff classification of an interactive outdoor kiosk from Taiwan"
+  },
+  {
+   "裁定号": "N342478",
+   "日期": "2024-09-26",
+   "描述": "men’s upper body garments",
+   "金标": "61102020",
+   "subject": "The tariff classification of men’s upper body garments from China and Bulgaria"
+  },
+  {
+   "裁定号": "N342897",
+   "日期": "2024-10-22",
+   "描述": "Tranexamic Acid in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Tranexamic Acid in dosage form, from China"
+  },
+  {
+   "裁定号": "N342983",
+   "日期": "2024-10-10",
+   "描述": "boys’ jacket",
+   "金标": "62014075",
+   "subject": "The tariff classification of a boys’ jacket from Bangladesh or Vietnam"
+  },
+  {
+   "裁定号": "N343173",
+   "日期": "2024-10-30",
+   "描述": "woman’s blouse",
+   "金标": "62064030",
+   "subject": "The tariff classification of a woman’s blouse from China"
+  },
+  {
+   "裁定号": "N343184",
+   "日期": "2024-10-29",
+   "描述": "children’s toy gardening set",
+   "金标": "95030000",
+   "subject": "The tariff classification of a children’s toy gardening set from China"
+  },
+  {
+   "裁定号": "N343288",
+   "日期": "2024-10-17",
+   "描述": "wooden table décor",
+   "金标": "44201900",
+   "subject": "The tariff classification of a wooden table décor from China"
+  },
+  {
+   "裁定号": "N343299",
+   "日期": "2024-10-17",
+   "描述": "polyethylene mailer bag",
+   "金标": "39232100",
+   "subject": "The tariff classification of a polyethylene mailer bag from China"
+  },
+  {
+   "裁定号": "N343391",
+   "日期": "2024-10-22",
+   "描述": "party decoration",
+   "金标": "95059040",
+   "subject": "The tariff classification of a party decoration from China."
+  },
+  {
+   "裁定号": "N343393",
+   "日期": "2024-10-23",
+   "描述": "plastic bookmarks",
+   "金标": "39261000",
+   "subject": "The tariff classification of plastic bookmarks from China"
+  },
+  {
+   "裁定号": "N343483",
+   "日期": "2024-11-12",
+   "描述": "plastic automotive body trim pieces",
+   "金标": "39263050",
+   "subject": "The tariff classification of plastic automotive body trim pieces from China."
+  },
+  {
+   "裁定号": "N343522",
+   "日期": "2024-11-12",
+   "描述": "metal wreath hanger",
+   "金标": "83025000",
+   "subject": "The tariff classification of a metal wreath hanger from China"
+  },
+  {
+   "裁定号": "N343569",
+   "日期": "2024-11-21",
+   "描述": "steel reprocessing sink",
+   "金标": "73241000",
+   "subject": "The tariff classification of a steel reprocessing sink from Canada"
+  },
+  {
+   "裁定号": "N344012",
+   "日期": "2024-12-04",
+   "描述": "pneumatic pressure redistribution device",
+   "金标": "39269075",
+   "subject": "The tariff classification of a pneumatic pressure redistribution device from China."
+  },
+  {
+   "裁定号": "N344257",
+   "日期": "2024-12-13",
+   "描述": "candle holder",
+   "金标": "94055040",
+   "subject": "The tariff classification of a candle holder from China"
+  },
+  {
+   "裁定号": "N344437",
+   "日期": "2024-12-17",
+   "描述": "slip-on footwear",
+   "金标": "64029931",
+   "subject": "The tariff classification of slip-on footwear  from Vietnam"
+  },
+  {
+   "裁定号": "N344559",
+   "日期": "2025-01-06",
+   "描述": "adjustable workstation",
+   "金标": "94032000",
+   "subject": "The tariff classification of an adjustable workstation from Mexico"
+  },
+  {
+   "裁定号": "N345071",
+   "日期": "2025-02-07",
+   "描述": "stuffed food preparation",
+   "金标": "19022000",
+   "subject": "The tariff classification of a stuffed food preparation from Vietnam"
+  },
+  {
+   "裁定号": "N345344",
+   "日期": "2025-02-12",
+   "描述": "plastic mesh",
+   "金标": "39269099",
+   "subject": "The tariff classification of plastic mesh from China."
+  },
+  {
+   "裁定号": "N345475",
+   "日期": "2025-02-11",
+   "描述": "printed wooden figures and pens",
+   "金标": "49119140",
+   "subject": "The tariff classification of printed wooden figures and pens from China"
+  },
+  {
+   "裁定号": "N345569",
+   "日期": "2025-02-05",
+   "描述": "empty plastic bottles with caps",
+   "金标": "39233000",
+   "subject": "The tariff classification of empty plastic bottles with caps from China"
+  },
+  {
+   "裁定号": "N345669",
+   "日期": "2025-03-03",
+   "描述": "Versace Elastic Loop with Bow",
+   "金标": "63079098",
+   "subject": "The tariff classification of a Versace Elastic Loop with Bow from China"
+  },
+  {
+   "裁定号": "N345733",
+   "日期": "2025-02-11",
+   "描述": "tin oxide nano-particle suspension",
+   "金标": "38249993",
+   "subject": "The tariff classification of a tin oxide nano-particle suspension from Japan"
+  },
+  {
+   "裁定号": "N345901",
+   "日期": "2025-02-18",
+   "描述": "guitar effect processor",
+   "金标": "85437098",
+   "subject": "The tariff classification of a guitar effect processor from Japan"
+  },
+  {
+   "裁定号": "N345907",
+   "日期": "2025-02-20",
+   "描述": "elastomeric ethylene copolymers",
+   "金标": "39019010",
+   "subject": "The tariff classification of elastomeric ethylene copolymers from Belgium"
+  },
+  {
+   "裁定号": "N346196",
+   "日期": "2025-03-06",
+   "描述": "four laminated nonwoven fabrics",
+   "金标": "56031200",
+   "subject": "The tariff classification of four laminated nonwoven fabrics from India"
+  },
+  {
+   "裁定号": "N346239",
+   "日期": "2025-03-19",
+   "描述": "aluminum shutters",
+   "金标": "76109000",
+   "subject": "The tariff classification of aluminum shutters from Honduras"
+  },
+  {
+   "裁定号": "N346399",
+   "日期": "2025-04-01",
+   "描述": "spooled wire of precious metal",
+   "金标": "71159060",
+   "subject": "The tariff classification of spooled wire of precious metal"
+  },
+  {
+   "裁定号": "N346536",
+   "日期": "2025-03-26",
+   "描述": "live edge wood boards",
+   "金标": "44071100",
+   "subject": "The tariff classification of live edge wood boards from Canada"
+  },
+  {
+   "裁定号": "N346628",
+   "日期": "2025-04-01",
+   "描述": "powdered bromelain",
+   "金标": "35079070",
+   "subject": "The tariff classification of powdered bromelain from India"
+  },
+  {
+   "裁定号": "N346688",
+   "日期": "2025-03-18",
+   "描述": "nutcracker figure",
+   "金标": "95051025",
+   "subject": "The tariff classification of a nutcracker figure from China."
+  },
+  {
+   "裁定号": "N346733",
+   "日期": "2025-03-20",
+   "描述": "clothes hangers",
+   "金标": "44211000",
+   "subject": "The tariff classification of clothes hangers from China"
+  },
+  {
+   "裁定号": "N346885",
+   "日期": "2025-03-20",
+   "描述": "Christmas stocking holders",
+   "金标": "95051025",
+   "subject": "The tariff classification of Christmas stocking holders from China."
+  },
+  {
+   "裁定号": "N347111",
+   "日期": "2025-04-21",
+   "描述": "fish oil mixture",
+   "金标": "38249941",
+   "subject": "The tariff classification of a fish oil mixture from Norway"
+  },
+  {
+   "裁定号": "N347153",
+   "日期": "2025-04-15",
+   "描述": "cannabis vaporizer kit",
+   "金标": "85434000",
+   "subject": "The tariff classification of a cannabis vaporizer kit from China"
+  },
+  {
+   "裁定号": "N347382",
+   "日期": "2025-04-15",
+   "描述": "rubber profile shapes",
+   "金标": "40082920",
+   "subject": "The tariff classification of rubber profile shapes from China"
+  },
+  {
+   "裁定号": "N347454",
+   "日期": "2025-04-29",
+   "描述": "“PGAT Hook & Toss” game",
+   "金标": "95049090",
+   "subject": "The tariff classification of a “PGAT Hook & Toss” game from China."
+  },
+  {
+   "裁定号": "N347486",
+   "日期": "2025-04-09",
+   "描述": "Ball Marker 3 Piece Set",
+   "金标": "95063900",
+   "subject": "The tariff classification of a Ball Marker 3 Piece Set from China."
+  },
+  {
+   "裁定号": "N347488",
+   "日期": "2025-04-22",
+   "描述": "metal tie bar",
+   "金标": "71171990",
+   "subject": "The tariff classification of a metal tie bar from China"
+  },
+  {
+   "裁定号": "N347565",
+   "日期": "2025-04-23",
+   "描述": "play kitchen",
+   "金标": "95030000",
+   "subject": "The tariff classification of a play kitchen from China."
+  },
+  {
+   "裁定号": "N347619",
+   "日期": "2025-04-15",
+   "描述": "solid wood flooring",
+   "金标": "44189991",
+   "subject": "The tariff classification of solid wood flooring from Indonesia"
+  },
+  {
+   "裁定号": "N347761",
+   "日期": "2025-05-08",
+   "描述": "plastic automotive body trim pieces",
+   "金标": "39263050",
+   "subject": "The tariff classification of plastic automotive body trim pieces from South Korea."
+  },
+  {
+   "裁定号": "N347781",
+   "日期": "2025-04-22",
+   "描述": "beverage holder",
+   "金标": "63079098",
+   "subject": "The tariff classification of a beverage holder from China"
+  },
+  {
+   "裁定号": "N347822",
+   "日期": "2025-05-12",
+   "描述": "forensic-use fentanyl detection device",
+   "金标": "38221900",
+   "subject": "The tariff classification of a forensic-use fentanyl detection device from China"
+  },
+  {
+   "裁定号": "N347885",
+   "日期": "2025-05-09",
+   "描述": "nasal aspirator",
+   "金标": "39269099",
+   "subject": "The tariff classification of a nasal aspirator from Sweden."
+  },
+  {
+   "裁定号": "N348214",
+   "日期": "2025-05-16",
+   "描述": "His Tag ELISA (Enzyme-Linked Immunosorbent Assay) Detection Kit",
+   "金标": "38221900",
+   "subject": "The tariff classification of a His Tag ELISA (Enzyme-Linked Immunosorbent Assay) Detection Kit from China"
+  },
+  {
+   "裁定号": "N348323",
+   "日期": "2025-05-09",
+   "描述": "quartz oscillator",
+   "金标": "85437098",
+   "subject": "The tariff classification of a quartz oscillator from South Korea"
+  },
+  {
+   "裁定号": "N348388",
+   "日期": "2025-05-16",
+   "描述": "ultrasonic dog barking control device",
+   "金标": "85437098",
+   "subject": "The tariff classification of an ultrasonic dog barking control device from China"
+  },
+  {
+   "裁定号": "N348517",
+   "日期": "2025-05-16",
+   "描述": "blood testing meter systems",
+   "金标": "90275040",
+   "subject": "The tariff classification of blood testing meter systems from Malaysia"
+  },
+  {
+   "裁定号": "N348691",
+   "日期": "2025-05-20",
+   "描述": "CV Joint assembly and outboard boot",
+   "金标": "87089968",
+   "subject": "The tariff classification of a CV Joint assembly and outboard boot from South Korea"
+  },
+  {
+   "裁定号": "N348766",
+   "日期": "2025-05-09",
+   "描述": "polyvinyl chloride (PVC) hose",
+   "金标": "39173300",
+   "subject": "The tariff classification of a polyvinyl chloride (PVC) hose from Korea"
+  },
+  {
+   "裁定号": "N348898",
+   "日期": "2025-05-19",
+   "描述": "drawing activity kit",
+   "金标": "49030000",
+   "subject": "The tariff classification of a drawing activity kit from China"
+  },
+  {
+   "裁定号": "N348931",
+   "日期": "2025-06-11",
+   "描述": "sudoku and word puzzle paperback books",
+   "金标": "95030000",
+   "subject": "The tariff classification of sudoku and word puzzle paperback books from China."
+  },
+  {
+   "裁定号": "N349024",
+   "日期": "2025-06-09",
+   "描述": "orthopedic appliances for foals",
+   "金标": "90211000",
+   "subject": "The tariff classification of orthopedic appliances for foals from Germany"
+  },
+  {
+   "裁定号": "N349200",
+   "日期": "2025-05-22",
+   "描述": "ceramic decoration",
+   "金标": "69139050",
+   "subject": "The tariff classification of a ceramic decoration from China"
+  },
+  {
+   "裁定号": "N349201",
+   "日期": "2025-05-27",
+   "描述": "ceramic decoration",
+   "金标": "69139050",
+   "subject": "The tariff classification of a ceramic decoration from China"
+  },
+  {
+   "裁定号": "N349261",
+   "日期": "2025-06-13",
+   "描述": "plastic automotive body trim pieces",
+   "金标": "39263050",
+   "subject": "The tariff classification of plastic automotive body trim pieces from South Korea."
+  },
+  {
+   "裁定号": "N349268",
+   "日期": "2025-06-17",
+   "描述": "road marking truck",
+   "金标": "87059000",
+   "subject": "The tariff classification of a road marking truck from Canada"
+  },
+  {
+   "裁定号": "N349349",
+   "日期": "2025-06-04",
+   "描述": "transmission control unit",
+   "金标": "85437098",
+   "subject": "The tariff classification of a transmission control unit from Korea"
+  },
+  {
+   "裁定号": "N349543",
+   "日期": "2025-06-06",
+   "描述": "flash gas separator module",
+   "金标": "84212900",
+   "subject": "The tariff classification of a flash gas separator module from Canada"
+  },
+  {
+   "裁定号": "N349685",
+   "日期": "2025-06-10",
+   "描述": "women’s knit garment",
+   "金标": "61143010",
+   "subject": "The tariff classification of a women’s knit garment from Vietnam"
+  },
+  {
+   "裁定号": "N349823",
+   "日期": "2025-06-27",
+   "描述": "aluminum scrap",
+   "金标": "76020000",
+   "subject": "The tariff classification of aluminum scrap from Canada"
+  },
+  {
+   "裁定号": "N349842",
+   "日期": "2025-06-24",
+   "描述": "ball hopper baskets",
+   "金标": "73269086",
+   "subject": "The tariff classification of ball hopper baskets from China"
+  },
+  {
+   "裁定号": "N349944",
+   "日期": "2025-07-02",
+   "描述": "plastic peelable heat shrink tubing",
+   "金标": "39269099",
+   "subject": "The tariff classification of plastic peelable heat shrink tubing from Japan."
+  },
+  {
+   "裁定号": "N349965",
+   "日期": "2025-06-12",
+   "描述": "vulcanized rubber conveyor belt reinforced with steel cord",
+   "金标": "40101100",
+   "subject": "The tariff classification of a vulcanized rubber conveyor belt reinforced with steel cord from China"
+  },
+  {
+   "裁定号": "N350173",
+   "日期": "2025-07-09",
+   "描述": "LED clip-on light",
+   "金标": "85131040",
+   "subject": "The tariff classification of an LED clip-on light from China"
+  },
+  {
+   "裁定号": "N350426",
+   "日期": "2025-07-11",
+   "描述": "plastic automotive body trim piece",
+   "金标": "39263050",
+   "subject": "The tariff classification of a plastic automotive body trim piece from South Korea."
+  },
+  {
+   "裁定号": "N350482",
+   "日期": "2025-07-16",
+   "描述": "steel retail display channels",
+   "金标": "83024230",
+   "subject": "The tariff classification of steel retail display channels from China"
+  },
+  {
+   "裁定号": "N350568",
+   "日期": "2025-07-09",
+   "描述": "steel structures",
+   "金标": "73089095",
+   "subject": "The tariff classification of steel structures from Mexico"
+  },
+  {
+   "裁定号": "N350577",
+   "日期": "2025-07-14",
+   "描述": "plastic sterilizer bag",
+   "金标": "39249056",
+   "subject": "The tariff classification of a plastic sterilizer bag from Vietnam"
+  },
+  {
+   "裁定号": "N350591",
+   "日期": "2025-07-03",
+   "描述": "plastic trophy",
+   "金标": "39264000",
+   "subject": "The tariff classification of a plastic trophy from China."
+  },
+  {
+   "裁定号": "N350598",
+   "日期": "2025-07-15",
+   "描述": "plastic automotive body trim pieces",
+   "金标": "39263050",
+   "subject": "The tariff classification of plastic automotive body trim pieces from South Korea."
+  },
+  {
+   "裁定号": "N350636",
+   "日期": "2025-07-09",
+   "描述": "women’s knit blouses",
+   "金标": "61061000",
+   "subject": "The tariff classification of women’s knit blouses from China"
+  },
+  {
+   "裁定号": "N350696",
+   "日期": "2025-07-02",
+   "描述": "modular building components",
+   "金标": "76169951",
+   "subject": "The tariff classification of modular building components from Canada"
+  },
+  {
+   "裁定号": "N350951",
+   "日期": "2025-08-01",
+   "描述": "steel automotive fastener",
+   "金标": "73181560",
+   "subject": "The tariff classification of a steel automotive fastener from Taiwan"
+  },
+  {
+   "裁定号": "N350952",
+   "日期": "2025-08-01",
+   "描述": "steel automotive fastener",
+   "金标": "73181560",
+   "subject": "The tariff classification of a steel automotive fastener from Taiwan"
+  },
+  {
+   "裁定号": "N351151",
+   "日期": "2025-08-05",
+   "描述": "leather flocked fabric",
+   "金标": "59070060",
+   "subject": "The tariff classification of a leather flocked fabric from China."
+  },
+  {
+   "裁定号": "N351191",
+   "日期": "2025-07-21",
+   "描述": "liquid micronutrient preparation",
+   "金标": "38249993",
+   "subject": "The tariff classification of a liquid micronutrient preparation from Spain"
+  },
+  {
+   "裁定号": "N351244",
+   "日期": "2025-07-29",
+   "描述": "analog digital converter",
+   "金标": "85437098",
+   "subject": "The tariff classification of an analog digital converter from Japan"
+  },
+  {
+   "裁定号": "N351417",
+   "日期": "2025-07-25",
+   "描述": "powder coating",
+   "金标": "38249939",
+   "subject": "The tariff classification of a powder coating from Japan"
+  },
+  {
+   "裁定号": "N351670",
+   "日期": "2025-07-30",
+   "描述": "oil hose reels",
+   "金标": "40092200",
+   "subject": "The tariff classification of oil hose reels from China"
+  },
+  {
+   "裁定号": "N351764",
+   "日期": "2025-08-25",
+   "描述": "plastic automotive mounting bracket",
+   "金标": "39269099",
+   "subject": "The tariff classification of a plastic automotive mounting bracket from South Korea."
+  },
+  {
+   "裁定号": "N351814",
+   "日期": "2025-08-15",
+   "描述": "battery packs",
+   "金标": "85076000",
+   "subject": "The tariff classification of battery packs from China"
+  },
+  {
+   "裁定号": "N352108",
+   "日期": "2025-08-19",
+   "描述": "mixed reality headset",
+   "金标": "84714101",
+   "subject": "The tariff classification of a mixed reality headset from South Korea"
+  },
+  {
+   "裁定号": "N352196",
+   "日期": "2025-08-25",
+   "描述": "electric motors",
+   "金标": "85013140",
+   "subject": "The tariff classification of electric motors from China"
+  },
+  {
+   "裁定号": "N352198",
+   "日期": "2025-08-25",
+   "描述": "electric motors",
+   "金标": "85013140",
+   "subject": "The tariff classification of electric motors from China"
+  },
+  {
+   "裁定号": "N352206",
+   "日期": "2025-08-15",
+   "描述": "1999 Subaru Sambar",
+   "金标": "87032101",
+   "subject": "The tariff classification of a 1999 Subaru Sambar from Japan"
+  },
+  {
+   "裁定号": "N352273",
+   "日期": "2025-08-14",
+   "描述": "brass cartridge cases from multiple countries",
+   "金标": "93063080",
+   "subject": "The tariff classification of brass cartridge cases from multiple countries"
+  },
+  {
+   "裁定号": "N352534",
+   "日期": "2025-09-09",
+   "描述": "plastic automotive body trim piece",
+   "金标": "39263050",
+   "subject": "The tariff classification of a plastic automotive body trim piece from South Korea."
+  },
+  {
+   "裁定号": "N352565",
+   "日期": "2025-09-04",
+   "描述": "lipstick case",
+   "金标": "42023293",
+   "subject": "The tariff classification of a lipstick case from China"
+  },
+  {
+   "裁定号": "N352581",
+   "日期": "2025-09-04",
+   "描述": "brake hose fittings",
+   "金标": "87083050",
+   "subject": "The tariff classification of brake hose fittings from Japan"
+  },
+  {
+   "裁定号": "N352598",
+   "日期": "2025-09-17",
+   "描述": "honey cakes from the Czech Republic",
+   "金标": "19059010",
+   "subject": "The tariff classification of honey cakes from the Czech Republic"
+  },
+  {
+   "裁定号": "N352608",
+   "日期": "2025-09-10",
+   "描述": "oxygen concentrator",
+   "金标": "90192000",
+   "subject": "The tariff classification of an oxygen concentrator from China"
+  },
+  {
+   "裁定号": "N352636",
+   "日期": "2025-09-11",
+   "描述": "plastic utility bins",
+   "金标": "39269099",
+   "subject": "The tariff classification of plastic utility bins from Taiwan."
+  },
+  {
+   "裁定号": "N352935",
+   "日期": "2025-09-16",
+   "描述": "laptop accessory",
+   "金标": "84733051",
+   "subject": "The tariff classification of a laptop accessory from China"
+  },
+  {
+   "裁定号": "N353081",
+   "日期": "2025-09-09",
+   "描述": "tree climbing spurs",
+   "金标": "73269086",
+   "subject": "The tariff classification of tree climbing spurs from Germany"
+  },
+  {
+   "裁定号": "N353118",
+   "日期": "2025-10-01",
+   "描述": "Herbal Tinctures",
+   "金标": "13021941",
+   "subject": "The tariff classification of Herbal Tinctures from Canada"
+  },
+  {
+   "裁定号": "N353292",
+   "日期": "2025-09-18",
+   "描述": "Mazlite System",
+   "金标": "90314990",
+   "subject": "The tariff classification of the Mazlite System from Canada"
+  },
+  {
+   "裁定号": "N353377",
+   "日期": "2025-09-23",
+   "描述": "Valentine's Day themed puzzle booklet",
+   "金标": "95030000",
+   "subject": "The tariff classification of a Valentine's Day themed puzzle booklet from China."
+  },
+  {
+   "裁定号": "N353386",
+   "日期": "2025-09-19",
+   "描述": "instructional flash cards",
+   "金标": "49119960",
+   "subject": "The tariff classification of instructional flash cards from India"
+  },
+  {
+   "裁定号": "N353460",
+   "日期": "2025-09-24",
+   "描述": "Pre-Amp PCBA",
+   "金标": "85184020",
+   "subject": "The tariff classification of a Pre-Amp PCBA from China"
+  },
+  {
+   "裁定号": "N353462",
+   "日期": "2025-10-02",
+   "描述": "plastic automotive component",
+   "金标": "39263050",
+   "subject": "The tariff classification of a plastic automotive component from South Korea."
+  },
+  {
+   "裁定号": "N353514",
+   "日期": "2025-09-29",
+   "描述": "three chalkboards",
+   "金标": "96100000",
+   "subject": "The tariff classification of three chalkboards from China"
+  },
+  {
+   "裁定号": "N353605",
+   "日期": "2025-10-10",
+   "描述": "Pemetrexed Disodium Hemipentahydrate for Injection in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Pemetrexed Disodium Hemipentahydrate for Injection in dosage form, from China"
+  },
+  {
+   "裁定号": "N353640",
+   "日期": "2025-10-06",
+   "描述": "stainless-steel wastebaskets",
+   "金标": "73239300",
+   "subject": "The tariff classification of stainless-steel wastebaskets from China"
+  },
+  {
+   "裁定号": "N353699",
+   "日期": "2025-09-26",
+   "描述": "textile bag charms",
+   "金标": "63079098",
+   "subject": "The tariff classification of textile bag charms from Cambodia"
+  },
+  {
+   "裁定号": "N353703",
+   "日期": "2025-10-07",
+   "描述": "Halloween decorations",
+   "金标": "95059060",
+   "subject": "The tariff classification of Halloween decorations from China."
+  },
+  {
+   "裁定号": "N353829",
+   "日期": "2025-10-08",
+   "描述": "metal sub assembly",
+   "金标": "83016000",
+   "subject": "The tariff classification of metal sub assembly from South Korea"
+  },
+  {
+   "裁定号": "N353893",
+   "日期": "2025-10-10",
+   "描述": "headgear clips",
+   "金标": "90192000",
+   "subject": "The tariff classification of headgear clips from China and Costa Rica"
+  },
+  {
+   "裁定号": "N353912",
+   "日期": "2025-10-14",
+   "描述": "stainless-steel wastebaskets",
+   "金标": "73239300",
+   "subject": "The tariff classification of stainless-steel wastebaskets from China"
+  },
+  {
+   "裁定号": "N353978",
+   "日期": "2025-10-01",
+   "描述": "security token",
+   "金标": "85437098",
+   "subject": "The tariff classification of a security token from Mexico"
+  },
+  {
+   "裁定号": "N354199",
+   "日期": "2025-10-22",
+   "描述": "Frozen Seasoned Boneless Beef",
+   "金标": "16025021",
+   "subject": "The tariff classification of Frozen Seasoned Boneless Beef from Canada"
+  },
+  {
+   "裁定号": "N354399",
+   "日期": "2025-10-10",
+   "描述": "livestock monitoring system",
+   "金标": "90318080",
+   "subject": "The tariff classification of a livestock monitoring system from Germany"
+  },
+  {
+   "裁定号": "N354522",
+   "日期": "2025-10-24",
+   "描述": "fuel injection rails",
+   "金标": "87089981",
+   "subject": "The tariff classification of fuel injection rails from Japan"
+  },
+  {
+   "裁定号": "N354666",
+   "日期": "2025-10-15",
+   "描述": "outdoor electrical outlet cover",
+   "金标": "76169951",
+   "subject": "The tariff classification of an outdoor electrical outlet cover from Vietnam"
+  },
+  {
+   "裁定号": "N354811",
+   "日期": "2026-05-05",
+   "描述": "Caravelas stone",
+   "金标": "68029300",
+   "subject": "The tariff classification of Caravelas stone from Brazil."
+  },
+  {
+   "裁定号": "N354854",
+   "日期": "2025-10-27",
+   "描述": "tread cassette carts",
+   "金标": "84798995",
+   "subject": "The tariff classification of tread cassette carts from Czech Republic"
+  },
+  {
+   "裁定号": "N354998",
+   "日期": "2025-11-14",
+   "描述": "coated fabric",
+   "金标": "59039025",
+   "subject": "The tariff classification of a coated fabric from Japan"
+  },
+  {
+   "裁定号": "N355070",
+   "日期": "2025-10-30",
+   "描述": "poly(3-hydroxybutyrate)-co-3-hydroxyhexanoate)",
+   "金标": "39139050",
+   "subject": "The tariff classification of poly(3-hydroxybutyrate)-co-3-hydroxyhexanoate) from Japan"
+  },
+  {
+   "裁定号": "N355171",
+   "日期": "2025-10-30",
+   "描述": "calcined petroleum coke",
+   "金标": "27131200",
+   "subject": "The tariff classification of calcined petroleum coke from Brazil"
+  },
+  {
+   "裁定号": "N355190",
+   "日期": "2025-11-06",
+   "描述": "Seasoned Squid from South Korea. Correction to Ruling Number N352331",
+   "金标": "16055460",
+   "subject": "The tariff classification of Seasoned Squid from South Korea. Correction to Ruling Number N352331"
+  },
+  {
+   "裁定号": "N355390",
+   "日期": "2025-11-10",
+   "描述": "foam components for aviation headsets from the Philippines",
+   "金标": "85189081",
+   "subject": "The tariff classification of foam components for aviation headsets from the Philippines"
+  },
+  {
+   "裁定号": "N355833",
+   "日期": "2025-11-20",
+   "描述": "dispenser head",
+   "金标": "84818050",
+   "subject": "The tariff classification of a dispenser head from China"
+  },
+  {
+   "裁定号": "N355870",
+   "日期": "2025-11-25",
+   "描述": "finger-jointed lumber",
+   "金标": "44071100",
+   "subject": "The tariff classification of finger-jointed lumber from Brazil"
+  },
+  {
+   "裁定号": "N355940",
+   "日期": "2025-12-01",
+   "描述": "men’s coveralls",
+   "金标": "62113290",
+   "subject": "The tariff classification of men’s coveralls from Mexico"
+  },
+  {
+   "裁定号": "N355963",
+   "日期": "2025-12-03",
+   "描述": "children’s soft books",
+   "金标": "49030000",
+   "subject": "The tariff classification of children’s soft books from China"
+  },
+  {
+   "裁定号": "N356036",
+   "日期": "2025-12-02",
+   "描述": "embroidered bag charm",
+   "金标": "63079098",
+   "subject": "The tariff classification of an embroidered bag charm from Taiwan"
+  },
+  {
+   "裁定号": "N356154",
+   "日期": "2025-12-10",
+   "描述": "robotic platforms",
+   "金标": "84798995",
+   "subject": "The tariff classification of robotic platforms from China"
+  },
+  {
+   "裁定号": "N356414",
+   "日期": "2025-12-16",
+   "描述": "sorting grab",
+   "金标": "84314100",
+   "subject": "The tariff classification of a sorting grab from South Korea"
+  },
+  {
+   "裁定号": "N356491",
+   "日期": "2025-12-16",
+   "描述": "aviation headset parts",
+   "金标": "85189081",
+   "subject": "The tariff classification of aviation headset parts from China"
+  },
+  {
+   "裁定号": "N356909",
+   "日期": "2026-01-05",
+   "描述": "fiber optic cabinets",
+   "金标": "90138091",
+   "subject": "The tariff classification of fiber optic cabinets from Mexico"
+  },
+  {
+   "裁定号": "N356971",
+   "日期": "2026-01-08",
+   "描述": "long chain fatty acid prill",
+   "金标": "38231920",
+   "subject": "The tariff classification of a long chain fatty acid prill from Malaysia"
+  },
+  {
+   "裁定号": "N357215",
+   "日期": "2026-01-08",
+   "描述": "automobile lens assembly",
+   "金标": "90029095",
+   "subject": "The tariff classification of an automobile lens assembly from Malaysia"
+  },
+  {
+   "裁定号": "N357266",
+   "日期": "2026-01-21",
+   "描述": "“Genmaicha Tea Bags (Roasted Brown Rice Green Tea)”",
+   "金标": "19049001",
+   "subject": "The tariff classification of “Genmaicha Tea Bags (Roasted Brown Rice Green Tea)” from Japan"
+  },
+  {
+   "裁定号": "N357365",
+   "日期": "2026-01-13",
+   "描述": "SPF dimensional lumber",
+   "金标": "44071300",
+   "subject": "The tariff classification of SPF dimensional lumber from Canada"
+  },
+  {
+   "裁定号": "N357645",
+   "日期": "2026-01-28",
+   "描述": "toilet seat incorporating an electronic bidet",
+   "金标": "39222000",
+   "subject": "The tariff classification of a toilet seat incorporating an electronic bidet from Korea"
+  },
+  {
+   "裁定号": "N357689",
+   "日期": "2026-01-30",
+   "描述": "upper body garment",
+   "金标": "61102020",
+   "subject": "The tariff classification of an upper body garment from South Korea"
+  },
+  {
+   "裁定号": "N358151",
+   "日期": "2026-02-17",
+   "描述": "RoadLoft Minivan Camper Conversion Kit",
+   "金标": "94036080",
+   "subject": "The tariff classification of a RoadLoft Minivan Camper Conversion Kit from Canada"
+  },
+  {
+   "裁定号": "N358187",
+   "日期": "2026-02-25",
+   "描述": "Sacubitril and Valsartan Tablets in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Sacubitril and Valsartan Tablets in dosage form, from India"
+  },
+  {
+   "裁定号": "N358212",
+   "日期": "2026-02-11",
+   "描述": "LFX Synthetic Protein Isolate",
+   "金标": "35040010",
+   "subject": "The tariff classification of LFX Synthetic Protein Isolate from China"
+  },
+  {
+   "裁定号": "N358304",
+   "日期": "2026-02-17",
+   "描述": "wireless speaker system",
+   "金标": "85182200",
+   "subject": "The tariff classification of a wireless speaker system from China"
+  },
+  {
+   "裁定号": "N358409",
+   "日期": "2026-02-27",
+   "描述": "printed reproduction of original artwork",
+   "金标": "49119140",
+   "subject": "The tariff classification of a printed reproduction of original artwork from India"
+  },
+  {
+   "裁定号": "N358581",
+   "日期": "2026-03-02",
+   "描述": "Racing Go Kart chassis without an engine and tires from the Czech Republic",
+   "金标": "87039001",
+   "subject": "The tariff classification of a Racing Go Kart chassis without an engine and tires from the Czech Republic."
+  },
+  {
+   "裁定号": "N358626",
+   "日期": "2026-03-09",
+   "描述": "Clodronic Acid Disoduim Salt Tetrahydrate (CAS No. 88416-50-6) in bulk powder form,",
+   "金标": "29315900",
+   "subject": "The tariff classification of Clodronic Acid Disoduim Salt Tetrahydrate (CAS No. 88416-50-6) in bulk powder form, from Italy"
+  },
+  {
+   "裁定号": "N358675",
+   "日期": "2026-03-05",
+   "描述": "dental orthodontic wire-bending machines",
+   "金标": "90184980",
+   "subject": "The tariff classification of dental orthodontic wire-bending machines from China."
+  },
+  {
+   "裁定号": "N358988",
+   "日期": "2026-03-17",
+   "描述": "textile bib-shaped covering",
+   "金标": "63079098",
+   "subject": "The tariff classification of textile bib-shaped covering from China."
+  },
+  {
+   "裁定号": "N359071",
+   "日期": "2026-03-04",
+   "描述": "parts of aviation headsets",
+   "金标": "85189081",
+   "subject": "The tariff classification of parts of aviation headsets from China"
+  },
+  {
+   "裁定号": "N359289",
+   "日期": "2026-03-13",
+   "描述": "Fischer Plug connector",
+   "金标": "85366940",
+   "subject": "The tariff classification of a Fischer Plug connector from China"
+  },
+  {
+   "裁定号": "N359397",
+   "日期": "2026-03-24",
+   "描述": "“Speedball” game",
+   "金标": "95049040",
+   "subject": "The tariff classification of the “Speedball” game from China."
+  },
+  {
+   "裁定号": "N359513",
+   "日期": "2026-03-25",
+   "描述": "air separator",
+   "金标": "84212900",
+   "subject": "The tariff classification of an air separator from Italy"
+  },
+  {
+   "裁定号": "N359740",
+   "日期": "2026-04-02",
+   "描述": "salad bar bowl",
+   "金标": "76151030",
+   "subject": "The tariff classification of a salad bar bowl from China"
+  },
+  {
+   "裁定号": "N359763",
+   "日期": "2026-04-06",
+   "描述": "camera module",
+   "金标": "85258930",
+   "subject": "The tariff classification of a camera module from Vietnam"
+  },
+  {
+   "裁定号": "N359804",
+   "日期": "2026-03-30",
+   "描述": "Indeelift People Picker Upper",
+   "金标": "84289003",
+   "subject": "The tariff classification of the Indeelift People Picker Upper from China"
+  },
+  {
+   "裁定号": "N359826",
+   "日期": "2026-04-14",
+   "描述": "ceramic decoration",
+   "金标": "69139050",
+   "subject": "The tariff classification of a ceramic decoration from China"
+  },
+  {
+   "裁定号": "N359899",
+   "日期": "2026-04-16",
+   "描述": "CosmeRNA ARI Intensive Hair Revitalizing Tonic, CosmeRNA ARI SalonPro Hair Revitalizing Tonic and ComeRNA ARI Hair Revitalizing Tonic",
+   "金标": "33059000",
+   "subject": "The tariff classification of CosmeRNA ARI Intensive Hair Revitalizing Tonic, CosmeRNA ARI SalonPro Hair Revitalizing Tonic and ComeRNA ARI Hair Revitalizing Tonic from South Korea"
+  },
+  {
+   "裁定号": "N359982",
+   "日期": "2026-04-08",
+   "描述": "self-adhesive polyvinyl chloride (PVC) gel mat from the Philippines",
+   "金标": "39199050",
+   "subject": "The tariff classification of a self-adhesive polyvinyl chloride (PVC) gel mat from the Philippines"
+  },
+  {
+   "裁定号": "N360180",
+   "日期": "2026-04-28",
+   "描述": "Brimonidine Tartrate and Timolol Maleate Ophthalmic Drops 0.2%/0.5% in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Brimonidine Tartrate and Timolol Maleate Ophthalmic Drops 0.2%/0.5% in dosage form, from India"
+  },
+  {
+   "裁定号": "N360185",
+   "日期": "2026-04-21",
+   "描述": "cleaning brush",
+   "金标": "96039080",
+   "subject": "The tariff classification of a cleaning brush from China."
+  },
+  {
+   "裁定号": "N360242",
+   "日期": "2026-04-24",
+   "描述": "output carrier assembly",
+   "金标": "84839050",
+   "subject": "The tariff classification of an output carrier assembly from Mexico and a gear from Canada"
+  },
+  {
+   "裁定号": "N360246",
+   "日期": "2026-04-29",
+   "描述": "Doxorubicin Hydrochloride Liposome Injection in dosage form,",
+   "金标": "30042000",
+   "subject": "The tariff classification of Doxorubicin Hydrochloride Liposome Injection in dosage form, from Germany"
+  },
+  {
+   "裁定号": "N360493",
+   "日期": "2026-05-06",
+   "描述": "Colestipol Hydrochloride Tablets in dosage form,",
+   "金标": "30049092",
+   "subject": "The tariff classification of Colestipol Hydrochloride Tablets in dosage form, from Taiwan"
+  },
+  {
+   "裁定号": "N360739",
+   "日期": "2026-05-14",
+   "描述": "imitation meat products from the United Kingdom",
+   "金标": "21069099",
+   "subject": "The tariff classification of imitation meat products from the United Kingdom"
+  },
+  {
+   "裁定号": "N360761",
+   "日期": "2026-05-12",
+   "描述": "wooden furniture",
+   "金标": "94036080",
+   "subject": "The tariff classification of wooden furniture from Germany"
+  },
+  {
+   "裁定号": "N360809",
+   "日期": "2026-05-01",
+   "描述": "metal furniture",
+   "金标": "94032000",
+   "subject": "The tariff classification of metal furniture from China"
+  },
+  {
+   "裁定号": "N361284",
+   "日期": "2026-05-21",
+   "描述": "air conditioning fittings",
+   "金标": "84159080",
+   "subject": "The tariff classification of air conditioning fittings from Japan"
+  },
+  {
+   "裁定号": "N361405",
+   "日期": "2026-05-13",
+   "描述": "metal furniture",
+   "金标": "94032000",
+   "subject": "The tariff classification of metal furniture from China"
+  },
+  {
+   "裁定号": "N361556",
+   "日期": "2026-06-12",
+   "描述": "women’s blouse",
+   "金标": "61062020",
+   "subject": "The tariff classification of a women’s blouse from Vietnam"
+  },
+  {
+   "裁定号": "N361559",
+   "日期": "2026-06-01",
+   "描述": "confocal microscope system",
+   "金标": "90118000",
+   "subject": "The tariff classification of a confocal microscope system from Japan"
+  },
+  {
+   "裁定号": "N361696",
+   "日期": "2026-06-01",
+   "描述": "5-ply clad metal disc",
+   "金标": "73269086",
+   "subject": "The tariff classification of a 5-ply clad metal disc from South Korea"
+  },
+  {
+   "裁定号": "N361811",
+   "日期": "2026-06-23",
+   "描述": "enameled sheet metal street number plates from the Netherlands",
+   "金标": "83100000",
+   "subject": "The tariff classification of enameled sheet metal street number plates from the Netherlands"
+  },
+  {
+   "裁定号": "N361875",
+   "日期": "2026-06-01",
+   "描述": "seat component",
+   "金标": "94019990",
+   "subject": "The tariff classification of a seat component from Vietnam"
+  },
+  {
+   "裁定号": "N361982",
+   "日期": "2026-06-15",
+   "描述": "incomplete trailers",
+   "金标": "87164000",
+   "subject": "The tariff classification of incomplete trailers from Canada"
+  },
+  {
+   "裁定号": "N362291",
+   "日期": "2026-06-18",
+   "描述": "decorative pillow cover",
+   "金标": "63049935",
+   "subject": "The tariff classification of decorative pillow cover from France"
+  },
+  {
+   "裁定号": "N362304",
+   "日期": "2026-07-10",
+   "描述": "casava flatbread",
+   "金标": "20089965",
+   "subject": "The tariff classification of casava flatbread from Venezuela."
+  },
+  {
+   "裁定号": "N362489",
+   "日期": "2026-06-24",
+   "描述": "sofa sectional and sofa sectional components",
+   "金标": "94016160",
+   "subject": "The tariff classification of a sofa sectional and sofa sectional components from China."
+  },
+  {
+   "裁定号": "N362665",
+   "日期": "2026-07-15",
+   "描述": "Polyaxial Pedicle Screws, MIS Extended-Tab Pedicle Screws, and Locking Set Screws",
+   "金标": "90211000",
+   "subject": "The tariff classification of Polyaxial Pedicle Screws, MIS Extended-Tab Pedicle Screws, and Locking Set Screws from Taiwan"
+  },
+  {
+   "裁定号": "N362694",
+   "日期": "2026-07-16",
+   "描述": "epoxy resin key chain making kit",
+   "金标": "39073000",
+   "subject": "The tariff classification of an epoxy resin key chain making kit from China"
+  },
+  {
+   "裁定号": "N362816",
+   "日期": "2026-07-15",
+   "描述": "“Squishy Cloud Buddies”",
+   "金标": "95030000",
+   "subject": "The tariff classification of “Squishy Cloud Buddies” from China"
+  },
+  {
+   "裁定号": "N362965",
+   "日期": "2026-07-14",
+   "描述": "decorative hedgehog figure",
+   "金标": "46021980",
+   "subject": "The tariff classification of a decorative hedgehog figure from China"
+  },
+  {
+   "裁定号": "N363001",
+   "日期": "2026-07-29",
+   "描述": "Turnout Remover and Carrier System",
+   "金标": "84261900",
+   "subject": "The tariff classification of the Turnout Remover and Carrier System from Australia"
+  },
+  {
+   "裁定号": "N363652",
+   "日期": "2026-08-13",
+   "描述": "toy minifigure apparel",
+   "金标": "95030000",
+   "subject": "The tariff classification of toy minifigure apparel from Spain"
+  }
+ ]
+}

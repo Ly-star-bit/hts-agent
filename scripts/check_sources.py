@@ -372,6 +372,9 @@ def rebuild(updated_keys):
     # htsdata.csv 里 9903 标目的品名，日期一改，"生效中/已过期"的判定就跟着变。
     if "ch99_pdf" in updated_keys or "htsdata" in updated_keys:
         steps.append([py, os.path.join(BASE_DIR, "scripts", "extract_exclusions.py")])
+    # Chapter 99 变了，按产品触发的 note 清单（232 类探测）也要重提——它同样是 build_db 的输入
+    if "ch99_pdf" in updated_keys:
+        steps.append([py, os.path.join(BASE_DIR, "scripts", "extract_c99_products.py")])
     steps.append([py, os.path.join(BASE_DIR, "scripts", "build_db.py")])
     for cmd in steps:
         print(f"\n$ {' '.join(os.path.relpath(c, BASE_DIR) if c.startswith(BASE_DIR) else c for c in cmd)}")
@@ -379,6 +382,16 @@ def rebuild(updated_keys):
         if rc != 0:
             print(f"!! 退出码 {rc}，中止后续步骤")
             return rc
+    # 税则行语义索引：htsdata.csv 变了，品名变过的行要重嵌（增量，通常几十行、秒级）。
+    # 需要本机 ollama；失败只警告不中止——索引是召回通道之一，主链路不依赖它。
+    vec_db = os.path.join(BASE_DIR, "data", "hts_vec.db")
+    if "htsdata" in updated_keys and os.path.exists(vec_db):
+        cmd = [py, os.path.join(BASE_DIR, "scripts", "hts_embed.py")]
+        print(f"\n$ {' '.join(os.path.relpath(c, BASE_DIR) if c.startswith(BASE_DIR) else c for c in cmd)}")
+        rc = subprocess.call(cmd, cwd=BASE_DIR)
+        if rc != 0:
+            print(f"!! 语义索引增量更新失败（退出码 {rc}），搜索的语义通道可能用到旧品名；"
+                  f"ollama 就绪后手动跑 python scripts/hts_embed.py")
     return 0
 
 

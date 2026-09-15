@@ -1088,12 +1088,10 @@
       </div>
       <div class="inline-form" style="margin-bottom:12px;">
         <span class="label">原产地：</span>
-        <select id="queryOrigin" class="narrow" title="原产地决定适用措施（301 / 越南轨道 / MFN 通用轨道）">
-          <option value="CN">🇨🇳 中国（适用 301 加征）</option>
-          <option value="VN">🇻🇳 越南（MFN，不适用 301）</option>
-          <option value="OTHER">🌏 其他国家（MFN，不适用 301）</option>
+        <select id="queryOrigin" class="narrow" data-origins title="原产地决定适用措施：中国 301 + FLIP 301；其他经济体按经济体查 FLIP 301（第二栏国家按第二栏税率）；未指定则只按 MFN">
+          <option value="CN">中国（301 + FLIP 301 +12.5%）</option>
         </select>
-        <span style="font-size:12px;color:var(--muted);">中国含 301 flip 历史与 FLIP 301 强迫劳动关税；越南/其他国家走 MFN 一般税率</span>
+        <span style="font-size:12px;color:var(--muted);">中国：301 + FLIP 301；其他经济体：MFN（第二栏国家按第二栏）+ 按经济体查 FLIP 301；未指定：仅 MFN，不计任何原产地措施</span>
       </div>
       <textarea id="codesInput" placeholder="粘贴 HTS 编码，支持多种格式，如：&#10;6204.69.45&#10;8703.80.00, 8507.60.00&#10;2931.90.9010&#10;&#10;（可含描述文字，自动提取编码）"></textarea>
       <div class="or-divider">或 上传文件</div>
@@ -1228,10 +1226,8 @@
           </span>
           <span class="filter-item">
             <span class="label">原产地</span>
-            <select id="searchOrigin" class="w-origin" title="原产地（按总税负排序时用于计算 301/FLIP）">
-              <option value="CN">中国（含 301）</option>
-              <option value="VN">越南</option>
-              <option value="OTHER">其他国家</option>
+            <select id="searchOrigin" class="w-origin" data-origins title="原产地（按总税负排序时用于计算 301 / FLIP 301 / 第二栏）">
+              <option value="CN">中国（301 + FLIP 301 +12.5%）</option>
             </select>
           </span>
           <span class="filter-item">
@@ -1352,10 +1348,8 @@
       <input type="file" id="estFile" accept=".xlsx,.xls,.csv">
       <div class="inline-form" style="margin-top:12px;">
         <span class="label">原产地：</span>
-        <select id="estOrigin" class="narrow" onchange="doEstimate()">
-          <option value="CN">中国（含 301）</option>
-          <option value="VN">越南（MFN，无 301）</option>
-          <option value="OTHER">其他国家（MFN，无 301）</option>
+        <select id="estOrigin" class="narrow" data-origins onchange="doEstimate()">
+          <option value="CN">中国（301 + FLIP 301 +12.5%）</option>
         </select>
         <button class="btn-primary" id="btnEstimate" onclick="parseEstCodes()">生成申报清单</button>
       </div>
@@ -1458,10 +1452,8 @@
         placeholder="便携式蓝牙音箱（内置锂电池）&#10;陶瓷马克杯（骨瓷、家用）&#10;PU 涂层梭织连帽夹克（涤纶面料）&#10;不锈钢保温杯（双层真空、500ml）"></textarea>
       <div class="inline-form" style="margin-top:12px;">
         <span class="label">原产地：</span>
-        <select id="listOrigin" class="narrow">
-          <option value="CN">中国（含 301）</option>
-          <option value="VN">越南（MFN，无 301）</option>
-          <option value="OTHER">其他国家（MFN，无 301）</option>
+        <select id="listOrigin" class="narrow" data-origins>
+          <option value="CN">中国（301 + FLIP 301 +12.5%）</option>
         </select>
         <button class="btn-primary" id="btnAnalyzeList" onclick="doAnalyzeList()">开始批量归类</button>
         <span class="hint" style="margin:0;">每行都要 AI 归类 + 本地查税，30 行约需十几秒</span>
@@ -1613,6 +1605,24 @@ fetch('/api/info')
     el.className = 'status-pill bad';
     el.innerHTML = '<span class="dot"></span>数据源加载失败';
   });
+
+// 原产地下拉：从 /api/origins 生成（中国、越南、FLIP 301 的 60 个经济体、第二栏国家、
+// 其他国家、未指定）。此前四个下拉写死 CN / VN / OTHER，「其他国家」落到"不在 60 名单"，
+// 界面上任何非中越原产的报价都静默少了 10%–12.5% 的 FLIP 301。列表从数据出，
+// 数据里多一个经济体，下拉就多一项；抓不到接口时保留占位的中国一项，页面照常可用。
+let ORIGINS = [];
+function fillOriginSelects(list) {
+  ORIGINS = list;
+  document.querySelectorAll('select[data-origins]').forEach(sel => {
+    const keep = sel.value || 'CN';
+    sel.innerHTML = list.map(o => `<option value="${esc(o.code)}">${esc(o.label)}</option>`).join('');
+    sel.value = list.some(o => o.code === keep) ? keep : 'CN';
+  });
+}
+fetch('/api/origins')
+  .then(r => r.json())
+  .then(d => fillOriginSelects(d.origins || []))
+  .catch(() => {});
 
 // AI 状态（可刷新）。搜索页的「AI 补充分析」按钮按此显隐——
 // AI 未配置时不该出现一个点了必然报错的按钮。
@@ -2031,14 +2041,14 @@ function renderTable() {
       <td class="desc" data-full="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
       <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
       <td class="ellipsis" data-full="${esc(r['特殊税率'])}">${esc(r['特殊税率'])}</td>
-      <td><span class="tag ${r['原产地'] === '越南' ? 'warn' : 'miss'}">${esc(r['原产地'])}${esc(r['原产地代码'] && r['原产地代码'] !== 'CN' ? '(' + r['原产地代码'] + ')' : '')}</span></td>
+      <td><span class="tag ${r['原产地'] === '中国' ? 'miss' : 'warn'}">${esc(r['原产地'])}${esc(r['原产地代码'] && r['原产地代码'] !== 'CN' && r['原产地代码'] !== 'OTHER' ? '(' + r['原产地代码'] + ')' : '')}</span></td>
       <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>
       <td class="code" data-full="${esc(r['9903子目'])}">${esc(r['9903子目'])}</td>
       <td class="add-pct" data-full="${esc(r['301加征'] || '')}">${esc(r['301加征'] || '—')}</td>
       <td class="excl-cell${exclCls(r['301排除'])}" data-full="${esc(r['301排除'] || '')}"
           ${(r['301排除明细'] || []).length ? `onclick="showExclOf(${idx})" title="点击查看排除条目原文"` : ''}
       >${esc(r['301排除'] || '—')}</td>
-      <td class="add-pct${String(r['FLIP 301加征'] || '').includes('范围存疑') ? ' scope-suspect' : ''}" data-full="${esc(r['FLIP 301加征'])}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
+      <td class="add-pct${String(r['FLIP 301加征'] || '').includes('范围存疑') ? ' scope-suspect' : ''}" data-full="${esc(r['FLIP 301加征'])}${esc(r['FLIP 301标目'] ? '；报关标目 ' + r['FLIP 301标目'] : '')}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
       <td class="note" data-full="${esc(noteFull)}"><div class="note-in">${esc(noteFull)}</div></td>
       <td><button class="src-btn" title="查看该条税负的官方来源" onclick="showSourceOf(${idx})">📄</button> <button class="src-btn" title="在 USITC 官网查看该编码（https://hts.usitc.gov）" onclick="openHtsSite('${esc(r['输入编码'])}')">🌐</button></td>`;
     body.appendChild(tr);
@@ -2432,12 +2442,28 @@ function renderSearch(data) {
       mapped.map(m => `${esc(m['输入词'])} → <b style="color:var(--text)">${esc((m['检索词'] || []).join(' '))}</b>`).join('；') +
       '</div>';
   }
-  if (left.length) {
+  const chs = data['召回通道'] || {};
+  const semanticRan = ['语义', '先例'].some(k => chs[k] && chs[k]['数量'] > 0);
+  if (left.length && semanticRan) {
+    // 语义 / 先例通道拿原文检索过了，关键词没识别的片段不再是"结果不完整"，只是旁注
+    notes += `<div class="hint" style="margin:6px 0 0;">关键词通道未能识别：<b>${esc(left.join('、'))}</b>，
+      语义与先例通道已按原文检索并参与排序。</div>`;
+  } else if (left.length) {
     notes += `<div class="error-bar show">⚠ 未能识别：<b>${esc(left.join('、'))}</b>。
       本次仅按已识别的部分检索，结果可能不完整。多概念组合（如“塑料制婴儿餐椅”）
       需按基本特征判断，${aiEnabled
         ? '建议点右上角「✨ AI 补充分析」把描述翻译成税则用词重新召回。'
         : '可在「AI 助手」配置 AI 服务后使用补充分析。'}</div>`;
+  }
+  // 召回通道状态：三条通道（关键词 / 税则行语义 / 裁定先例）哪条在跑、哪条为什么没跑。
+  // 语义与先例依赖本地索引与 ollama，不可用时静默只剩关键词——但"静默"要有一行字说明，
+  // 否则用户分不清"没搜到"和"只用了一条通道"。
+  const ch = data['召回通道'] || {};
+  if (Object.keys(ch).length) {
+    const parts = Object.entries(ch).map(([k, v]) => v['原因']
+      ? `${esc(k)} <span style="color:var(--warn)" title="${esc(v['原因'])}">未启用</span>`
+      : `${esc(k)} <b>${v['数量']}</b>`);
+    notes += `<div class="hint" style="margin:6px 0 0;">召回通道：${parts.join(' ｜ ')}（多通道同时命中的排前面）</div>`;
   }
   document.getElementById('searchNotes').innerHTML = notes;
   document.getElementById('disputeBox').innerHTML =
@@ -2570,9 +2596,17 @@ function searchRow(r) {
   tr.dataset.code = String(r['编码']);
   // 完整品名（含归类路径）放进 title：子目品名多为 Other，单看无从判断
   const full = r['完整品名'] || r['商品描述'];
-  const src = r['来源'] === 'AI'
+  let src = r['来源'] === 'AI'
     ? ` <span class="tag tag-ai" title="本地词表未搜到，由 AI 改写检索词后补充召回">AI</span>`
     : '';
+  // 关键词没命中、靠语义或先例召回的行打个小标：这一行不是"词面匹配"来的
+  const via = r['召回来源'] || [];
+  if (via.length && !via.includes('关键词')) {
+    const t = via.includes('先例')
+      ? `CBP 裁定先例投票 ${r['先例票'] || ''} 票${(r['先例裁定'] || []).length ? '：' + r['先例裁定'].join('、') : ''}`
+      : `税则行语义相似度 ${r['语义相似度'] || ''}`;
+    src += ` <span class="tag tag-ai" title="${esc(t)}">${via.includes('先例') ? '先例' : '语义'}</span>`;
+  }
   tr.innerHTML = `
     <td><input type="checkbox" class="cmp-pick" value="${esc(r['编码'])}" onclick="syncCmpButton()"></td>
     <td class="code" data-full="${esc(r['编码'])}">${esc(r['编码'])}${src}</td>
