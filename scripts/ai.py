@@ -548,7 +548,28 @@ def _candidate_line(db, i, row):
             f"301: {row['301判定']} {row['301加征']}{flip}{excl}")
     if cr_txt:
         line += f" | 判定条件: {cr_txt}"
+    # 先例证据：先例通道（CBP 裁定 kNN 投票）是三条召回里最强的（正文金标 r@5 0.69），
+    # 此前候选行里不带它，模型等于拿着最弱的信号在挑。2026-09 正文金标 60 条消融：
+    # 只加这一项 top-1 19 → 26、top-3 26 → 31。
+    line += _precedent_evidence(row)
     return line
+
+
+def _precedent_evidence(row, max_rulings=2):
+    """候选行末尾的先例证据："| CBP 先例 3.2 票：N330020(2023) “trailer transition plate”；…"。"""
+    votes = row.get("先例票")
+    if not votes:
+        return ""
+    nums = [n for n in (row.get("先例裁定") or []) if isinstance(n, str)][:max_rulings]
+    try:
+        import cross
+        meta = cross.ruling_subjects(nums)
+    except Exception:
+        meta = {}
+    ev = "；".join(
+        f"{n}({meta[n][1]}) “{meta[n][0][:70]}”" if n in meta and meta[n][0] else n
+        for n in nums)
+    return f" | CBP 先例 {votes} 票" + (f"：{ev}" if ev else "")
 
 
 # ---------- AI 功能 ----------

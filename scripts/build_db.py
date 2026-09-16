@@ -16,6 +16,7 @@ from collections import Counter
 import json
 import os
 import re
+from datetime import datetime
 import sys
 
 # Windows 控制台中文输出兼容
@@ -294,14 +295,133 @@ def compile_product_scopes(scopes):
     return {"entries": entries, "exact": exact, "prefix": prefix, "ranges": ranges}
 
 
-def group_unmodeled(c99_rows, flip_headings, note_status=None):
+_ROMAN = {"i":1,"v":5,"x":10,"l":50}
+def _roman_to_int(s):
+    t=0; prev=0
+    for ch in reversed(s.lower()):
+        v=_ROMAN.get(ch)
+        if v is None: return None
+        t += -v if v < prev else v; prev=max(prev,v)
+    return t
+def _int_to_roman(n):
+    out=""; 
+    for v,sym in ((50,"l"),(40,"xl"),(10,"x"),(9,"ix"),(5,"v"),(4,"iv"),(1,"i")):
+        while n>=v: out+=sym; n-=v
+    return out
+def _is_roman(tok): return bool(tok) and all(c in "ivxl" for c in tok)
+_SEG_RE = re.compile(r"subdivisions?\s+(.{1,160}?)\s+(?:of|to)\s+(?:this\s+)?(?:U\.S\.\s+)?note\s+(\d+)", re.I)
+_TOK_RE = re.compile(r"\(([a-z0-9]+)\)|(–|-|—)|(\band\b|,)|(subdivisions?)", re.I)
+def subdivision_refs(desc):
+    """返回 [(note, "(c)(i)"), ...]。"""
+    out=[]
+    for m in _SEG_RE.finditer(desc):
+        seg, note = m.group(1), m.group(2)
+        outer=None; inner=None; pending_range=False; last_kind=None; after_word=True
+        for t in _TOK_RE.finditer(seg):
+            tok, dash, sep, word = t.groups()
+            if word: after_word=True; last_kind="sep"; continue
+            if sep: after_word=False; last_kind="sep"; continue
+            if dash: pending_range=True; last_kind="dash"; continue
+            tok=tok.lower()
+            adjacent = last_kind=="tok" and seg[t.start()-1:t.start()]==")"  # "(c)(i)"
+            if adjacent:
+                # 内层
+                inner=tok; out.append((note, f"({outer})({inner})")); last_kind="tok"; continue
+            if pending_range:
+                pending_range=False
+                if inner is not None and _is_roman(tok) and _is_roman(inner):
+                    a,b=_roman_to_int(inner),_roman_to_int(tok)
+                    for k in range(a+1,b+1): out.append((note, f"({outer})({_int_to_roman(k)})"))
+                    inner=tok
+                elif inner is not None and inner.isdigit() and tok.isdigit():
+                    for k in range(int(inner)+1,int(tok)+1): out.append((note, f"({outer})({k})"))
+                    inner=tok
+                elif outer is not None and inner is None and len(tok)==1 and len(outer)==1:
+                    for k in range(ord(outer)+1, ord(tok)+1): out.append((note, f"({chr(k)})"))
+                    outer=tok
+                last_kind="tok"; continue
+            # 独立 token：罗马数字且已有外层且不是紧跟 "subdivision" 一词 → 内层；否则外层
+            if _is_roman(tok) and outer is not None and inner is not None and not after_word and tok not in ("i","v","x") or \
+               (_is_roman(tok) and outer is not None and inner is not None and not after_word and len(tok)>1):
+                inner=tok; out.append((note, f"({outer})({inner})"))
+            else:
+                outer=tok; inner=None; out.append((note, f"({outer})"))
+            after_word=False; last_kind="tok"
+    # 去重保序；"(c)(i)" 这种带内层的，外层 "(c)" 本身不算引用
+    seen=set(); res=[]
+    inner_outers = {(n, k.split(")")[0] + ")") for n, k in out if k.count("(") > 1}
+    for x in out:
+        if x in inner_outers or x in seen:
+            continue
+        seen.add(x); res.append(x)
+    return res
+
+
+
+_ADD_PCT_RE = re.compile(r"\+\s*(?:a duty of\s*)?([\d.]+)\s*%")
+_FLAT_PCT_RE = re.compile(r"^\s*([\d.]+)\s*%\s*$")
+
+
+def compile_product_headings(c99_rows, product_notes=None):
+    """
+    按产品触发的 note（16/33/37/38/39/51）：子条 → 可能适用的 9903 标目及其税率。
+
+    标目品名写着 "automobile parts, as provided for in subdivision (g) of U.S. note 33"，
+    税率栏写着 "+ 25%"。查询命中 note 33 (g) 时，232 情形的数字就从这里来。
+    返回 {note: {"(g)": [{"标目", "税率", "加征": 25.0|None, "原产地": [...], "第二栏": bool}]}}。
+    加征 None 表示该标目不加（"No change" / 仅 "The duty provided in the applicable subheading"），
+    是例外口或分档口（如 9903.94.06 非乘用车零件、9903.82.03 金属含量不足 15%）。
+    """
+    notes = set(product_notes or PRODUCT_NOTES)
+    out = {}
+    for h in sorted(c99_rows):
+        row = c99_rows[h]
+        d = row["desc"]
+        refs = [(n, k) for n, k in subdivision_refs(d) if n in notes]
+        if not refs:
+            continue
+        gen = row["general"] or ""
+        m = _ADD_PCT_RE.search(gen) or _FLAT_PCT_RE.match(gen)
+        pct = float(m.group(1)) if m else None
+        ent = {"标目": _fmt_c99(h), "税率": gen[:70], "加征": pct,
+               "原产地": origins_in(d), "第二栏": "general note 3(b)" in d,
+               "品名": d[:140]}
+        for n, k in refs:
+            out.setdefault(n, {}).setdefault(k, []).append(ent)
+    return out
+
+
+def compile_adcvd(adcvd):
+    """
+    data/adcvd_cases.json（adcvd_import.py 的产物）→ {"cases": [...], "exact": {8/10位: [i]},
+    "prefix": {4/6位: [i]}, "meta": {...}}。没导入过 → cases 为空，查询时来源栏照旧写"未覆盖"。
+    """
+    cases = list((adcvd or {}).get("cases") or [])
+    exact, prefix = {}, {}
+    for i, c in enumerate(cases):
+        for h in c.get("hts") or []:
+            d = re.sub(r"\D", "", str(h))
+            if len(d) in (8, 10):
+                exact.setdefault(d, []).append(i)
+            elif len(d) in (4, 6):
+                prefix.setdefault(d, []).append(i)
+    return {"cases": cases, "exact": exact, "prefix": prefix, "meta": (adcvd or {}).get("meta") or {}}
+
+
+def group_unmodeled(c99_rows, flip_headings, note_status=None, heading_status=None):
     """
     把工具没建模的 9903 标目按前 6 位分组，记录每组提及了哪些原产地、哪些是
     "any country"、正文里出现了哪些产品词，供查询时探测"总税负不完整"。
 
     这里只做**探测**不做判定：标目正文提及某原产地（含出现在例外从句里）就记一笔，
     查询时按原产地报"另有 N 个标目以该原产地为条件、本工具未建模"，由人核实。
+
+    heading_status（load_heading_status 的产物）标出已终止 / 已到期 / 已中止的标目：
+    这些不再计入 标目数 / 按原产地 / 任何国家，只记进 "已终止"，供来源弹窗说明
+    "为什么没算 IEEPA"。此前 9903.01/.02/.03 三组死措施对每个原产地都报"总税负
+    不完整"，警告 100% 命中等于没有警告。
     """
+    heading_status = heading_status or {}
     groups = {}
     for h in sorted(c99_rows):
         if h[:6] in MODELED_301_PREFIXES or h in flip_headings:
@@ -310,7 +430,23 @@ def group_unmodeled(c99_rows, flip_headings, note_status=None):
         d = row["desc"]
         g = groups.setdefault(h[:6], {
             "组": f"{h[:4]}.{h[4:6]}", "标目数": 0, "依据": set(), "按原产地": {},
-            "任何国家": {"数量": 0, "示例": []}, "产品词": set(), "示例": None})
+            "任何国家": {"数量": 0, "示例": []}, "产品词": set(), "示例": None,
+            "已终止": {"数量": 0, "按原产地": {}, "任何国家": 0, "依据": {}, "示例": []}})
+        st = heading_status.get(h)
+        if st and st.get("状态") in DEAD_STATUSES:
+            dead = g["已终止"]
+            dead["数量"] += 1
+            for o in origins_in(d):
+                dead["按原产地"][o] = dead["按原产地"].get(o, 0) + 1
+            if "any country" in d:
+                dead["任何国家"] += 1
+            key = (STATUS_LABELS.get(st["状态"], st["状态"]), st.get("自", ""))
+            dead["依据"].setdefault(key, {"状态": key[0], "自": key[1],
+                                        "措施": st.get("措施", ""), "依据": st.get("依据", "")})
+            if len(dead["示例"]) < 2:
+                dead["示例"].append({"标目": _fmt_c99(h), "税率": row["general"][:60]})
+            g["依据"].update(f"U.S. note {n}" for n in _NOTE_RE.findall(d))
+            continue
         g["标目数"] += 1
         g["依据"].update(f"U.S. note {n}" for n in _NOTE_RE.findall(d))
         sample = {"标目": _fmt_c99(h), "税率": row["general"][:60], "描述": d[:160]}
@@ -342,7 +478,55 @@ def group_unmodeled(c99_rows, flip_headings, note_status=None):
         status_words = ("terminated", "expired", "suspended", "Compiler")
         rest = [x for x in pool if x not in mine and any(w in x for w in status_words)]
         g["编者注"] = (mine + rest)[:2]
+        g["已终止"]["依据"] = list(g["已终止"]["依据"].values())
         out.append(g)
+    return out
+
+
+# 标目状态：手工状态表（data/c99_status.json）+ htsdata 品名里的编者注，两路合一
+DEAD_STATUSES = ("terminated", "expired", "suspended")
+STATUS_LABELS = {"terminated": "已终止", "expired": "已到期", "suspended": "已中止",
+                 "unverified": "未核实"}
+_INLINE_STATUS_RE = re.compile(
+    r"Compiler.s note:\s*(?:provision|This provision)?\s*(?:was\s+)?(terminated|expired|suspended)"
+    r"(?:\s+(?:as of|on)\s+([A-Z][a-z]+ \d{1,2}, \d{4}))?", re.I)
+_RANGE_RE = re.compile(r"(9903\.\d{2}\.\d{2})\s*[–-]\s*(9903\.\d{2}\.\d{2})")
+
+
+def load_heading_status(c99_rows, status_json):
+    """
+    每个 9903 标目的执行状态：{norm8: {"状态", "自", "措施", "依据", "来源"}}。
+
+    两路来源：
+      · htsdata.csv 品名里的 "[Compiler's note: provision terminated. See 90 Fed. Reg. …]"
+        （9903.01.43–.76 那批就是这样标的）——自动识别，官方以后再终止什么都不用改 JSON；
+      · data/c99_status.json 手工段——官方没标但确实已不执行的（IEEPA 一族在 Rev18 里
+        既无编者注也无阴影），依据只引主文件。
+    手工段与编者注都有时以编者注为准（那是官方的话）。unverified 段照记，但不算死。
+    """
+    out = {}
+    for ent in (status_json or {}).get("entries") or []:
+        m = _RANGE_RE.search(str(ent.get("headings") or ""))
+        if not m:
+            continue
+        lo, hi = norm(m.group(1)), norm(m.group(2))
+        for h in c99_rows:
+            if lo <= h <= hi:
+                out[h] = {"状态": ent.get("status", "unverified"), "自": ent.get("since", ""),
+                          "措施": ent.get("measure", ""), "依据": ent.get("basis", ""),
+                          "来源": "状态表"}
+    for h, row in c99_rows.items():
+        m = _INLINE_STATUS_RE.search(row.get("desc", ""))
+        if m:
+            since = ""
+            if m.group(2):
+                try:
+                    since = datetime.strptime(m.group(2), "%B %d, %Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    since = m.group(2)
+            out[h] = {"状态": m.group(1).lower(), "自": since,
+                      "措施": (out.get(h) or {}).get("措施", ""),
+                      "依据": "htsdata 品名编者注：" + m.group(0)[:120], "来源": "编者注"}
     return out
 
 
@@ -499,6 +683,13 @@ def build():
     exclusions = load_json_data("sec301_exclusions.json", {})
     product_scopes = load_json_data("c99_product_scopes.json", {})
     c99_product_index = compile_product_scopes(product_scopes)
+    c99_product_headings = compile_product_headings(c99_rows)
+    adcvd_index = compile_adcvd(load_json_data("adcvd_cases.json", {}))
+    print(f"   AD/CVD 案件: {len(adcvd_index['cases'])} 个（HTS 精确 {len(adcvd_index['exact'])} | 前缀 "
+          f"{len(adcvd_index['prefix'])}）" + ("" if adcvd_index["cases"] else
+          " —— 未导入，查询里 AD/CVD 一栏保持「未覆盖」；导入见 scripts/adcvd_import.py"))
+    print("   按产品触发的 note 标目映射: " + "、".join(
+        f"note {n} {len(v)} 子条/{sum(len(x) for x in v.values())} 标目" for n, v in sorted(c99_product_headings.items())))
     print(f"   按产品触发的 Chapter 99 清单: note {sorted(PRODUCT_NOTES)} → 子条 "
           f"{len(c99_product_index['entries'])} 个 | 精确编码 {len(c99_product_index['exact'])} | "
           f"前缀 {len(c99_product_index['prefix'])} | 区间 {len(c99_product_index['ranges'])}")
@@ -546,10 +737,16 @@ def build():
         flip_heading_set.update(norm(it["标目"]) for it in lst)
     note_status = {n: [x for x in (v.get("status_sentences") or []) if x]
                    for n, v in (product_scopes.get("notes") or {}).items()}
-    c99_unmodeled = group_unmodeled(c99_rows, flip_heading_set, note_status)
+    c99_heading_status = load_heading_status(c99_rows, load_json_data("c99_status.json", {}))
+    n_dead = sum(1 for v in c99_heading_status.values() if v["状态"] in DEAD_STATUSES)
+    n_inline = sum(1 for v in c99_heading_status.values() if v["来源"] == "编者注")
+    print(f"   9903 标目状态: 已终止/到期/中止 {n_dead} 个（编者注 {n_inline}、状态表 {n_dead - n_inline}）"
+          f"，未核实 {sum(1 for v in c99_heading_status.values() if v['状态'] == 'unverified')} 个")
+    c99_unmodeled = group_unmodeled(c99_rows, flip_heading_set, note_status, c99_heading_status)
     n_unmodeled = sum(g["标目数"] for g in c99_unmodeled)
-    print(f"   未建模 9903 标目: {n_unmodeled} 个，分 {len(c99_unmodeled)} 组："
-          + "、".join(f"{g['组']}×{g['标目数']}" for g in c99_unmodeled))
+    print(f"   未建模 9903 标目: {n_unmodeled} 个仍在执行，分 {len(c99_unmodeled)} 组："
+          + "、".join(f"{g['组']}×{g['标目数']}" + (f"(死{g['已终止']['数量']})" if g["已终止"]["数量"] else "")
+                     for g in c99_unmodeled))
 
     ex_notes = exclusions.get("notes") or {}
     ex_live = [c for c, v in ex_notes.items() if v.get("status") == "生效中"]
@@ -596,8 +793,11 @@ def build():
         "c99_headings": c99_rows,
         "flip301_headings": flip_headings,
         "c99_unmodeled": c99_unmodeled,
+        "c99_heading_status": c99_heading_status,
         # 按产品触发的 Chapter 99 清单索引（232 类）：编码 → note/子条，查询时探测
         "c99_product_index": c99_product_index,
+        "c99_product_headings": c99_product_headings,
+        "adcvd_index": adcvd_index,
     }
     print("④ 产出下限校验 ...")
     failures = sanity_check({

@@ -833,6 +833,58 @@ def unmodeled_measures(db, origin_code):
     return out
 
 
+def terminated_measures(db, origin_code):
+    """
+    以该原产地为条件、但**已终止 / 已到期 / 已中止**的 9903 标目组（不计税，只说明）。
+
+    IEEPA 一族（9903.01/.02）与 Section 122（9903.03.01–.11）在 Rev18 里没有编者注，
+    此前被当成"未建模、待核"对每个原产地报警。现在按 build_db 的状态表判死，
+    这里把它们单列出来放进来源弹窗，让人知道"为什么总税负里没有那 10%"。
+    """
+    o = normalize_origin(origin_code)
+    if o == ORIGIN_UNSPECIFIED:
+        return []
+    out = []
+    for g in db.get("c99_unmodeled") or []:
+        dead = g.get("已终止") or {}
+        n = (dead.get("按原产地") or {}).get(o, 0)
+        if not n and "U.S. note 2" in (g.get("依据") or []):
+            n = dead.get("任何国家", 0)
+        if n:
+            out.append({"标目组": g["组"], "数量": n, "依据": dead.get("依据") or [],
+                        "示例": dead.get("示例") or []})
+    return out
+
+
+def adcvd_cases(db, code, code8, origin_code):
+    """
+    该编码落在哪些 AD/CVD 案件的**参考 HTS** 范围里（只探测，不判定、不计税）。
+
+    案件表来自 adcvd_import.py 导入的 ITA / ACE 导出（data/adcvd_cases.json）。
+    AD/CVD 的范围以案件 scope（商品描述）为准，HTS 只是参考；税率按出口商定。
+    所以命中只说明"这类货有案子，去核"，同国家的排前面，其他国家的也列（scope 可能
+    覆盖转口/第三国）。没导入案件表返回 None（与"查过没有"区分）。
+    """
+    idx = db.get("adcvd_index") or {}
+    cases = idx.get("cases") or []
+    if not cases:
+        return None
+    hit = set()
+    for key in {code8, code if len(code) == 10 else None} - {None}:
+        hit.update(idx.get("exact", {}).get(key, []))
+    for k in (code8[:4], code8[:6]):
+        hit.update(idx.get("prefix", {}).get(k, []))
+    o = normalize_origin(origin_code)
+    out = []
+    for i in sorted(hit):
+        c = cases[i]
+        out.append({"案号": c["案号"], "类型": c.get("类型", ""), "商品": c.get("商品", ""),
+                    "国家": c.get("国家", ""), "国家代码": c.get("国家代码", ""),
+                    "状态": c.get("状态", ""), "同原产地": bool(c.get("国家代码")) and c.get("国家代码") == o})
+    out.sort(key=lambda x: (not x["同原产地"], x["案号"]))
+    return out
+
+
 def product_measures(db, code, code8, origin_code):
     """
     该编码落在哪些**按产品触发**的 Chapter 99 清单里（note 16 钢铝铜、33 乘用车、
@@ -859,6 +911,7 @@ def product_measures(db, code, code8, origin_code):
         if len(c) == L and r["from"] <= c <= r["to"]:
             hit.add(r["i"])
     o = normalize_origin(origin_code)
+    heads = db.get("c99_product_headings") or {}
     out, seen = [], set()
     for i in sorted(hit):
         e = ents[i]
@@ -868,6 +921,18 @@ def product_measures(db, code, code8, origin_code):
         if key in seen:
             continue
         seen.add(key)
+        e = dict(e)
+        # 该子条可能适用的 9903 标目与税率（232 情形的数字从这里来）。
+        # 有原产地专用标目（英国 25%、韩国/台湾 15%）时只取专用的；否则取通用的。
+        sub = (e["子条"].split(" ") or [""])[0]
+        cands = (heads.get(e["note"]) or {}).get(sub) or []
+        specific = [c for c in cands if o in (c.get("原产地") or [])
+                    or (c.get("第二栏") and o in COLUMN2_ORIGINS)]
+        general = [c for c in cands if not c.get("原产地") and not c.get("第二栏")]
+        e["可能标目"] = [{"标目": c["标目"], "税率": c["税率"], "加征": c["加征"]}
+                       for c in (specific or general)]
+        # note 16 的衍生品按金属含量价值计税，给不出整票百分比
+        e["按含量"] = e["note"] == "16" and "derivative" in e["子条"].lower()
         out.append(e)
     return out
 
@@ -1062,6 +1127,16 @@ def query_one(db, code, origin="CN"):
         _u = "、".join(f"{u['标目组']}×{u['标目数']}" for u in unmodeled)
         note = (note + "；" if note else "") + (
             f"⚠ 另有未建模 9903 标目以该原产地为条件（{_u}），总税负不完整，请核实")
+    # 已终止的原产地类标目（IEEPA 等）：不进备注、不进总税负，只进来源弹窗说明
+    terminated = terminated_measures(db, origin_code)
+    # AD/CVD 案件参考范围（导入了案件表才有；只探测）
+    adcvd = adcvd_cases(db, code, code8, origin_code) if base else None
+    if adcvd:
+        same = [a for a in adcvd if a["同原产地"]]
+        _a = "、".join(f"{a['案号']} {a['商品'][:24]}" for a in (same or adcvd)[:2])
+        note = (note + "；" if note else "") + (
+            f"⚠ 落在 {len(adcvd)} 个 AD/CVD 案件的参考 HTS 范围（{'同原产地 ' + str(len(same)) + ' 个：' if same else '均为其他国家：'}{_a}），"
+            f"范围以案件 scope 为准、税率按出口商定，本工具未计，请核实")
     # 按产品触发的清单（232 类）：命中即标注，且 FLIP 301 按 note 52(f) 对这些产品不适用。
     # 税额仍按不豁免计（少收比多收危险），文本标"232 存疑"要人核实。
     product_hits = product_measures(db, code, code8, origin_code) if base else []
@@ -1121,6 +1196,10 @@ def query_one(db, code, origin="CN"):
         "越南措施": vn_measures,
         # 以该原产地为条件、本工具未建模的 9903 标目组（探测结果，供人核实）
         "未建模措施": unmodeled,
+        # 以该原产地为条件但已终止 / 到期的 9903 标目组（IEEPA 等；不计，只说明）
+        "已终止措施": terminated,
+        # AD/CVD 案件参考范围命中（None = 未导入案件表；[] = 查过没有；只探测）
+        "AD/CVD案件": adcvd,
         # 按产品触发的 Chapter 99 清单命中（232 类；探测结果，供人核实）
         "产品类未建模措施": product_hits,
     }
@@ -1218,6 +1297,18 @@ def query_one(db, code, origin="CN"):
                 for u in unmodeled)
                 + "。这些标目的法律状态与是否适用本工具无法判断，总税负未计入，请核实。",
         })
+    if terminated:
+        sources.append({
+            "key": "local", "类型": "已终止措施（不计）",
+            "文件": "htsdata.csv 9903 标目 + data/c99_status.json（状态表）", "位置": "",
+            "说明": "；".join(
+                f"{t['标目组']}×{t['数量']}（"
+                + "、".join(f"{b['状态']}{'，' + b['自'] + ' 起' if b.get('自') else ''}" for b in t["依据"][:2])
+                + (f"：{t['依据'][0]['措施'][:80]}" if t["依据"] and t["依据"][0].get("措施") else "")
+                + (f"；依据：{t['依据'][0]['依据'][:160]}" if t["依据"] else "") + "）"
+                for t in terminated)
+                + "。这些标目在 htsdata.csv 里仍有税率但已不执行，总税负不计入。",
+        })
     if product_hits:
         sources.append({
             "key": "ch99_pdf", "类型": "未建模措施（按产品触发，232 类，探测）",
@@ -1232,11 +1323,25 @@ def query_one(db, code, origin="CN"):
         })
     # 这一条对每个编码都成立：不是"没查到"，是"本工具没有这份数据"。
     # 此前有一列"附加税"永远为空（数据里只有 99 章标目有值），空格子被读成"没有反倾销"。
-    sources.append({
-        "key": "none", "类型": "反倾销/反补贴（AD/CVD）", "文件": "未覆盖", "位置": "",
-        "说明": "本工具不含 AD/CVD 案件数据。反倾销/反补贴按案件与出口商定税，不在 htsdata.csv 里，"
-                "请另查 ITA / ACE；此处空白不代表无案件。",
-    })
+    _adcvd_meta = (db.get("adcvd_index") or {}).get("meta") or {}
+    if adcvd is None:
+        sources.append({
+            "key": "none", "类型": "反倾销/反补贴（AD/CVD）", "文件": "未覆盖", "位置": "",
+            "说明": "本工具未导入 AD/CVD 案件表。反倾销/反补贴按案件与出口商定税，不在 htsdata.csv 里，"
+                    "请另查 ITA / ACE；此处空白不代表无案件。导入方法见 scripts/adcvd_import.py。",
+        })
+    else:
+        sources.append({
+            "key": "local", "类型": "反倾销/反补贴（AD/CVD，参考 HTS 探测）",
+            "文件": f"data/adcvd_cases.json（{_adcvd_meta.get('source', '')}，{_adcvd_meta.get('imported_at', '')[:10]} 导入）",
+            "位置": "",
+            "说明": ("；".join(f"{a['案号']}（{a['类型']}，{a['国家'] or a['国家代码']}，{a['商品'][:40]}"
+                             + (f"，{a['状态']}" if a.get("状态") else "") + "）" for a in adcvd[:6])
+                     + "。范围以案件 scope（商品描述）为准，HTS 只是参考；税率按出口商定，本工具未计。"
+                     if adcvd else
+                     f"案件表（{_adcvd_meta.get('n_cases', 0)} 个案件）中无以该编码为参考 HTS 的案件；"
+                     "scope 按商品描述定，仍可能被别的案件覆盖。"),
+        })
     result["来源"] = sources
     return result
 

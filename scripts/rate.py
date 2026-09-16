@@ -240,6 +240,11 @@ def calc_total(db, code, unit_value=None, origin="CN"):
         "free": "免税", "percent": "从价", "specific": "从量",
         "compound": "复合", "reference": "引用", "complex": "复杂", "unknown": "未知",
     }
+    # 232 情形：编码落在按产品触发的清单里时，另一种情形是"该措施适用、FLIP 按 note 52(f) 免"。
+    # 此前只给 FLIP 情形那一个数加一句 caveat，8507.60 中国产显示 40.9%，而按 note 33
+    # 汽车零件算是 53.4%，后者从没显示过。两种情形并列给数，由人按用途/含量定。
+    alt_txt, alt_val = _alt_232(base.get("产品类未建模措施") or [], base_av, pct301)
+
     result = dict(base)
     result.update({
         "税率类型": kind_names.get(p["kind"], p["kind"]),
@@ -247,6 +252,8 @@ def calc_total(db, code, unit_value=None, origin="CN"):
         "301加征数值": pct301,
         "FLIP 301加征数值": pct_flip,
         "总税负估算": total_txt,
+        "232情形": alt_txt,
+        "232情形数值": alt_val,
     })
     # net-of-MFN 档：知道了 MFN 就能定报关标目是"低于上限"那一个还是"不加征"那一个
     eff = spec
@@ -258,6 +265,58 @@ def calc_total(db, code, unit_value=None, origin="CN"):
              else eff.get("heading_at_or_above") or eff["heading_below"])
         result["FLIP 301标目"] = core._fmt_c99(h)
     return result
+
+
+def _alt_232(product_hits, base_av, pct301):
+    """
+    232 情形的总税负：基础 + 301 + 该措施加征，FLIP 301 不计（note 52(f)）。
+
+    返回 (文本, 数值)。数值只在"通用标目唯一且为整票从价"时给；
+    note 16 衍生品按金属含量价值计（给不出整票百分比）、同一子条有多档
+    （9903.82.02 +50% / 9903.82.06 +10%）时只列标目与税率，数值 None。
+    没命中清单返回 ("", None)。
+    """
+    if not product_hits:
+        return "", None
+    pcts, heads, content = set(), [], False
+    for h in product_hits:
+        cands = [c for c in (h.get("可能标目") or []) if c.get("加征") is not None]
+        if not cands:
+            continue
+        if h.get("按含量"):
+            content = True
+        for c in cands:
+            pcts.add(float(c["加征"]))
+            tag = f"{c['标目']} +{c['加征']:g}%"
+            if tag not in heads:
+                heads.append(tag)
+    if not pcts:
+        return "命中 232 类清单但未找到对应加征标目，需人工核实", None
+    if base_av is None:
+        return f"需折算（FLIP 按 note 52(f) 免；另加 {'/'.join(f'{x:g}' for x in sorted(pcts))}%：{'、'.join(heads[:4])}）", None
+    if content or len(pcts) > 1:
+        why = "按金属含量价值计" if content else "按子条分档"
+        return (f"FLIP 按 note 52(f) 免；另加 {'/'.join(f'{x:g}' for x in sorted(pcts))}%"
+                f"（{'、'.join(heads[:4])}，{why}），需人工核实"), None
+    p = pcts.pop()
+    v = round(base_av + pct301 + p, 4)
+    return f"{v:g}%（FLIP 按 note 52(f) 免；{heads[0]}）", v
+
+
+def attach_alt_232(rows):
+    """
+    给 core.batch_query 的结果行补上「232情形」两个字段（编码查询表也要显示它，
+    此前只有走 calc_total 的估算/搜索路径才有）。不重算税负：基础从价与 301 都从行里取。
+    """
+    for r in rows or []:
+        if not isinstance(r, dict) or "232情形" in r:
+            continue
+        gen = r.get("适用基础税率") or r.get("一般税率", "")
+        base_av = estimate_ad_valorem(gen) if gen else None
+        m = re.search(r"([\d.]+)\s*%", r.get("301加征", "") or "")
+        pct301 = float(m.group(1)) if m else 0.0
+        r["232情形"], r["232情形数值"] = _alt_232(r.get("产品类未建模措施") or [], base_av, pct301)
+    return rows
 
 
 def _flip_amount(spec, base_av):
@@ -326,7 +385,34 @@ def units_of(db, code):
     return [str(x).strip() for x in v if str(x).strip()]
 
 
-def estimate_lines(db, items, origin="CN"):
+# 报关规费（CBP 用户费），FY2026（2025-10-01 起）：CBP Dec. 25-10，90 FR（2025-07-23）
+# https://www.federalregister.gov/documents/2025/07/23/2025-13869/customs-user-fees-to-be-adjusted-for-inflation-in-fiscal-year-2026-cbp-dec-25-10
+# MPF 按**每票报关单**取上下限，这里整张清单按一票算；HMF 只有海运有、无上限。
+# USMCA 原产货免 MPF——不建模，文本里说明。
+CUSTOMS_FEES = {
+    "fy": "FY2026",
+    "mpf_rate": 0.3464, "mpf_min": 33.58, "mpf_max": 651.50,
+    "hmf_rate": 0.125,
+    "source": "CBP Dec. 25-10（90 FR 2025-07-23）",
+}
+
+
+def customs_fees(value_sum, ocean=True):
+    """整票货值 → {"MPF", "HMF", "规费合计", "说明"}；货值为 0/None 时全 0。"""
+    f = CUSTOMS_FEES
+    v = float(value_sum or 0.0)
+    mpf = min(max(v * f["mpf_rate"] / 100.0, f["mpf_min"]), f["mpf_max"]) if v > 0 else 0.0
+    hmf = v * f["hmf_rate"] / 100.0 if (ocean and v > 0) else 0.0
+    return {
+        "MPF": round(mpf, 2), "HMF": round(hmf, 2), "规费合计": round(mpf + hmf, 2),
+        "说明": (f"MPF {f['mpf_rate']}%（每票下限 ${f['mpf_min']}、上限 ${f['mpf_max']}，整张清单按一票计；"
+                 f"USMCA 原产货免 MPF，未建模）"
+                 + (f"；HMF {f['hmf_rate']}%（海运）" if ocean else "；HMF 未计（非海运）")
+                 + f"。{f['fy']} 费率，{f['source']}"),
+    }
+
+
+def estimate_lines(db, items, origin="CN", ocean=True):
     """
     逐行估算：每行自带单位货值与数量，算出该行货值与预估税费，最后汇总。
 
@@ -363,6 +449,9 @@ def estimate_lines(db, items, origin="CN"):
         r["预估税费"] = (round(line_value * total_pct / 100.0, 2)
                      if (line_value is not None and total_pct is not None) else None)
         r["总税负数值"] = total_pct
+        alt = r.get("232情形数值")
+        r["232情形税费"] = (round(line_value * alt / 100.0, 2)
+                        if (line_value is not None and alt is not None) else None)
         rows.append(r)
 
     priced = [r for r in rows if r["预估税费"] is not None]
@@ -376,6 +465,11 @@ def estimate_lines(db, items, origin="CN"):
     unfilled = [r for r in rows if r["货值"] is None]
     value_sum = round(sum(r["货值"] for r in priced), 2)
     duty_sum = round(sum(r["预估税费"] for r in priced), 2)
+    # 232 情形合计：只累加算得出 232 情形数字的行；其余行沿用 FLIP 情形的税费
+    alt_sum = round(sum(r["232情形税费"] if r.get("232情形税费") is not None else r["预估税费"]
+                        for r in priced), 2)
+    n_alt = sum(1 for r in priced if r.get("232情形税费") is not None)
+    fees = customs_fees(value_sum, ocean=ocean)
     why = []
     if pending:
         why.append(f"{len(pending)} 行需人工（税率无法折算）")
@@ -391,6 +485,13 @@ def estimate_lines(db, items, origin="CN"):
             "货值合计": value_sum,
             "税费合计": duty_sum,
             "综合税负": (round(duty_sum / value_sum * 100.0, 2) if value_sum else None),
+            # 232 情形：命中清单的行按 232 情形税费累加（FLIP 免），其余行不变
+            "232情形行数": n_alt,
+            "232情形税费合计": alt_sum if n_alt else None,
+            # 规费（MPF / HMF）：不是关税，但报关时一样要交，此前"预估税费"里没有
+            "MPF": fees["MPF"], "HMF": fees["HMF"], "规费合计": fees["规费合计"],
+            "规费说明": fees["说明"],
+            "税费含规费合计": round(duty_sum + fees["规费合计"], 2),
             "说明": ("合计不含 " + "、".join(why)) if why else "",
         },
     }

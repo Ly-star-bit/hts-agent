@@ -235,6 +235,7 @@
   }
   .status-pill:hover { box-shadow: var(--focus-ring); }
   .status-pill.bad { background: var(--hit-bg); color: var(--hit); border-color: var(--hit-border); }
+  .status-pill.warn { background: var(--warn-bg, #fff7e6); color: var(--warn, #b26a00); border-color: var(--warn-border, #f0c36d); }
   .status-pill .dot {
     width: 7px; height: 7px; border-radius: 50%; background: currentColor;
     box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
@@ -1159,15 +1160,16 @@
             <!-- 2026-09 加了「301排除」列（第 10 列），列数 12 → 13；容器同时放宽到
                  1320px，按 13 列重配：编码类列要放得下完整的 10 位号（9025.19.8085），
                  来源列要够两个按钮并排（5% 时会上下堆成两行）。合计 100%。 -->
-            <col style="width:11%"><col style="width:8%"><col style="width:12%">
+            <!-- 2026-09 再加「232情形」列（FLIP301 之后）：13 → 14 列，合计仍 100%。 -->
+            <col style="width:10%"><col style="width:8%"><col style="width:10%">
             <col style="width:6%"><col style="width:5%"><col style="width:5%">
-            <col style="width:6%"><col style="width:8%"><col style="width:6%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:6%">
+            <col style="width:6%"><col style="width:8%"><col style="width:6%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:6%">
           </colgroup>
           <thead>
             <tr>
               <th>输入编码</th><th>8位子目</th><th>商品描述</th>
               <th>一般税率</th><th>特殊税率</th><th>原产地</th>
-              <th>301判定</th><th>9903子目</th><th>301加征</th><th>301排除</th><th>FLIP301</th><th>备注</th><th>来源</th>
+              <th>301判定</th><th>9903子目</th><th>301加征</th><th>301排除</th><th>FLIP301</th><th title="编码落在按产品触发的 Chapter 99 清单（note 16 钢铝铜 / 33 汽车零件等，232 类）时的另一种情形：该措施适用、FLIP 301 按 note 52(f) 免。左边总税负按 FLIP 情形算，两者由人按用途/含量定。">232情形</th><th>备注</th><th>来源</th>
             </tr>
           </thead>
           <tbody id="resultBody"></tbody>
@@ -1351,6 +1353,7 @@
         <select id="estOrigin" class="narrow" data-origins onchange="doEstimate()">
           <option value="CN">中国（301 + FLIP 301 +12.5%）</option>
         </select>
+        <label style="font-size:13px;" title="港口维护费 HMF 0.125% 只有海运有；MPF 0.3464% 各运输方式都有"><input type="checkbox" id="estOcean" checked onchange="doEstimate()"> 海运（计 HMF）</label>
         <button class="btn-primary" id="btnEstimate" onclick="parseEstCodes()">生成申报清单</button>
       </div>
       <div class="error-bar" id="estError"></div>
@@ -1381,16 +1384,18 @@
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:11%"><col style="width:17%"><col style="width:8%">
-            <col style="width:9%"><col style="width:9%"><col style="width:10%">
-            <col style="width:12%"><col style="width:11%"><col style="width:9%"><col style="width:4%">
+            <col style="width:11%"><col style="width:15%"><col style="width:7%">
+            <col style="width:8%"><col style="width:8%"><col style="width:9%">
+            <col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:4%">
           </colgroup>
           <thead>
             <tr>
               <th>编码</th><th>商品描述</th>
               <th title="官方税则的计量单位，数量请按此单位填">计量单位</th>
               <th>数量</th><th>单价 USD</th><th>货值 USD</th>
-              <th>综合税负</th><th>预估税费 USD</th><th>税率构成</th><th></th>
+              <th>综合税负</th><th>预估税费 USD</th>
+              <th title="编码落在 232 类清单（note 16 钢铝铜 / 33 汽车零件等）时的另一种情形：该措施适用、FLIP 301 免。左边按 FLIP 情形算。">232 情形</th>
+              <th>税率构成</th><th></th>
             </tr>
           </thead>
           <tbody id="estBody"></tbody>
@@ -1569,7 +1574,10 @@ fetch('/api/info')
   .then(d => {
     // 顶栏只留"数据是哪天的"——这是每次查询前唯一需要扫一眼的。
     // 文件名、映射条数这些收进 hover 提示和「数据来源」弹窗（点胶囊即开）。
-    const srcs = [d.hts_csv, d.ustr_pdf, d.flip_frn_pdf, d.ch99_pdf].filter(Boolean).join(' + ');
+    // 文件名后面带内容版本：本地文件名不随官方改版换，Rev18 的名字里可能装着 Rev19
+    const sv = d.source_versions || {};
+    const ver = k => (sv[k] && !/^W\//.test(sv[k]) ? `（${sv[k]}）` : '');
+    const srcs = [d.hts_csv + ver('htsdata'), d.ustr_pdf + ver('ustr_pdf'), d.flip_frn_pdf, d.ch99_pdf + ver('ch99_pdf')].filter(Boolean).join(' + ');
     const el = document.getElementById('info');
     const day = (d.built_at || '').slice(0, 10);
     // 排除到期优先于"数据就绪"显示：这是唯一会让工具**少报**的情形
@@ -1583,10 +1591,25 @@ fetch('/api/info')
     } else if (ee && ee.告警) {
       el.className = 'status-pill bad';
       el.innerHTML = `<span class="dot"></span>301 排除 ${ee.剩余天数} 天后到期`;
+    } else if ((d.db_stale || []).length) {
+      // 源文件已换、库没重建（自动更新链在 build_db 那一步断了）
+      el.className = 'status-pill bad';
+      el.innerHTML = `<span class="dot"></span>源文件已更新但库未重建（${d.db_stale.map(esc).join('、')}）`;
+    } else if ((d.sources_outdated || []).length) {
+      // 官方已出新版、本地还没换：定时任务会自动下载重建，这里显示是为了"没跑成"时有人看见
+      const so = d.sources_outdated;
+      el.className = 'status-pill warn';
+      el.innerHTML = `<span class="dot"></span>官方已更新（${so.map(x => esc(x.short || x.label)).join('、')} ${esc(so[0].remote_version || '')}），本地未应用`;
     } else {
       el.innerHTML = `<span class="dot"></span>数据就绪${day ? ' · ' + day : ''}`;
     }
-    el.title = `数据源：${srcs}\n301 映射 ${(d.sec301_mapping_count || 0).toLocaleString()} 条`
+    if ((d.sources_outdated || []).length) {
+      el.title = `官方源有新版本尚未应用：${d.sources_outdated.map(x => x.label + ' ' + (x.remote_version || '')).join('；')}`
+               + `\n定时任务（每日 08:30）会自动下载并重建；若持续显示，终端跑 python scripts/check_sources.py --apply --rebuild\n\n`;
+    } else {
+      el.title = '';
+    }
+    el.title += `数据源：${srcs}\n301 映射 ${(d.sec301_mapping_count || 0).toLocaleString()} 条`
              + ` ｜ 8位子目 ${(d.rates_8_count || 0).toLocaleString()} 个`
              + (d.built_at ? `\n构建于 ${d.built_at}` : '')
              + (ee ? (ee.状态 === '已全部过期'
@@ -2049,6 +2072,8 @@ function renderTable() {
           ${(r['301排除明细'] || []).length ? `onclick="showExclOf(${idx})" title="点击查看排除条目原文"` : ''}
       >${esc(r['301排除'] || '—')}</td>
       <td class="add-pct${String(r['FLIP 301加征'] || '').includes('范围存疑') ? ' scope-suspect' : ''}" data-full="${esc(r['FLIP 301加征'])}${esc(r['FLIP 301标目'] ? '；报关标目 ' + r['FLIP 301标目'] : '')}${esc(r['FLIP 301说明'] ? '；' + r['FLIP 301说明'] : '')}">${esc(r['FLIP 301加征'] || '—')}</td>
+      <td class="ellipsis${r['232情形数值'] != null ? ' scope-suspect' : ''}" data-full="${esc(r['232情形'] || '')}" title="${esc(r['232情形'] || '')}">${
+        r['232情形数值'] != null ? r['232情形数值'] + '%' : (r['232情形'] ? '需核' : '—')}</td>
       <td class="note" data-full="${esc(noteFull)}"><div class="note-in">${esc(noteFull)}</div></td>
       <td><button class="src-btn" title="查看该条税负的官方来源" onclick="showSourceOf(${idx})">📄</button> <button class="src-btn" title="在 USITC 官网查看该编码（https://hts.usitc.gov）" onclick="openHtsSite('${esc(r['输入编码'])}')">🌐</button></td>`;
     body.appendChild(tr);
@@ -3289,6 +3314,7 @@ async function doEstimate() {
     const data = await apiPost('/api/estimate', {
       items: estItems,
       origin: document.getElementById('estOrigin').value || 'CN',
+      ocean: document.getElementById('estOcean').checked,
     });
     if (!Array.isArray(data.results)) throw new Error('服务端响应缺少 results 字段');
     currentEstRows = data.results;
@@ -3332,6 +3358,9 @@ function renderEstimate(data) {
       <td class="num">${money(r['货值'])}</td>
       <td><b style="color:var(--primary-dark)">${pctTxt}</b></td>
       <td class="num"><b>${money(r['预估税费'])}</b></td>
+      <td class="num" style="font-size:12px;" title="${esc(r['232情形'] || '')}">${
+        r['232情形数值'] != null ? `<span style="color:var(--warn)">${r['232情形数值']}%</span><br>${money(r['232情形税费'])}`
+          : (r['232情形'] ? '<span style="color:var(--warn)">需核</span>' : '—')}</td>
       <td style="font-size:11.5px;color:var(--muted);line-height:1.4;">${parts.join('<br>')}</td>
       <td><button class="src-btn" title="删除本行" onclick="removeEstRow(${i})">✕</button></td>
     </tr>`;
@@ -3346,8 +3375,15 @@ function renderEstimate(data) {
     <td class="num">${money(s.货值合计)}</td>
     <td><b>${s.综合税负 != null ? s.综合税负 + '%' : '—'}</b></td>
     <td class="num"><b>${money(s.税费合计)}</b></td>
+    <td class="num" title="命中 232 类清单的 ${s['232情形行数'] || 0} 行按 232 情形（该措施适用、FLIP 免）累加，其余行不变">${
+      s['232情形税费合计'] != null ? `<span style="color:var(--warn)">${money(s['232情形税费合计'])}</span>` : '—'}</td>
     <td colspan="2">${missing
       ? `<span style="color:var(--warn);font-size:11.5px;">${esc(s.说明 || '')}</span>` : ''}</td>
+  </tr>
+  <tr class="est-total" style="font-weight:400;">
+    <td colspan="7" style="font-size:11.5px;color:var(--muted);" title="${esc(s.规费说明 || '')}">规费：MPF ${money(s.MPF)} + HMF ${money(s.HMF)}（${esc((s.规费说明 || '').split('。')[1] || '')}，非关税但报关要交；悬停看口径）</td>
+    <td class="num">${money(s.规费合计)}</td>
+    <td colspan="3" style="font-size:12px;">关税 + 规费合计 <b>${money(s.税费含规费合计)}</b></td>
   </tr>`;
 }
 

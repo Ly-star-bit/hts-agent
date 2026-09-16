@@ -134,7 +134,10 @@ def local_sha256(key: str):
         return content_sha256(f.read(), info["kind"])
 
 
-def load_state(path=STATE_PATH):
+def load_state(path=None):
+    # 默认值不能写在签名里：那是定义时绑定的，测试换 STATE_PATH 会换不掉，
+    # 于是 tests/test_check_sources.py 跑一遍就把 data/.sources_state.json 覆盖成假数据
+    path = path or STATE_PATH
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
@@ -142,7 +145,8 @@ def load_state(path=STATE_PATH):
         return {}
 
 
-def save_state(state, path=STATE_PATH):
+def save_state(state, path=None):
+    path = path or STATE_PATH
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -289,13 +293,16 @@ PROBES = {"htsdata": _probe_htsdata, "ustr_pdf": _probe_ustr_pdf,
 # 主流程
 # ------------------------------------------------------------
 
-def check(keys=None, apply=False, force=False, transport=None, state_path=STATE_PATH,
-          backup_dir=BACKUP_DIR):
+def check(keys=None, apply=False, force=False, transport=None, state_path=None,
+          backup_dir=None):
     """
     逐源探测，返回 {checked_at, updated: [key...], errors: [key...], sources: {key: {...}}}。
     apply=True 时把有更新的文件原地覆盖（旧文件先备份），并在结果里标 applied=True。
     一个源失败不影响其他源——三份文件三家服务器，谁挂了就报谁。
+    state_path / backup_dir 的默认值在函数体里取（模块变量可被测试替换）。
     """
+    state_path = state_path or STATE_PATH
+    backup_dir = backup_dir or BACKUP_DIR
     keys = keys or list(SOURCES)
     state = load_state(state_path)
     prev_sources = state.get("sources", {})
@@ -538,6 +545,10 @@ def main(argv=None):
     if a.rebuild and result["applied"]:
         rc = rebuild(result["applied"])
         if rc != 0:
+            # 下载成功、重建失败是最危险的组合：源文件已换、库还是旧的，状态里却记着 applied。
+            # 通知要单独发，页头也靠 /api/info 比对"库比源文件旧"来兜底。
+            if a.notify:
+                notify("HTS 数据重建失败", f"源文件已下载但 build_db 失败（退出码 {rc}），库仍是旧版，看 output/check_sources.log")
             return rc
 
     if result["updated"]:

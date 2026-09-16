@@ -90,6 +90,76 @@ def build_golden(n=300, since="2023-01-01", seed=20260915, db_path=None):
     return sample
 
 
+# ---------- 正文金标：用裁定正文里的商品描述段代替 subject ----------
+# subject 只有 2–3 个词（"coated fabric"、"chemical mixture"），拿它评归类是猜谜，
+# 会低估真实能力也指导不了优化。NY 裁定正文的开头段就是申请人描述的商品，
+# 这才接近用户实际会贴进来的东西。留 subject 在 "描述_subject" 里，两套口径都能跑。
+TEXT_GOLDEN = os.path.join(BASE_DIR, "data", "eval", "rulings_golden_text.json")
+_DESC_START_RE = re.compile(
+    r"(?:requested a (?:binding )?(?:tariff classification |classification )?ruling[^.]*\.|"
+    r"ruling request[^.]*\.|request for a (?:binding )?(?:tariff classification )?ruling[^.]*\.)", re.I)
+_DESC_LEAD_RE = re.compile(
+    r"^(?:(?:Additional information|No samples?|Samples?|Photographs?|Pictures?|Descriptive literature|"
+    r"Product (?:information|literature)|A sample|The sample|Your (?:sample|request))[^.]*\.\s*)+", re.I)
+_DESC_END_RE = re.compile(
+    r"\b(?:The applicable (?:sub)?heading|In your (?:letter|request|submission)[^.]{0,80}?"
+    r"(?:suggest|propose|state|assert|argue|indicate|believe)|You (?:have |also )?(?:suggest(?:ed)?|propose[d]?|"
+    r"state[d]?|assert(?:ed)?|argue[d]?|indicate[d]?|believe[d]?|request(?:ed)?)|"
+    r"Classification (?:under|of) the (?:HTSUS|Harmonized)|The General Rules of Interpretation|"
+    r"This ruling is being issued|The rate of duty will be|Pursuant to (?:the )?(?:Section|section) 301)", re.I)
+# 申请人在描述段里点名的税号是"漏答"（金标就是它），一律抹掉
+_HTS_NUM_RE = re.compile(r"\b(?:HTSUS\s+)?(?:sub)?heading\s+\d[\d.]*\b|\b\d{4}\.\d{2}(?:\.\d{2,4}|\.\d{2}\.\d{2})?\b", re.I)
+
+
+def extract_description(text, max_chars=400):
+    """裁定正文 → 商品描述段（申请人描述的货，剥掉套话与税号）。抽不到返回 ''。"""
+    t = re.sub(r"\s+", " ", str(text or ""))
+    m = _DESC_START_RE.search(t)
+    if not m:
+        return ""
+    body = _DESC_LEAD_RE.sub("", t[m.end():].lstrip())
+    e = _DESC_END_RE.search(body)
+    if e:
+        body = body[:e.start()]
+    body = _HTS_NUM_RE.sub("", body)
+    body = re.sub(r"\s+", " ", body).strip(" ,;:")
+    if len(body) > max_chars:
+        cut = body[:max_chars]
+        k = cut.rfind(". ")
+        body = cut[:k + 1] if k > 150 else cut
+    return body
+
+
+def build_text_golden(items=None, sleep=0.3, log=print):
+    """给现有金标集配正文描述：逐条抓 CROSS 正文（永久缓存），落到 TEXT_GOLDEN。"""
+    import cross
+
+    if items is None:
+        with open(GOLDEN, encoding="utf-8") as f:
+            items = json.load(f)["items"]
+    out, n_fail = [], 0
+    for i, it in enumerate(items, 1):
+        txt = cross.fetch_ruling_text(it["裁定号"], "ny", it["日期"])
+        desc = extract_description(txt) if txt else ""
+        if len(desc) < 40:
+            n_fail += 1
+            log(f"  {i}/{len(items)} {it['裁定号']} 抽不到描述（正文 {len(txt or '')} 字）")
+            continue
+        out.append({**it, "描述_subject": it["描述"], "描述": desc, "正文长度": len(txt)})
+        if i % 20 == 0:
+            log(f"  {i}/{len(items)} 已抽 {len(out)} 条")
+        time.sleep(sleep)
+    os.makedirs(os.path.dirname(TEXT_GOLDEN), exist_ok=True)
+    with open(TEXT_GOLDEN, "w", encoding="utf-8") as f:
+        json.dump({"meta": {"built_at": dt.datetime.now().isoformat(timespec="seconds"),
+                            "from": os.path.basename(GOLDEN), "n": len(out), "failed": n_fail,
+                            "note": "描述取自 NY 裁定正文的商品描述段（≤400 字，税号已抹去）；"
+                                    "描述_subject 为原 subject 口径"},
+                   "items": out}, f, ensure_ascii=False, indent=1)
+    log(f"正文金标 {len(out)} 条（抽不到 {n_fail}）→ {TEXT_GOLDEN}")
+    return out
+
+
 def _hit(codes, gold, k, lenient=False):
     top = codes[:k]
     if lenient:
@@ -222,15 +292,24 @@ def main(argv=None):
     ap.add_argument("--limit", type=int, default=0, help="只评前 N 条")
     ap.add_argument("--channels", default="keyword,semantic,precedent")
     ap.add_argument("--llm", action="store_true", help="再跑 classify_product 的 top-k（慢）")
+    ap.add_argument("--build-text", action="store_true",
+                    help="给金标集配裁定正文的商品描述段（联网抓 CROSS，永久缓存）")
+    ap.add_argument("--golden", default="", help="评测用的金标文件（默认 subject 口径；--text 用正文口径）")
+    ap.add_argument("--text", action="store_true", help="用正文金标（data/eval/rulings_golden_text.json）评测")
     a = ap.parse_args(argv)
     if a.build:
         build_golden(a.build, since=a.since)
         return 0
-    if not os.path.exists(GOLDEN):
-        print(f"金标集不存在：{GOLDEN}，先 --build N")
+    if a.build_text:
+        build_text_golden()
+        return 0
+    golden = a.golden or (TEXT_GOLDEN if a.text else GOLDEN)
+    if not os.path.exists(golden):
+        print(f"金标集不存在：{golden}，先 --build N（正文口径再 --build-text）")
         return 1
-    with open(GOLDEN, encoding="utf-8") as f:
+    with open(golden, encoding="utf-8") as f:
         items = json.load(f)["items"]
+    print(f"金标：{os.path.basename(golden)}")
     if a.limit:
         items = items[:a.limit]
     channels = [c.strip() for c in a.channels.split(",") if c.strip()]
@@ -239,7 +318,7 @@ def main(argv=None):
     print(_fmt_table(stats, len(items)))
     details = stats.pop("_明细", [])
     report = {"at": dt.datetime.now().isoformat(timespec="seconds"), "n": len(items),
-              "channels": channels, "recall": stats, "明细": details}
+              "golden": os.path.basename(golden), "channels": channels, "recall": stats, "明细": details}
     if a.llm:
         print("\n归类 top-k（classify_product）：")
         report["llm"] = eval_llm(items)

@@ -17,6 +17,29 @@ import app as app_mod
 import ai as ai_mod
 
 
+
+class ExportFlattenTest(unittest.TestCase):
+    """导出行里的结构化字段要摊平成可读文本，不能是 Python repr / 整段 JSON"""
+
+    def test_flatten_structured_fields(self):
+        row = {"输入编码": "8507.60.00", "232情形数值": 53.4,
+               "未建模措施": [{"标目组": "9903.94", "标目数": 6, "依据": "U.S. note 33"}],
+               "已终止措施": [{"标目组": "9903.01", "数量": 6, "依据": [{"状态": "已终止", "自": "2026-02-24", "措施": "IEEPA…", "依据": "很长的依据" * 50}]}],
+               "产品类未建模措施": [{"note": "33", "子条": "(g) Subject to…", "可能标目": [{"标目": "9903.94.05"}]}],
+               "AD/CVD案件": None, "归类路径": ["a", "b"],
+               "来源": [{"类型": "基础税率", "文件": "htsdata.csv"}], "其他": {"x": 1}}
+        o = app_mod._flatten_for_export(row)
+        self.assertEqual(o["未建模措施"], "9903.94×6（U.S. note 33）")
+        self.assertEqual(o["已终止措施"], "9903.01×6（已终止 2026-02-24）")
+        self.assertEqual(o["产品类未建模措施"], "note 33 (g)")
+        self.assertEqual(o["AD/CVD案件"], "")
+        self.assertEqual(o["归类路径"], "a > b")
+        self.assertEqual(o["来源"], "基础税率: htsdata.csv")
+        self.assertEqual(o["其他"], '{"x": 1}')
+        self.assertEqual(o["232情形数值"], 53.4)
+        self.assertLess(len(o["已终止措施"]), 60)
+
+
 class TestQueryAPI(unittest.TestCase):
     """原有查询接口不回归"""
 

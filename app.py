@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
 import core
+import rate
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_HTML = os.path.join(BASE_DIR, "templates", "index.html")
@@ -95,7 +96,64 @@ def api_info():
         # 排除到期是唯一会让工具**少报**的定时炸弹：到期后不重抓数据，
         # 它会继续按失效的排除判 0%。顶栏据此变色。
         "exclusion_expiry": core.exclusion_expiry(get_db()),
+        # 官方源有新版但本地还没应用（定时任务下载/重建失败，或还没跑到）：
+        # 此前只藏在「数据来源」弹窗里，Rev19 出来一整天顶栏仍显示"数据就绪"。
+        "sources_outdated": _sources_outdated(),
+        # 本地文件名不随官方改版换（"Chapter 99_2026HTSRev18.pdf" 里装的可能已是 Rev19 的字节），
+        # 真正的内容版本记在探测状态里，这里一并给出，页头提示按它显示
+        "source_versions": _source_versions(),
+        # 源文件比库新 = 下载成功但重建失败（或还没跑）：状态文件里 applied 已是 true，
+        # 只有这个比对能发现。页头据此变黄。
+        "db_stale": _db_stale(),
     }
+
+
+def _db_stale():
+    """任一官方源文件的 mtime 晚于 data/sec301_db.json 的 mtime → True。"""
+    try:
+        db_m = os.path.getmtime(core.DB_JSON)
+    except OSError:
+        return False
+    newer = []
+    for key, info in SOURCE_FILES.items():
+        path = os.path.join(BASE_DIR, info["path"])
+        try:
+            if os.path.getmtime(path) > db_m + 1:
+                newer.append(info["label"])
+        except OSError:
+            pass
+    return newer
+
+
+def _source_versions():
+    """{key: 内容版本}：最近一次探测判定"与官方一致"或已下载应用的，取远端版本号。"""
+    rc = _remote_check_summary()
+    if not rc:
+        return {}
+    out = {}
+    for key, s in (rc.get("sources") or {}).items():
+        if s.get("error"):
+            continue
+        if not s.get("updated") or s.get("applied"):
+            out[key] = s.get("remote_version", "")
+    return out
+
+
+def _sources_outdated():
+    """[{key, label, remote_version}]：最近一次探测发现有新版、且尚未下载应用的官方源。"""
+    rc = _remote_check_summary()
+    if not rc:
+        return []
+    out = []
+    for key in rc.get("updated") or []:
+        s = (rc.get("sources") or {}).get(key) or {}
+        if s.get("updated") and not s.get("applied"):
+            out.append({"key": key, "label": SOURCE_FILES.get(key, {}).get("label", key),
+                        "short": {"htsdata": "税率表", "ustr_pdf": "301 清单", "flip_frn": "FLIP FRN",
+                                  "ch99_pdf": "第 99 章"}.get(key, key),
+                        "remote_version": s.get("remote_version", ""),
+                        "checked_at": s.get("checked_at", "")})
+    return out
 
 
 # ============================================================
@@ -242,6 +300,7 @@ def api_query(req: QueryRequest):
                 f"{i['原文']}（{i['原因']}）" for i in issues[:5])
         raise HTTPException(status_code=400, detail=detail)
     results, stats = core.batch_query(db, codes, origin=req.origin)
+    rate.attach_alt_232(results)
     # 未采用的输入必须回报：否则结果行数比输入少，用户不知道少了哪几行
     return {"results": results, "stats": stats, "origin": req.origin, "未采用": issues}
 
@@ -270,6 +329,7 @@ async def api_upload(file: UploadFile = File(...), origin: Optional[str] = Form(
     if not codes:
         raise HTTPException(status_code=400, detail=f"文件 {filename} 中未解析到 HTS 编码")
     results, stats = core.batch_query(get_db(), codes, origin=origin)
+    rate.attach_alt_232(results)
     return {"results": results, "stats": stats, "source": filename, "origin": origin,
             "未采用": issues}
 
@@ -323,12 +383,48 @@ def data_version_stamp():
     return _stamp_cache["value"]
 
 
+def _flatten_for_export(row):
+    """
+    结构化字段摊平成可读文本。/api/export 按 keys() 铺列，list of dict 会在 Excel 里
+    变成 Python repr；前端摊了「来源」「候选」几个，后端再兜一层——今天新加的
+    「已终止措施」带整段 IEEPA 依据，不摊每一行都要多几百字。
+    """
+    o = dict(row)
+    def j(items, f):
+        return "；".join(f(x) for x in items if isinstance(x, dict))
+    v = o.get("未建模措施")
+    if isinstance(v, list):
+        o["未建模措施"] = j(v, lambda u: f"{u.get('标目组', '')}×{u.get('标目数', '')}（{u.get('依据', '')}）")
+    v = o.get("已终止措施")
+    if isinstance(v, list):
+        o["已终止措施"] = j(v, lambda t: f"{t.get('标目组', '')}×{t.get('数量', '')}（"
+                          + "、".join(f"{b.get('状态', '')}{' ' + b['自'] if b.get('自') else ''}" for b in (t.get("依据") or [])[:2]) + "）")
+    v = o.get("产品类未建模措施")
+    if isinstance(v, list):
+        o["产品类未建模措施"] = j(v, lambda h: f"note {h.get('note', '')} {h.get('子条', '').split(' ')[0]}")
+    v = o.get("AD/CVD案件")
+    if isinstance(v, list):
+        o["AD/CVD案件"] = j(v, lambda a: f"{a.get('案号', '')} {a.get('类型', '')} {a.get('国家', '') or a.get('国家代码', '')} {a.get('商品', '')[:30]}")
+    elif v is None and "AD/CVD案件" in o:
+        o["AD/CVD案件"] = ""
+    if isinstance(o.get("归类路径"), list):
+        o["归类路径"] = " > ".join(str(x) for x in o["归类路径"])
+    if isinstance(o.get("来源"), list):
+        o["来源"] = j(o["来源"], lambda x: f"{x.get('类型', '')}: {x.get('文件', '')}")
+    for k, val in list(o.items()):
+        if isinstance(val, list):
+            o[k] = "；".join(json.dumps(x, ensure_ascii=False) if isinstance(x, (dict, list)) else str(x) for x in val)
+        elif isinstance(val, dict):
+            o[k] = json.dumps(val, ensure_ascii=False)
+    return o
+
+
 def _defuse_rows(rows):
     """对导出行的每个值做公式中和；非 dict 行原样保留"""
     out = []
     for row in rows:
         if isinstance(row, dict):
-            out.append({k: _defuse(v) for k, v in row.items()})
+            out.append({k: _defuse(v) for k, v in _flatten_for_export(row).items()})
         else:
             out.append(row)
     return out
@@ -399,6 +495,7 @@ class EstimateRequest(BaseModel):
                         description="逐行估算：[{'code': 编码, 'qty': 数量, 'unit_value': 单位货值}]")
     unit_value: Optional[float] = Field(default=None, description="单位货值 USD，折算从量税（items 未给时作为全行默认）")
     origin: Optional[str] = Field(default="CN", description="原产地：CN（中国，默认）/ VN（越南）/ 其他国家代码")
+    ocean: bool = Field(default=True, description="是否海运（计港口维护费 HMF 0.125%）")
 
 
 class AIAskRequest(BaseModel):
@@ -777,7 +874,7 @@ def api_estimate(req: EstimateRequest):
             for it in items:
                 if it.get("unit_value") in (None, "") and req.unit_value:
                     it["unit_value"] = req.unit_value    # 未逐行填时沿用全局值
-            out = rate.estimate_lines(db, items, origin=req.origin)
+            out = rate.estimate_lines(db, items, origin=req.origin, ocean=req.ocean)
             if not out["rows"]:
                 raise HTTPException(status_code=400, detail="未解析到任何 HTS 编码")
             return {"results": out["rows"], "count": len(out["rows"]),

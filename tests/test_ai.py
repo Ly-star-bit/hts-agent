@@ -340,6 +340,24 @@ class TestRerankContext(unittest.TestCase):
         self.assertIn("含量阈值", line)             # 判定条件
         self.assertIn("man-made fibers", line)     # 祖先里的材质限定
 
+    def test_candidate_line_carries_precedent_evidence(self):
+        # 先例通道召回的行带票数与裁定号；候选行要把 subject 一起给模型（裁定号本身模型看不懂）
+        import cross
+        row = {"编码": "8716.90.50", "商品描述": "Other", "一般税率": "3.1%", "301判定": "是",
+               "301加征": "+25%", "先例票": 3.2, "先例裁定": ["N330020", "N999999"]}
+        orig = cross.ruling_subjects
+        cross.ruling_subjects = lambda nums, db_path=None: {
+            "N330020": ("a trailer transition plate from China", "2023")}
+        try:
+            line = ai._candidate_line(self.db, 1, row)
+        finally:
+            cross.ruling_subjects = orig
+        self.assertIn("CBP 先例 3.2 票", line)
+        self.assertIn("N330020(2023) “a trailer transition plate from China”", line)
+        self.assertIn("N999999", line)          # 查不到 subject 也保留裁定号
+        # 没有先例的行不带这一段
+        self.assertNotIn("CBP 先例", ai._candidate_line(self.db, 1, {**row, "先例票": None}))
+
     def test_candidate_line_survives_missing_code(self):
         row = {"编码": "0000.00.00", "商品描述": "x", "一般税率": "", "301判定": "否",
                "301加征": "", "附加税": ""}

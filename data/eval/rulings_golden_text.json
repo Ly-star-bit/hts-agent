@@ -1,0 +1,2666 @@
+{
+ "meta": {
+  "built_at": "2026-09-15T20:07:55",
+  "from": "rulings_golden.json",
+  "n": 295,
+  "failed": 5,
+  "note": "描述取自 NY 裁定正文的商品描述段（≤400 字，税号已抹去）；描述_subject 为原 subject 口径"
+ },
+ "items": [
+  {
+   "裁定号": "N330020",
+   "日期": "2023-01-10",
+   "描述": "The item under consideration is a Trailer Transition Plate, Part Number e32JR. The item consists of three metal plates of 2.5 mm thick steel. Each plate is covered in grip tape on one side. Two plates weigh approximately 14 lbs., and the third weighs about 16 lbs. The package includes nuts, washers, and bolts.",
+   "金标": "87169050",
+   "subject": "The tariff classification of a trailer transition plate from China",
+   "描述_subject": "trailer transition plate",
+   "正文长度": 2971
+  },
+  {
+   "裁定号": "N330102",
+   "日期": "2023-01-25",
+   "描述": "The item under consideration has been identified as a 1996 Toyota HiLux 4 full door pickup, frame number LN107-0024711. This vehicle is equipped with a 3-liter (2,779 cc) diesel engine, and interior seating for five (5) passengers with two (2) foldable rear facing jump seats in the open cargo area.",
+   "金标": "87042101",
+   "subject": "The tariff classification of a 1996 Toyota HiLux from Japan",
+   "描述_subject": "1996 Toyota HiLux",
+   "正文长度": 5190
+  },
+  {
+   "裁定号": "N330272",
+   "日期": "2023-01-20",
+   "描述": "You submitted a photograph and detailed description of an item identified as “PSFL23 HOHOHO TBL DECO,” SKU # BCSJ2022511, which consists of a tabletop decoration composed of medium density fiberboard (MDF) in the form of three-dimensional cut-out letters spelling out Santa’s famous expression, “Ho Ho Ho.” Each letter “H” features a different color, and the “O” letters are shaped to depict multi-co",
+   "金标": "95051015",
+   "subject": "The tariff classification of a Christmas decoration from China.",
+   "描述_subject": "Christmas decoration",
+   "正文长度": 1904
+  },
+  {
+   "裁定号": "N330495",
+   "日期": "2023-02-08",
+   "描述": "Style K40037 is a 5-layer reusable incontinent underpad. The top and bottom layers of the pad are made from 100 percent polyester knitted fabric. The three middle layers consist of loose polyester fiber, nonwoven polyester fabric and a polyurethane membrane. Quilt stitching extends through all five layers and the edges are finished with a sewn on binding.",
+   "金标": "63049101",
+   "subject": "The tariff classification of an incontinent underpad from Turkey",
+   "描述_subject": "incontinent underpad",
+   "正文长度": 3246
+  },
+  {
+   "裁定号": "N330503",
+   "日期": "2023-02-09",
+   "描述": "The item under consideration has been identified as a 1994 Bugatti EB112 (VIN: ZA9CC030ERCD39002). The Bugatti EB112 is equipped with a 6.0 liter, 12 Valve spark-ignition internal combustion (Gas) piston engine.",
+   "金标": "87032401",
+   "subject": "The tariff classification of a 1994 Bugatti EB 112 passenger vehicle from France",
+   "描述_subject": "1994 Bugatti EB 112 passenger vehicle",
+   "正文长度": 3608
+  },
+  {
+   "裁定号": "N330768",
+   "日期": "2023-02-13",
+   "描述": "The imported merchandise is identified as a Greenworks Mower/Axial Blower/String Trimmer Set, Best Buy SKU # 6531331. The set will include the following items that will be imported together in one box for retail sale: Greenworks Pro 80V 21\" Brushless Cordless Lawn Mower Greenworks Cordless String Trimmer Greenworks Pro 80V 125 MPH - 500CFM Cordless Blower Lithium-ion 2.0Ah Battery 30 Minute Rapid ",
+   "金标": "84331100",
+   "subject": "The tariff classification of a Yard Maintenance Set from Vietnam",
+   "描述_subject": "Yard Maintenance Set",
+   "正文长度": 4573
+  },
+  {
+   "裁定号": "N330816",
+   "日期": "2023-02-15",
+   "描述": "The merchandise under consideration is a decorative photo holder described as PZF 124 WC 1 Butterfly. It consists of a medium density fiberboard (MDF) base which resembles a butterfly, measuring approximately 3.7 inches high, 3.5 inches wide, and 0.78 inches thick. The MDF butterfly is painted in green, tan, or grey colors.",
+   "金标": "83062900",
+   "subject": "The tariff classification of a decorative photo holder from China",
+   "描述_subject": "decorative photo holder",
+   "正文长度": 3236
+  },
+  {
+   "裁定号": "N330907",
+   "日期": "2023-02-23",
+   "描述": "BP930 is a single use 500 ml polypropylene cup. The cup will be empty and unlabeled at the time of importation. The cup will be sold to food distributors to package and transport food products.",
+   "金标": "39239000",
+   "subject": "The tariff classification of polypropylene cup from Poland",
+   "描述_subject": "polypropylene cup",
+   "正文长度": 1503
+  },
+  {
+   "裁定号": "N331015",
+   "日期": "2023-03-01",
+   "描述": "Images were provided in lieu of a sample. The product under consideration is described as a BBQ multi-tool. It is made from stainless-steel and measures 18 inches in length by five inches in width by two inches in height. This article holds the overall appearance of a spatula. The handle includes a bottle opener at the end.",
+   "金标": "82159950",
+   "subject": "The tariff classification of a BBQ multi-feature spatula from Vietnam.",
+   "描述_subject": "BBQ multi-feature spatula",
+   "正文长度": 2124
+  },
+  {
+   "裁定号": "N331101",
+   "日期": "2023-03-01",
+   "描述": "The products under consideration are 30MnCr2, round alloy steel bars. The bars are hot-rolled with diameters ranging from 90 mm to 120 mm and are available in lengths from 7000 mm to 7850 mm.",
+   "金标": "72283080",
+   "subject": "The tariff classification of alloy steel bars from China",
+   "描述_subject": "alloy steel bars",
+   "正文长度": 3820
+  },
+  {
+   "裁定号": "N331494",
+   "日期": "2023-03-17",
+   "描述": "Photos and product descriptions were provided for our review. The item under consideration is SKU# BCSHX-0314, “Spring Wooden Wall Plaque.” It is a decorative item made to resemble an arched window frame with multiple open panes, made of medium density fiberboard (MDF), with a wreath of artificial foliage attached to the front.",
+   "金标": "44201900",
+   "subject": "The tariff classification of window frame with wreath decor from China",
+   "描述_subject": "window frame with wreath decor",
+   "正文长度": 2811
+  },
+  {
+   "裁定号": "N331643",
+   "日期": "2023-03-30",
+   "描述": "Descriptions and photographs of each size/style ramp were submitted for our review. The articles under consideration are identified in your letter as Silver Spring ARR Series Aluminum Roll-Up Ramps with Carrying Bags that are comprised of pre-assembled aluminum ‘sectional’ roll-up ramps, two safety side rails and cloth carrying bags.",
+   "金标": "76169951",
+   "subject": "The tariff classification of ARR Series Silver Spring Aluminum Roll-Up Ramps with Carrying Bags made in China",
+   "描述_subject": "ARR Series Silver Spring Aluminum Roll-Up Ramps with Carrying Bags",
+   "正文长度": 8175
+  },
+  {
+   "裁定号": "N331707",
+   "日期": "2023-04-18",
+   "描述": "The item under consideration has been identified as two (2) versions of the Xcient hydrogen cell electric powered Class 8 Tractor/Truck.",
+   "金标": "87012400",
+   "subject": "The tariff classification of Hydrogen Fuel Cell Electric Tractors/Trucks from South Korea",
+   "描述_subject": "Hydrogen Fuel Cell Electric Tractors/Trucks",
+   "正文长度": 3259
+  },
+  {
+   "裁定号": "N331720",
+   "日期": "2023-04-20",
+   "描述": "The subject merchandise is Mycelium (also known as Shredded Fiber Biomass).",
+   "金标": "14049090",
+   "subject": "The tariff classification of Mycelium from the Netherlands",
+   "描述_subject": "Mycelium from the Netherlands",
+   "正文长度": 3474
+  },
+  {
+   "裁定号": "N331825",
+   "日期": "2023-11-13",
+   "描述": "U.S. Customs and Border Protection Laboratory (CBP Laboratory) has determined that Flexsteel Pattern 155, Sublime, is a bonded fabric consisting of a knit face fabric bonded to a woven backing fabric and is composed wholly of polyester. The face fabric is of warp knit cut pile construction and weighs 268.9 g/m 2 .",
+   "金标": "60019200",
+   "subject": "The tariff classification of a bonded fabric consisting of a knit face fabric bonded to a woven backing fabric from China",
+   "描述_subject": "bonded fabric consisting of a knit face fabric bonded to a woven backing fabric",
+   "正文长度": 4756
+  },
+  {
+   "裁定号": "N331852",
+   "日期": "2023-04-04",
+   "描述": "The merchandise under consideration is a footed ceramic bowl, style K85526. The bowl is made of stoneware ceramic and is marketed and designed to hold candy and treats. The bowl is available in four characters, Santa, an elf, a reindeer, and a snowman. Each bowl measures approximately 8 inches long by 8 inches high and is 7.8 inches deep. The volume capacity of each bowl is 2 quarts.",
+   "金标": "69120048",
+   "subject": "The tariff classification of a footed ceramic bowl from China",
+   "描述_subject": "footed ceramic bowl",
+   "正文长度": 4219
+  },
+  {
+   "裁定号": "N332026",
+   "日期": "2024-08-27",
+   "描述": "With your request for a ruling, you forwarded a sample of a coated fabric described as fabric style number “KK22101” with the style name of “MOTHEROFPEARL.” The coated fabric was subsequently forwarded to the New York Customs and Border Protection (“CBP”) Laboratory.",
+   "金标": "59032025",
+   "subject": "The tariff classification of a coated fabric from China",
+   "描述_subject": "coated fabric",
+   "正文长度": 3674
+  },
+  {
+   "裁定号": "N332157",
+   "日期": "2023-04-13",
+   "描述": "Style L1657 is a women’s raincoat constructed from a two-layer laminated fabric consisting of a 100% polyester woven fabric bonded to a thermoplastic polyurethane (TPU) film.",
+   "金标": "62103050",
+   "subject": "The tariff classification of a women’s raincoat from China",
+   "描述_subject": "women’s raincoat",
+   "正文长度": 3046
+  },
+  {
+   "裁定号": "N332317",
+   "日期": "2023-05-02",
+   "描述": "The ruling was requested on wood pallet collars. Product information and pictures were submitted for our review. The products under consideration are wood pallet collars. The pallets collars are constructed of four pine ( pinus sylvestris ) lumber boards connected at the corners with metal hinges. The pallet collars stack atop a pallet, connecting by the hinge hardware, to form a bin.",
+   "金标": "44152080",
+   "subject": "The tariff classification of wood pallet collars from Latvia",
+   "描述_subject": "wood pallet collars",
+   "正文长度": 3785
+  },
+  {
+   "裁定号": "N332565",
+   "日期": "2023-05-11",
+   "描述": "The merchandise under consideration is identified as vehicle power seat adjust motors (electric motor assemblies), Part Numbers 23-4855312-2 and 23-4855322-2, which are described as 12 VDC electric motors with an attached gearbox. Based on the information provided, we calculate the maximum output power at 42 W.",
+   "金标": "85013120",
+   "subject": "The tariff classification of electric seat motors from China",
+   "描述_subject": "electric seat motors",
+   "正文长度": 3499
+  },
+  {
+   "裁定号": "N332580",
+   "日期": "2023-05-08",
+   "描述": "You submitted illustrations and detailed descriptions of two wall hanging Christmas decorations composed primarily of medium density fiberboard (MDF) wood. The first item is identified as Joy Christmas Small Wall Art, item number EN230309007, which consists of a circular depiction of a Christmas ball ornament trimmed with a burlap bow and functional hanging loop.",
+   "金标": "95051015",
+   "subject": "The tariff classification of Christmas decorations from China.",
+   "描述_subject": "Christmas decorations",
+   "正文长度": 2495
+  },
+  {
+   "裁定号": "N332735",
+   "日期": "2023-06-01",
+   "描述": "The subject merchandise 0.1 M Triethylammonium Acetate/ 11.25% v/v Acetonitrile is a mixture of the following: Triethylammonium acetate (CAS # 5204-74-0), Acetonitrile (CAS # 75-05-8), and water.",
+   "金标": "38249993",
+   "subject": "The tariff classification of a chemical mixture from Canada",
+   "描述_subject": "chemical mixture",
+   "正文长度": 2390
+  },
+  {
+   "裁定号": "N332742",
+   "日期": "2023-05-15",
+   "描述": "The item under consideration is the Veba smart baby bottle monitor, which is a device that turns a standard baby bottle into a smart bottle and notifies parents of when breast milk or formula has expired. The Veba device attaches to a baby bottle via a silicone strap and allows the user to set expiration times for formula or expressed breast milk by hours or days.",
+   "金标": "90318080",
+   "subject": "The tariff classification of a Smart Baby Bottle Monitor from Canada",
+   "描述_subject": "Smart Baby Bottle Monitor",
+   "正文长度": 5114
+  },
+  {
+   "裁定号": "N332744",
+   "日期": "2023-05-17",
+   "描述": "Pentoxifylline is a synthetic dimethylxanthine derivative structurally related to theophylline and caffeine. It is used to treat intermittent claudication caused by chronic occlusive arterial disease of the limbs.",
+   "金标": "29395900",
+   "subject": "The tariff classification of Pentoxifylline (CAS No. 6493-05-6) in bulk crystalline powder form, from India",
+   "描述_subject": "Pentoxifylline (CAS No. 6493-05-6) in bulk crystalline powder form,",
+   "正文长度": 2159
+  },
+  {
+   "裁定号": "N332757",
+   "日期": "2023-05-17",
+   "描述": "The merchandise in question goes by the stock code “ZZFountbio-Citrate Buffer-Bulk”. It is said to consist of water, citric acid monohydrate, sodium citrate dihydrate, and EDTA disodium salt.",
+   "金标": "38249993",
+   "subject": "The tariff classification of product known as “ZZFountbio-Citrate Buffer-Bulk” from Canada",
+   "描述_subject": "product known as “ZZFountbio-Citrate Buffer-Bulk”",
+   "正文长度": 1766
+  },
+  {
+   "裁定号": "N332768",
+   "日期": "2024-08-27",
+   "描述": "Your submission includes a Safety Data Sheet, which identifies the subject product as MAPTAC-CH(TOTE), CAS # 51410-72-1, and indicates the chemical name to be [3-(Methacryloylamino)propyl]trimethylammonium chloride, 50 percent solution in water. In your reply to our request for additional information",
+   "金标": "34029050",
+   "subject": "The tariff classification of MAPTAC 50% solution in water, CAS # 51410-72-1, from China",
+   "描述_subject": "MAPTAC 50% solution in water, CAS # 51410-72-1,",
+   "正文长度": 4982
+  },
+  {
+   "裁定号": "N332781",
+   "日期": "2023-05-18",
+   "描述": "Orphenadrine Citrate is a skeletal muscle relaxant. It is used to help relax certain muscles in your body and relieve the stiffness, pain, and discomfort caused by strains, sprains, or other injury to your muscles. It is also used to relieve trembling caused by Parkinson's disease.",
+   "金标": "29221909",
+   "subject": "The tariff classification of Orphenadrine Citrate (CAS No. 4682-36-4) in bulk crystalline powder form, from Italy",
+   "描述_subject": "Orphenadrine Citrate (CAS No. 4682-36-4) in bulk crystalline powder form,",
+   "正文长度": 2208
+  },
+  {
+   "裁定号": "N333046",
+   "日期": "2023-06-20",
+   "描述": "Style LGLFM is a tight-fitting undergarment best described as a girdle. The garment extends from just below the bust to the ankle/foot and has been designed to support the lower torso. The garment is constructed of 51% nylon, 49% spandex knit fabric. The garment features a zipper on each side with six eye and hook closures on the inside, an open crotch and flatlock stitching at the seams.",
+   "金标": "62122000",
+   "subject": "The tariff classification of a compression garment from Mexico",
+   "描述_subject": "compression garment",
+   "正文长度": 2642
+  },
+  {
+   "裁定号": "N333062",
+   "日期": "2023-06-15",
+   "描述": "An ingredients’ breakdown and product samples were included with your request. The subject merchandise, Juice Drinks, is described as ready to drink non-carbonated juice-from-concentrate beverages that are sweetened with stevia extract. The four products, listed below, are put up for retail sale and consumption in eight-ounce tin-coated steel cans.",
+   "金标": "22021000",
+   "subject": "The tariff classification of Juice Drinks from the Philippines",
+   "描述_subject": "Juice Drinks from the Philippines",
+   "正文长度": 4514
+  },
+  {
+   "裁定号": "N333137",
+   "日期": "2023-11-20",
+   "描述": "The yarn will be used in a commercial setting to to produce circular knit fabrics for t-shirts. According to the U.S. Customs and Border Protection (“CBP”) laboratory analysis, the sample described as “28/1 (Ne)” is a single ply yarn composed of 79.5 percent polyester and 20.5 percent cotton staple fibers with a decitex of 212.7. The metric count (Nm) of the yarn is 47.",
+   "金标": "55095300",
+   "subject": "The tariff classification of a polyester stable fiber yarn from Vietnam or Indonesia",
+   "描述_subject": "polyester stable fiber yarn",
+   "正文长度": 3368
+  },
+  {
+   "裁定号": "N333360",
+   "日期": "2023-06-30",
+   "描述": "The subject merchandise is described as a dried moringa leaf that is grown in either India or Indonesia. The leaf will be processed into a powder in the country where it is grown and harvested which in this case is India or Indonesia. According to the information provided, you plan to import the product primarily for retail sale in 1-pound, 2-pound and 5-pound bags.",
+   "金标": "12129992",
+   "subject": "The tariff classification of dried moringa leaf powder from India or Indonesia",
+   "描述_subject": "dried moringa leaf powder",
+   "正文长度": 3089
+  },
+  {
+   "裁定号": "N333409",
+   "日期": "2023-06-14",
+   "描述": "There are three items at issue with this request, which are described as mini strobe lights and identified by part numbers 1328-04217, 1328-04217RIP, and 1328-04217SP_5IN. The three lights are virtually identical with the only difference being that the second and third item display the letters “RIP” or a spiderweb on the lens, respectively.",
+   "金标": "85437098",
+   "subject": "The tariff classification of strobe lights from China",
+   "描述_subject": "strobe lights",
+   "正文长度": 3064
+  },
+  {
+   "裁定号": "N333732",
+   "日期": "2023-07-07",
+   "描述": "The product under consideration is identified as 1,1,1,3,3,3-Hexafluoropropane (CAS # 690-39-1), a hydrofluorocarbon also known by the trade name R236fa or HFC-236fa. It is a colorless liquified gas with the chemical formula C3H2F6.",
+   "金标": "29034610",
+   "subject": "The tariff classification of 1,1,1,3,3,3-Hexafluoropropane (CAS # 690-39-1) from China",
+   "描述_subject": "1,1,1,3,3,3-Hexafluoropropane (CAS # 690-39-1)",
+   "正文长度": 2122
+  },
+  {
+   "裁定号": "N333795",
+   "日期": "2023-07-27",
+   "描述": "Descriptions and photographs of the subject ramps in use were submitted for our review. The articles under consideration are identified in your letter as Silver Spring ATR400 Series Adjustable Height Solid Threshold Ramps with a 400 pound weight capacity.",
+   "金标": "76169951",
+   "subject": "The tariff classification of adjustable threshold ramps from China",
+   "描述_subject": "adjustable threshold ramps",
+   "正文长度": 8294
+  },
+  {
+   "裁定号": "N333834",
+   "日期": "2023-07-25",
+   "描述": "The items under consideration have been identified as three (3) models of the Hyundai Ioniq 6.",
+   "金标": "87038000",
+   "subject": "The tariff classification of new electric vehicles from South Korea",
+   "描述_subject": "new electric vehicles",
+   "正文长度": 2925
+  },
+  {
+   "裁定号": "N334048",
+   "日期": "2023-08-09",
+   "描述": "Flexsteel Pattern 968 (Prelude) is a bonded fabric consisting of a woven face fabric laminated to a knit backing fabric. According to the information provided, the dyed plain weave face fabric is composed of 90 percent polyester non textured filament yarns, 5 percent rayon staple fibers and 5 percent linen staple fibers. The fabric weighs 230 g/m². The knit backing fabric weighs 80 g/m².",
+   "金标": "54076199",
+   "subject": "The tariff classification of a woven upholstery fabric from China",
+   "描述_subject": "woven upholstery fabric",
+   "正文长度": 3312
+  },
+  {
+   "裁定号": "N334432",
+   "日期": "2023-08-14",
+   "描述": "The merchandise is three models of light fixtures identified as the Artemis, Aspen, and Shadow. Your submission states, these lighting fixtures are designed for mounting on posts, decks, paths, floor, railings and fences, or where a smaller but generous beam spread is required.",
+   "金标": "94054900",
+   "subject": "The tariff classification of lighting fixtures from China",
+   "描述_subject": "lighting fixtures",
+   "正文长度": 4200
+  },
+  {
+   "裁定号": "N334598",
+   "日期": "2023-08-31",
+   "描述": "Product descriptions and pictures of the Constant Spring Assembly were submitted for our review. The article under consideration is identified as the Glide-Safe Constant Spring Assembly.",
+   "金标": "73269086",
+   "subject": "The tariff classification of the Constant Spring Assembly from Taiwan",
+   "描述_subject": "Constant Spring Assembly",
+   "正文长度": 5888
+  },
+  {
+   "裁定号": "N334643",
+   "日期": "2023-09-11",
+   "描述": "Prochlorperazine Maleate, imported in 5 mg and 10 mg tablets, is an antipsychotic drug. It is indicated for the treatment of severe nausea and vomiting, as well as short-term management of psychotic disorders such as generalized non-psychotic anxiety and schizophrenia.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Prochlorperazine Maleate Tablets in dosage form, from India",
+   "描述_subject": "Prochlorperazine Maleate Tablets in dosage form,",
+   "正文长度": 3179
+  },
+  {
+   "裁定号": "N334760",
+   "日期": "2023-08-25",
+   "描述": "In lieu of a sample, photographs of the “Jumbo 3 in 1 Checker Rug Game,” in its retail packaging, were submitted with your inquiry. The “Jumbo 3 in 1 Checker Rug Game,” item number 11112, is comprised of a 28” by 28” square woven mat in a “Camo” colored motif, with 12 green and 12 orange, round, disk shaped, game pieces.",
+   "金标": "95049060",
+   "subject": "The tariff classification of the “Jumbo 3 in 1 Checker Rug Game” from China",
+   "描述_subject": "“Jumbo 3 in 1 Checker Rug Game”",
+   "正文长度": 3630
+  },
+  {
+   "裁定号": "N334781",
+   "日期": "2023-08-29",
+   "描述": "In lieu of samples, illustrative literature and product descriptions were provided. The article is identified as an Automatic Inflatable Travel Pillow, model no. LS-B260, and is described as a self-inflating foam pillow that will be used for camping, hiking and traveling. The pillow is made of a composite TPU fabric and high-rebound shredded sponge filling.",
+   "金标": "94049020",
+   "subject": "The tariff classification of a self-inflating pillow from China",
+   "描述_subject": "self-inflating pillow",
+   "正文长度": 14380
+  },
+  {
+   "裁定号": "N334784",
+   "日期": "2023-09-05",
+   "描述": "“Tattoos That Teach” is a series of soft-cover books. They measure approximately 10” x 6” and include ten pages with fifty temporary tattoos on a specific theme followed by ten pages with illustrations of each tattoo image accompanied by factoids. Each tattoo page is covered by a clear plastic overlay sheet.",
+   "金标": "49089000",
+   "subject": "The tariff classification of books containing temporary tattoos from China",
+   "描述_subject": "books containing temporary tattoos",
+   "正文长度": 5097
+  },
+  {
+   "裁定号": "N335016",
+   "日期": "2023-09-19",
+   "描述": "Item C2901 and C2902, described as a “Car Seat Organizer,” is a textile over-the-seat car organizer. The flat, rectangular shaped organizer is composed of a single layer of polyethylene (PE) cardboard sandwiched between two layers of 100 percent polyester woven fabric and is coated with polyvinyl chloride (PVC) on the back.",
+   "金标": "63079098",
+   "subject": "The tariff classification of a backseat car organizer from China",
+   "描述_subject": "backseat car organizer",
+   "正文长度": 7902
+  },
+  {
+   "裁定号": "N335048",
+   "日期": "2023-09-19",
+   "描述": "The crate cover is composed of a 100 percent polyester woven fabric and is digitally printed. The five-panel crate cover with open bottom, measures 36 inches in length by 23 ½ inches in width by 24 inches in height and is hemmed. The four side panels are secured to each other with three 1 ½ inch hook-and-loop tabs along both vertical sides of each panel.",
+   "金标": "63079098",
+   "subject": "The tariff classification of a textile dog crate cover from China",
+   "描述_subject": "textile dog crate cover",
+   "正文长度": 3938
+  },
+  {
+   "裁定号": "N335058",
+   "日期": "2023-09-22",
+   "描述": "The articles under consideration are referred to as “RPG Ultimate Journey: Miniatures.” No part numbers or item numbers were provided. The RPG (role-play game) miniature figures are made from casted polyurethane and range in size from 4 to 16 centimeters tall.",
+   "金标": "95030000",
+   "subject": "The tariff classification of  the “RPG Ultimate Journey Miniatures” from China",
+   "描述_subject": "“RPG Ultimate Journey Miniatures”",
+   "正文长度": 3170
+  },
+  {
+   "裁定号": "N335134",
+   "日期": "2023-09-26",
+   "描述": "This letter is part of a split ruling request. The first five items are addressed in this letter. The remaining five items will be address in New York Ruling N335332. The articles at issue are jewelry boxes. Each is constructed of a paperboard base with an outer surface of paper. Each box is of the kind normally given to the purchaser at the point of purchase.",
+   "金标": "42029990",
+   "subject": "The tariff classification of jewelry boxes from China",
+   "描述_subject": "jewelry boxes",
+   "正文长度": 4890
+  },
+  {
+   "裁定号": "N335367",
+   "日期": "2023-10-10",
+   "描述": "The product is a mini plastic toy representation of a real gumball machine, approximately 4” in height, with a plastic lobster clasp at the top and gumballs inside its clear plastic globe. The toy dispenses gumballs through a hole in the front when a small red button is pressed above it. A package of candy gumballs is included in the retail package.",
+   "金标": "95030000",
+   "subject": "The tariff classification of the “Gumball Kidz” mini gumball machine from China",
+   "描述_subject": "“Gumball Kidz” mini gumball machine",
+   "正文长度": 4208
+  },
+  {
+   "裁定号": "N335403",
+   "日期": "2023-10-11",
+   "描述": "Bendamustine Hydrochloride is an antineoplastic agent. It is indicated for the treatment of chronic lymphocytic leukemia (CLL) and indolent B-cell non-Hodgkin lymphoma (NHL) that has progressed during or within six months of treatment with rituximab or a rituximab-containing regimen.",
+   "金标": "29339975",
+   "subject": "The tariff classification of Bendamustine Hydrochloride (CAS No. 3543-75-7) in bulk powder form, from India",
+   "描述_subject": "Bendamustine Hydrochloride (CAS No. 3543-75-7) in bulk powder form,",
+   "正文长度": 3032
+  },
+  {
+   "裁定号": "N335488",
+   "日期": "2024-08-21",
+   "描述": "Our response was delayed due to laboratory analysis, during which the sample you submitted was destroyed. Style WG15100135219A is a girl’s upper body garment constructed of 1% metallic yarn and 99% cotton woven fabric.",
+   "金标": "62114210",
+   "subject": "The tariff classification of a girl’s upper body garment from Bangladesh",
+   "描述_subject": "girl’s upper body garment",
+   "正文长度": 3627
+  },
+  {
+   "裁定号": "N335672",
+   "日期": "2023-10-18",
+   "描述": "Olanzapine, imported in 2.5 mg, 5 mg, 7.5 mg, 10 mg, 15 mg and 20 mg tablets, is a second-generation (atypical) antipsychotic medication. It is used in the management of schizophrenia, bipolar 1 disorder, and agitation associated with these disorders.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Olanzapine Tablets in dosage form, from India",
+   "描述_subject": "Olanzapine Tablets in dosage form,",
+   "正文长度": 3148
+  },
+  {
+   "裁定号": "N335834",
+   "日期": "2023-10-25",
+   "描述": "You have submitted a sample, which will be returned to you under separate cover. The article at issue is a hydration pack constructed with an outer surface of man-made textile material. It is similar in design to a backpack and includes two straps that can be worn over the shoulders and on the back. The hydration pack features one main compartment and a top zippered closure.",
+   "金标": "42029204",
+   "subject": "The tariff classification of a hydration pack from China",
+   "描述_subject": "hydration pack",
+   "正文长度": 4530
+  },
+  {
+   "裁定号": "N335949",
+   "日期": "2023-10-31",
+   "描述": "You submitted a sample of a child size costume identified as “FZN Elsas Blue FZN Dress,” item number 221042, which consists of a man-made textile pullover dress with attached cape depicting Elsa’s iconic blue dress. The long-sleeved dress features large, visible, loose overlock stitching around the back neck and back opening.",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China.",
+   "描述_subject": "textile costume",
+   "正文长度": 3486
+  },
+  {
+   "裁定号": "N336479",
+   "日期": "2023-11-22",
+   "描述": "This position is set forth in Title 19, Code of Federal Regulations (CFR), Section 177.9(b)(1). This section states that a ruling letter is issued on the assumption that all of the information furnished in the ruling letter, whether directly, by reference, or by implication, is accurate and complete in every material respect.",
+   "金标": "94032000",
+   "subject": "The tariff classification of a growing rack from China",
+   "描述_subject": "growing rack",
+   "正文长度": 44645
+  },
+  {
+   "裁定号": "N336481",
+   "日期": "2023-11-21",
+   "描述": "The product is a fishing rod and accessories kit, item number 91111. The kit is comprised of an unmounted fishing reel, telescopic fishing rod, plastic tackle box with a spool of fishing line, 2 floats, 2 float rests, 2 lures, and 2 fish hooks. The spool contains 25 meters of a 0.35mm line. The complete kit will be imported from China and sold in one retail blister package.",
+   "金标": "95071000",
+   "subject": "The tariff classification of Fishing Rod kit from China",
+   "描述_subject": "Fishing Rod kit",
+   "正文长度": 6000
+  },
+  {
+   "裁定号": "N336571",
+   "日期": "2023-12-06",
+   "描述": "The item under consideration is described as a temperature probe steam wand (SKU 011008736), which is a Negative Temperature Coefficient (NTC) sensor designed for use in the Mastrena Espresso Machine. According to the manufacturer, this item acts as a thermometer that is later combined with automatic regulating devices.",
+   "金标": "90251980",
+   "subject": "The tariff classification of a temperature probe steam wand from Switzerland",
+   "描述_subject": "temperature probe steam wand",
+   "正文长度": 4197
+  },
+  {
+   "裁定号": "N336715",
+   "日期": "2023-12-11",
+   "描述": "Zoledronic Acid Injection, imported in 5 mg/100 mL bags, belongs to a class of drugs known as bisphosphonates. It is indicated for the treatment and prevention of osteoporosis in postmenopausal women. It is also indicated to increase bone mass in men with osteoporosis and for the treatment of Paget's disease.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Zoledronic Acid Injection in dosage form, from India",
+   "描述_subject": "Zoledronic Acid Injection in dosage form,",
+   "正文长度": 3087
+  },
+  {
+   "裁定号": "N336811",
+   "日期": "2023-12-07",
+   "描述": "The merchandise under consideration is referred to as the Plant Petz “Hi Planty!,” which is an electronic greeting device that is designed to be inserted into a potted plant. It consists of a stainless-steel probe with semiconductor media that can record and reproduce sound.",
+   "金标": "85198141",
+   "subject": "The tariff classification of a sound recording and reproducing apparatus from China",
+   "描述_subject": "sound recording and reproducing apparatus",
+   "正文长度": 2986
+  },
+  {
+   "裁定号": "N336889",
+   "日期": "2023-12-21",
+   "描述": "Style O0303602 is a woman’s dress composed of two layers permanently attached at the neckline and armholes. The inner garment is constructed from 62% linen, 36% viscose, and 2% spandex woven fabric and extends from the shoulders to the mid-thigh area. The outer garment is constructed from 100% polyester woven fabric and extends from the shoulders to the ankle area.",
+   "金标": "62044340",
+   "subject": "The tariff classification of a woman’s dress from China",
+   "描述_subject": "woman’s dress",
+   "正文长度": 3956
+  },
+  {
+   "裁定号": "N336937",
+   "日期": "2023-12-14",
+   "描述": "Item 359792 is a woman’s upper body garment constructed from 45% cotton, 40% polyester, 14% rayon, and 1% spandex woven fabric. The fully-lined jacket features ¾ length sleeves with hemmed cuffs, a round neckline, a full front opening secured with four snap closures, a left chest pocket, and a banded bottom. The jacket extends from the shoulders to the hip area. Although",
+   "金标": "62114310",
+   "subject": "The tariff classification of a woman’s jacket from Vietnam",
+   "描述_subject": "woman’s jacket",
+   "正文长度": 2965
+  },
+  {
+   "裁定号": "N336967",
+   "日期": "2024-01-04",
+   "描述": "The subject merchandise is Quorn™ Vegan Pastry Puffs. The product is composed of water, wheat flour, palm oil, mycoprotein, onion, and wheat gluten that contains two percent or less of canola oil, yeast extract, pea protein, salt, natural flavors, maltodextrin, methylcellulose, potato protein, dextrose, calcium chloride, pea fiber, potassium chloride, spices, wheat starch, red beet coloring, calci",
+   "金标": "19019091",
+   "subject": "The tariff classification of Vegan Pastry Puffs from Ireland",
+   "描述_subject": "Vegan Pastry Puffs",
+   "正文长度": 3587
+  },
+  {
+   "裁定号": "N337041",
+   "日期": "2023-12-29",
+   "描述": "Item #JF10461, described as a “Bluey storage bin,” is a textile storage bin designed and intended to store children’s items in the home. The open top, round-shaped bin is constructed of 100 percent polyester woven, dyed light blue, plush fabric on the exterior surface and rim.",
+   "金标": "63079098",
+   "subject": "The tariff classification of a textile storage bin from China",
+   "描述_subject": "textile storage bin",
+   "正文长度": 5323
+  },
+  {
+   "裁定号": "N337043",
+   "日期": "2023-12-19",
+   "描述": "The item under consideration has been identified as a 1982 Toyota Landcruiser FJ45 Troop Carrier.",
+   "金标": "87029061",
+   "subject": "The tariff classification of a 1982 Toyota Landcruiser FJ45 Troop Carrier from Japan",
+   "描述_subject": "1982 Toyota Landcruiser FJ45 Troop Carrier",
+   "正文长度": 2885
+  },
+  {
+   "裁定号": "N337222",
+   "日期": "2024-01-03",
+   "描述": "Your submission identifies the subject product as a Halloween DIY Suncatcher Kit (SKU#: 38173701). The Suncatcher Kit consists of a clear plastic suncatcher, a string for hanging, three small pods of paint, and a paint brush. The suncatcher is intended to be painted and used as a Halloween decoration.",
+   "金标": "32131000",
+   "subject": "The tariff classification of a Suncatcher Kit from China",
+   "描述_subject": "Suncatcher Kit",
+   "正文长度": 6054
+  },
+  {
+   "裁定号": "N337243",
+   "日期": "2024-01-20",
+   "描述": "The subject merchandise is Whitefish Powder (Product code 200201).",
+   "金标": "03091005",
+   "subject": "The tariff classification of Whitefish Powder from Norway",
+   "描述_subject": "Whitefish Powder",
+   "正文长度": 2983
+  },
+  {
+   "裁定号": "N337323",
+   "日期": "2024-01-08",
+   "描述": "You submitted a child size costume identified as Killer Carnival Clown, item numbers 3124-068 and SP3124-068, which consists of a pullover long sleeved top, pull-on pants, separate collar, and mask. General Rule of Interpretation 3(b) is applicable when goods are, prima facie, classifiable under two or more headings, and have been put up in sets for retail sale.",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China and Vietnam.",
+   "描述_subject": "textile costume",
+   "正文长度": 3685
+  },
+  {
+   "裁定号": "N337357",
+   "日期": "2024-01-19",
+   "描述": "An image was provided in lieu of a sample. The product under consideration is described as “EVA Foam,” part 1231574. This item is an anti-slip pad made from ethylene vinyl acetate (EVA) plastic foam and will be added to the floor of a kayak after importation. From your correspondence, it appears this will go underneath the user’s feet while sitting in the kayak.",
+   "金标": "39269099",
+   "subject": "The tariff classification of an EVA foam kayak component from China.",
+   "描述_subject": "EVA foam kayak component",
+   "正文长度": 3854
+  },
+  {
+   "裁定号": "N337368",
+   "日期": "2024-01-22",
+   "描述": "You submitted a sample of a child size costume identified as Hooded Vampire Dress, item numbers 3024-063 and SP3024-063, which consists of a long-sleeved pullover dress, choker, and waist sash with buckle. General Rule of Interpretation 3(b) is applicable when goods are, prima facie, classifiable under two or more headings, and have been put up in sets for retail sale.",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China and Vietnam.",
+   "描述_subject": "textile costume",
+   "正文长度": 3700
+  },
+  {
+   "裁定号": "N337433",
+   "日期": "2024-01-17",
+   "描述": "The first item under consideration is described as the ETNA System, which is test equipment specifically designed for qualification and burn-in trials on a wide range of semiconductor devices. The system is based on three main platforms. The first is the test platform, which includes the electronics needed to stimulate and monitor the devices under test (DUTs).",
+   "金标": "90308200",
+   "subject": "The tariff classification of semiconductor test equipment from Italy",
+   "描述_subject": "semiconductor test equipment",
+   "正文长度": 5350
+  },
+  {
+   "裁定号": "N337440",
+   "日期": "2024-01-23",
+   "描述": "The submitted sample, item ES42K706, is a boy’s one-piece pullover sewn to a bodysuit-style garment that extends to the midthigh. The long sleeve garment is composed of 60 percent cotton and 40 percent polyester knit fabric. The pullover features a round front neckline, hemmed sleeves and a hemmed straight bottom that reaches below the waist.",
+   "金标": "61142000",
+   "subject": "The tariff classification of a boy’s adaptive garment from Vietnam",
+   "描述_subject": "boy’s adaptive garment",
+   "正文长度": 3824
+  },
+  {
+   "裁定号": "N337610",
+   "日期": "2024-01-29",
+   "描述": "The products under consideration are cold-rolled, zinc-coated, nonalloy steel sheets.",
+   "金标": "72104900",
+   "subject": "The tariff classification of galvanized steel sheets from Vietnam",
+   "描述_subject": "galvanized steel sheets",
+   "正文长度": 4148
+  },
+  {
+   "裁定号": "N337667",
+   "日期": "2024-02-06",
+   "描述": "You provided samples of two half bale covers with your request. The samples will be retained for training purposes. SKU# BB02180: INDO26HB-WHITE BAG, described as a “Half Bale Cover,” is a textile cover intended to protect lumber, yarn, and other goods from the elements.",
+   "金标": "63079098",
+   "subject": "The tariff classification of half bale covers from India",
+   "描述_subject": "half bale covers",
+   "正文长度": 4295
+  },
+  {
+   "裁定号": "N337672",
+   "日期": "2024-02-20",
+   "描述": "In your letter and subsequent correspondence",
+   "金标": "59032025",
+   "subject": "The tariff classification of three waterproof footwear fabrics from Germany",
+   "描述_subject": "three waterproof footwear fabrics",
+   "正文长度": 3749
+  },
+  {
+   "裁定号": "N337704",
+   "日期": "2024-02-15",
+   "描述": "The product under consideration has been identified as a kayak carrier designed to attach to the crossbars on a motor vehicle roof rack or a truck bed cargo rack.",
+   "金标": "87082951",
+   "subject": "The tariff classification of a kayak carrier from China",
+   "描述_subject": "kayak carrier",
+   "正文长度": 4632
+  },
+  {
+   "裁定号": "N337942",
+   "日期": "2024-02-21",
+   "描述": "Images were provided in lieu of a sample. The product under consideration is described as the “TruStream Drum Port.” It consists of three components, the port housing and the fastening nut, both made from polyoxymethylene plastic, and an ethylene propylene diene monomer (EPDM) rubber gasket.",
+   "金标": "39269099",
+   "subject": "The tariff classification of a plastic drum port from China.",
+   "描述_subject": "plastic drum port",
+   "正文长度": 4170
+  },
+  {
+   "裁定号": "N338047",
+   "日期": "2024-02-22",
+   "描述": "The merchandise under consideration is identified as the Sun’s Out Tropical Water Goggles, item number 4991. The subject goggles are comprised of two polycarbonate lenses and a silicone head strap. The goggles come in various colors and are designed and marketed for children ages 6 and over.",
+   "金标": "90049000",
+   "subject": "The tariff classification of children’s swim goggles from China",
+   "描述_subject": "children’s swim goggles",
+   "正文长度": 3559
+  },
+  {
+   "裁定号": "N338056",
+   "日期": "2024-02-28",
+   "描述": "Images were provided in lieu of a sample. The product under consideration is described as the “iCube Wrapsulator ™.” It consists of two individual plastic pieces that fit together and are securely held together with rubber latches. A neoprene sleeve is then wrapped around the plastic to provide an additional layer of insulation.",
+   "金标": "39269099",
+   "subject": "The tariff classification of a plastic beverage chilling sleeve from China.",
+   "描述_subject": "plastic beverage chilling sleeve",
+   "正文长度": 4219
+  },
+  {
+   "裁定号": "N338069",
+   "日期": "2024-02-18",
+   "描述": "You submitted a sample of a child size costume identified as item number 724734, which consists of a man-made textile pullover dress with spaghetti straps. The flimsy dress features large, visible, loose overlock stitching around the neck, deep back opening and armholes. The back opening is closed with a single small tab of hook and loop fastener.",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China.",
+   "描述_subject": "textile costume",
+   "正文长度": 3468
+  },
+  {
+   "裁定号": "N338285",
+   "日期": "2024-03-04",
+   "描述": "You have submitted an adult size costume identified as the Full Moon Werewolf, item numbers 5124-073 and SP5124-073, which consists of a long-sleeved pullover top with faux fur front neck insert, fingerless gloves, and a mask. General Rule of Interpretation 3(b) is applicable when goods are, prima facie, classifiable under two or more headings, and have been put up in sets for retail sale.",
+   "金标": "95059060",
+   "subject": "The tariff classification of a textile costume from China and Vietnam.",
+   "描述_subject": "textile costume",
+   "正文长度": 3795
+  },
+  {
+   "裁定号": "N338338",
+   "日期": "2024-02-26",
+   "描述": "Photos and a description of the item were submitted for our review. The “Wooden Mushroom Cluster,” item ADG24F0162E, is a wooden tabletop decoration constructed primarily of pine wood, which measures approximately four inches in diameter and six inches high. A round wooden base supports three sculpted wooden mushrooms of various heights. Around their stems is a bed of natural moss.",
+   "金标": "44201900",
+   "subject": "The tariff classification of a wooden décor item from China",
+   "描述_subject": "wooden décor item",
+   "正文长度": 2648
+  },
+  {
+   "裁定号": "N338407",
+   "日期": "2024-03-14",
+   "描述": "The product under consideration is described as a collection bag, which is used in the dairy industry for the collection of milk samples on dairy farms, dairy tanker trucks, and dairy plants. The collection bag is a set that consists of three components, a polyvinyl chloride (PVC) bag, PVC tubing, and a stainless-steel needle.",
+   "金标": "39269099",
+   "subject": "The tariff classification of a collection bag from China.",
+   "描述_subject": "collection bag",
+   "正文长度": 3561
+  },
+  {
+   "裁定号": "N338461",
+   "日期": "2025-03-13",
+   "描述": "The U.S. Customs and Border Protection Laboratory (CBP Laboratory) has determined that Flexsteel Pattern 537 (Field of Flowers) is a printed fabric of plain weave construction. The fabric weighs 309.6 g/m 2 and is composed of 96 percent polyester staple fibers and 4 percent linen staple fibers. The fabric contains 11 warp ends per one centimeter and 9 filling picks per one centimeter.",
+   "金标": "55121900",
+   "subject": "The tariff classification of plain-woven polyester upholstery fabric from China",
+   "描述_subject": "plain-woven polyester upholstery fabric",
+   "正文长度": 5709
+  },
+  {
+   "裁定号": "N338812",
+   "日期": "2024-03-15",
+   "描述": "You submitted a photograph and a detailed description of an item identified as Christmas Cake Slice Glass Ornament, item number 38855201, which consists of a wedge-shaped glass ornament depicting a slice of rainbow-colored layer cake with glitter on top. The top of the ornament features a metal crown with a metal loop through which a braided string loop is strung for hanging on a Christmas tree.",
+   "金标": "95051010",
+   "subject": "The tariff classification of a glass Christmas tree ornament from China.",
+   "描述_subject": "glass Christmas tree ornament",
+   "正文长度": 3885
+  },
+  {
+   "裁定号": "N338820",
+   "日期": "2024-04-05",
+   "描述": "Aripiprazole, imported as an oral solution in 1 mg/1 mL, belongs to a group of medicines called antipsychotics. It is indicated for the treatment of schizophrenia, bipolar I, major depressive disorder, irritability associated with autism, and Tourette’s syndrome.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Aripiprazole Oral Solution in dosage form, from India",
+   "描述_subject": "Aripiprazole Oral Solution in dosage form,",
+   "正文长度": 3164
+  },
+  {
+   "裁定号": "N338834",
+   "日期": "2024-04-09",
+   "描述": "Oxcarbazepine Oral Suspension, imported in 300 mg/5 mL, is an anti-epileptic drug. It is indicated for the treatment of partial-onset seizures.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Oxcarbazepine Oral Suspension in dosage form, from India",
+   "描述_subject": "Oxcarbazepine Oral Suspension in dosage form,",
+   "正文长度": 3021
+  },
+  {
+   "裁定号": "N339076",
+   "日期": "2024-04-18",
+   "描述": "Pirfenidone, imported in dosages of 267 mg and 801 mg tablets, is an antifibrotic agent with anti-inflammatory and antioxidant properties. It is indicated for the treatment of idiopathic pulmonary fibrosis (IPF) which is a chronic, progressive form of interstitial pneumonia.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Pirfenidone Tablets in dosage form, from India",
+   "描述_subject": "Pirfenidone Tablets in dosage form,",
+   "正文长度": 3113
+  },
+  {
+   "裁定号": "N339088",
+   "日期": "2024-10-22",
+   "描述": "An ingredients breakdown, a manufacturing flowchart, a detailed description of the manufacturing process, product specification sheets and samples of four products accompanied your inquiry. The samples and documentation received with your request were forwarded to the Custom and Border Protection Laboratory for review. That review is now complete.",
+   "金标": "20059920",
+   "subject": "The tariff classification of onion products from China",
+   "描述_subject": "onion products",
+   "正文长度": 6662
+  },
+  {
+   "裁定号": "N339116",
+   "日期": "2024-04-05",
+   "描述": "The merchandise under consideration is referred to as a micro push around scissor lift, model number CUB-10, which is described as a type of aerial work platform used by workers to access overhead work areas. The scissor lift has a lifting capacity of 500 pounds and is capable of raising personnel, tools, and materials up to a maximum working height of 15.8 feet.",
+   "金标": "84279000",
+   "subject": "The tariff classification of a scissor lift from China",
+   "描述_subject": "scissor lift",
+   "正文长度": 4631
+  },
+  {
+   "裁定号": "N339136",
+   "日期": "2024-04-23",
+   "描述": "Celecoxib, imported in dosages of 100 mg and 200 mg capsules, is a non-steroidal anti-inflammatory drug (NSAID). It is used in the treatment of osteoarthritis, rheumatoid arthritis, acute pain, painful menstruation and ankylosing spondylitis.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Celecoxib Capsules in dosage form, from India",
+   "描述_subject": "Celecoxib Capsules in dosage form,",
+   "正文长度": 3110
+  },
+  {
+   "裁定号": "N339348",
+   "日期": "2024-04-12",
+   "描述": "You submitted photographs and a detailed description of an item identified as a Christmas wreath, item number S86531, which consists of a 24” diameter wreath composed of plastic evergreen foliage bound with wire to a circular core of natural vine. The foliage completely obscures the vine core from view.",
+   "金标": "95051025",
+   "subject": "The tariff classification of Christmas wreaths from China.",
+   "描述_subject": "Christmas wreaths",
+   "正文长度": 3077
+  },
+  {
+   "裁定号": "N339563",
+   "日期": "2024-05-01",
+   "描述": "The merchandise under consideration is identified as the whiskey smoker. The whiskey smoker consists of a beech wood mushroom-like hollow base, a beech wood lid and a stainless steel rimmed mesh encased in the middle of the base. The stainless steel mesh is where the user places wood chips and then lights the wood chips on fire.",
+   "金标": "73218900",
+   "subject": "The tariff classification of a whiskey smoker from Italy",
+   "描述_subject": "whiskey smoker",
+   "正文长度": 3591
+  },
+  {
+   "裁定号": "N339568",
+   "日期": "2024-05-10",
+   "描述": "The submitted sample is a boy’s pullover constructed of 60 percent cotton and 40 percent polyester knit fabric. The garment features a large heat seal on the front, a rib knit crew neckline, long hemmed sleeves and a straight hemmed bottom.",
+   "金标": "61102020",
+   "subject": "The tariff classification of a boy’s upper body garment from Bangladesh.",
+   "描述_subject": "boy’s upper body garment",
+   "正文长度": 2506
+  },
+  {
+   "裁定号": "N339583",
+   "日期": "2024-05-08",
+   "描述": "The ruling was requested on surface covered plywood panels. Product information and a sample were submitted for our review. The products under consideration are multilayer wood panels.",
+   "金标": "44123357",
+   "subject": "The tariff classification of surface covered plywood panels from China",
+   "描述_subject": "surface covered plywood panels",
+   "正文长度": 7527
+  },
+  {
+   "裁定号": "N339640",
+   "日期": "2024-04-30",
+   "描述": "You submitted a photograph and a detailed description of an item you identified as a spider web patterned table runner, CVS Pharmacy item # 424355. The item is a man-made woven textile fabric cutout representation of a series of five spider webs, horizontally connected to each other including images of spiders scattered within the webs.",
+   "金标": "95059060",
+   "subject": "The tariff classification of a Halloween decoration from China.",
+   "描述_subject": "Halloween decoration",
+   "正文长度": 3953
+  },
+  {
+   "裁定号": "N339643",
+   "日期": "2024-05-01",
+   "描述": "You submitted photographs and a detailed description of an item identified as a decorative ceramic jack-o’-lantern, CVS Pharmacy item # 365347, which consists of a white dolomite ceramic jack-o’-lantern with a black interior. The item features large cutout eyes, nose, and a smiling mouth. The 7.6” tall jack-o’-lantern includes a wire handle.",
+   "金标": "95059060",
+   "subject": "The tariff classification of a Halloween decoration from China.",
+   "描述_subject": "Halloween decoration",
+   "正文长度": 2832
+  },
+  {
+   "裁定号": "N340051",
+   "日期": "2024-05-20",
+   "描述": "You submitted photographs and a detailed description of items identified as Day of the Dead animal decorations, CVS item number 436064, which consists of an assortment of four styles of brightly colored animal figurines which vary in height from 2.25\" to 4.25\" in height. The items are made of polyester resin mixed with natural stone powder.",
+   "金标": "95059060",
+   "subject": "The tariff classification of a Day of the Dead decorations from China.",
+   "描述_subject": "Day of the Dead decorations",
+   "正文长度": 2990
+  },
+  {
+   "裁定号": "N340218",
+   "日期": "2024-05-28",
+   "描述": "S. You submitted photographs and a detailed description of an item identified as style 991108336, Halloween Glasses, which consists of a half-mask comprised of plastic glasses, without lenses, that spell out the word 'BOO!'. A nonwoven polyester ghost and bat adorn the glasses. They are large and non-functional. Although",
+   "金标": "95059060",
+   "subject": "The tariff classification of novelty Halloween glasses from China.",
+   "描述_subject": "novelty Halloween glasses",
+   "正文长度": 2886
+  },
+  {
+   "裁定号": "N340492",
+   "日期": "2024-06-25",
+   "描述": "The merchandise under consideration are skincare products. The first item is a facial serum packaged in 30 mL glass bottles. The second item is a facial cream described as a barrier restoration cream packaged in 50 mL glass bottles.",
+   "金标": "33049950",
+   "subject": "The tariff classification of a facial serum and a facial cream from the United Kingdom",
+   "描述_subject": "facial serum and a facial cream from the United Kingdom",
+   "正文长度": 2936
+  },
+  {
+   "裁定号": "N340549",
+   "日期": "2024-06-06",
+   "描述": "That review is now complete. We apologize for the delay in the issuance of this ruling. The “PowerGel Hydro Orange,” is a miscellaneous edible preparation for human consumption.",
+   "金标": "21069099",
+   "subject": "The tariff classification of a miscellaneous edible preparation from Germany.",
+   "描述_subject": "miscellaneous edible preparation",
+   "正文长度": 3880
+  },
+  {
+   "裁定号": "N340554",
+   "日期": "2024-06-26",
+   "描述": "Style S8TI-J1605M is a woman’s upper body garment constructed from 100% silk woven fabric. The garment extends below the hips and covers the shoulders, the back, the front, and the arms. The garment features an unsecured full front opening, long sleeves, side seam pockets below the waist, and a hemmed bottom.",
+   "金标": "62114950",
+   "subject": "The tariff classification of a woman’s jacket from China",
+   "描述_subject": "woman’s jacket",
+   "正文长度": 4310
+  },
+  {
+   "裁定号": "N340774",
+   "日期": "2024-06-27",
+   "描述": "A description and a photograph of the dotting tool were submitted for our review. The article for which you are requesting a ruling is identified as the Beauty Secrets Dotting Tool.",
+   "金标": "73269086",
+   "subject": "The tariff classification of a dotting tool from China",
+   "描述_subject": "dotting tool",
+   "正文长度": 5931
+  },
+  {
+   "裁定号": "N340835",
+   "日期": "2024-06-28",
+   "描述": "The merchandise under consideration is described as the Safetech TriLatch, part number SL-50-TRI. It is a pool gate safety latch made of stainless steel and fiber-reinforced polymers that is used to prevent small children from opening the pool gate to access the swimming pool. The TriLatch is a magnetic self-latching system that is 21 inches long.",
+   "金标": "83024960",
+   "subject": "The tariff classification of a stainless steel pool gate safety latch from China",
+   "描述_subject": "stainless steel pool gate safety latch",
+   "正文长度": 4174
+  },
+  {
+   "裁定号": "N340956",
+   "日期": "2024-07-17",
+   "描述": "The merchandise is identified as the candle warmer lamp, CVS item # 552344. The submitted literature and the sample review indicates that the CVS item # 552344 is a desk lamp made of iron. It comprises a round disk-like base and a cylindrical light head or shade. A rod extended from the side of the base is connected to the shade.",
+   "金标": "94052960",
+   "subject": "The tariff classification of a candle warmer lamp from China",
+   "描述_subject": "candle warmer lamp",
+   "正文长度": 4544
+  },
+  {
+   "裁定号": "N341076",
+   "日期": "2024-07-16",
+   "描述": "The products under consideration are zinc-coated nonalloy steel coils. According to your submission, these cold-rolled steel coils which are made to ASTM A653 are hot-dipped galvanized and two coats of primer paint are applied. The coils measure 0.71 mm or 0.86 mm in thickness and are 1219 mm in width.",
+   "金标": "72107060",
+   "subject": "The tariff classification of nonalloy steel coils from Mexico",
+   "描述_subject": "nonalloy steel coils",
+   "正文长度": 3403
+  },
+  {
+   "裁定号": "N341089",
+   "日期": "2024-07-17",
+   "描述": "Descriptive information was provided. The items in question are aluminum manifold end covers, also referred to as valve blocks (part numbers 22334215, 38024602, and 38070948). The end covers are shaped to be used with a motor vehicle’s stabilizer bar system and feature bores designed to incorporate two solenoid valves, sensors, and an accumulator.",
+   "金标": "84819090",
+   "subject": "The tariff classification of manifold end covers from China",
+   "描述_subject": "manifold end covers",
+   "正文长度": 4761
+  },
+  {
+   "裁定号": "N341095",
+   "日期": "2024-07-18",
+   "描述": "The products under consideration are zinc-coated nonalloy steel coils. The coils are hot-dipped galvanized and are made to ASTM A653. These cold-rolled nonalloy steel coils measure 0.71 mm or 0.86 mm in thickness and are 1219 mm in width.",
+   "金标": "72104900",
+   "subject": "The tariff classification of nonalloy steel coils from Canada",
+   "描述_subject": "nonalloy steel coils",
+   "正文长度": 3351
+  },
+  {
+   "裁定号": "N341405",
+   "日期": "2024-08-06",
+   "描述": "Methylprednisolone, imported in 4 mg tablet form, is a synthetic corticosteroid (glucocorticoid) hormone. It is used to reduce inflammation in many conditions such as endocrine disorders, rheumatic disorders, collagen diseases, dermatologic diseases, ophthalmic diseases, respiratory diseases and allergic conditions.",
+   "金标": "30043200",
+   "subject": "The tariff classification of Methylprednisolone Tablets in dosage form, from India",
+   "描述_subject": "Methylprednisolone Tablets in dosage form,",
+   "正文长度": 3205
+  },
+  {
+   "裁定号": "N341424",
+   "日期": "2024-07-29",
+   "描述": "The products under consideration are zinc-coated nonalloy steel coils. According to your submission, these cold-rolled steel coils which are made to ASTM A653 are hot-dipped galvanized and two coats of primer paint are applied. The coils measure 0.71 mm or 0.86 mm in thickness and are 1150 mm in width.",
+   "金标": "72107060",
+   "subject": "The tariff classification of nonalloy steel coils from Canada",
+   "描述_subject": "nonalloy steel coils",
+   "正文长度": 3412
+  },
+  {
+   "裁定号": "N341553",
+   "日期": "2024-08-20",
+   "描述": "You submitted photographs and descriptive literature for our review. A style number was not provided. The article is a trifold toiletry bag with six empty plastic bottles: three two-ounce bottles, two 0.5-ounce bottles with caps, and one 1.2-ounce bottle with a pump cap.",
+   "金标": "42029231",
+   "subject": "The tariff classification of a trifold toiletry bag with plastic bottles from China",
+   "描述_subject": "trifold toiletry bag with plastic bottles",
+   "正文长度": 4859
+  },
+  {
+   "裁定号": "N342015",
+   "日期": "2024-09-05",
+   "描述": "The item under consideration is referred to as the Wexer player, which is a media player marketed for use in gyms and fitness facilities, model number WEX-PLYR-001. The subject media player allows the user to schedule streamed and on-demand fitness classes and store fitness content for playback.",
+   "金标": "85219000",
+   "subject": "The tariff classification of a media player from Taiwan or China",
+   "描述_subject": "media player",
+   "正文长度": 4655
+  },
+  {
+   "裁定号": "N342043",
+   "日期": "2024-08-21",
+   "描述": "A detailed description and photos of the item were submitted for our review. The product under consideration is a tabletop décor item made of iron, natural materials, and medium density fiberboard (MDF) with a printed message. The framework is iron, which has been wrapped completely with dried water hyacinth stems.",
+   "金标": "49119980",
+   "subject": "The tariff classification of printed decor from Vietnam",
+   "描述_subject": "printed decor",
+   "正文长度": 3332
+  },
+  {
+   "裁定号": "N342049",
+   "日期": "2024-08-27",
+   "描述": "An image was submitted in lieu of a sample. The item under consideration is described as a cuticle manicure set, CVS item number 256234. The set includes a cuticle nipper and a two-sided nail tool, which are both made from stainless steel, and a carrying case made of polyurethane (PU) plastic.",
+   "金标": "82142090",
+   "subject": "The tariff classification of a cuticle manicure set from China.",
+   "描述_subject": "cuticle manicure set",
+   "正文长度": 2778
+  },
+  {
+   "裁定号": "N342330",
+   "日期": "2024-09-24",
+   "描述": "You have submitted descriptive literature, a sample, and photographs. The submitted sample will be returned as requested. Style name/style number “Rapture Flip Flop” 30125S022 is a woman’s, open toe/open heel, thong sandal. This slip-on sandal does not cover the ankle.",
+   "金标": "64029931",
+   "subject": "The tariff classification of footwear form China",
+   "描述_subject": "footwear form China",
+   "正文长度": 3238
+  },
+  {
+   "裁定号": "N342336",
+   "日期": "2024-09-18",
+   "描述": "The merchandise under consideration is identified as the Barefoot Beachcomber Belt, Style Number 019466. The belt is a gold-colored metal stretch wire belt that features a gold-colored metal closure in the shape of a nautilus shell. The outer surface of the belt is made of zinc, and the inner coil wire is made of steel.",
+   "金标": "73269086",
+   "subject": "The tariff classification of a woman's metal belt from Cambodia",
+   "描述_subject": "woman's metal belt",
+   "正文长度": 4065
+  },
+  {
+   "裁定号": "N342354",
+   "日期": "2025-11-07",
+   "描述": "The U.S. Customs and Border Protection Laboratory (CBP Laboratory) has determined that fabric style “HALO” is a weft knit fabric of double knit construction. It composed wholly of polyester yarns of different colors and weighs 844.4 g/m2. The double knit fabric is composed of two knitted layers connected together by tuck stitches.",
+   "金标": "60063300",
+   "subject": "The tariff classification of a polyester double knit fabric from China",
+   "描述_subject": "polyester double knit fabric",
+   "正文长度": 5877
+  },
+  {
+   "裁定号": "N342376",
+   "日期": "2024-09-06",
+   "描述": "The merchandise under consideration is identified as the UX Edge Outdoor Kiosk, which is further described as a programmable, interactive display. The subject kiosk consists of two 55-inch, 4K touchscreens on either side, which are encased in glass to protect them from the elements.",
+   "金标": "85437098",
+   "subject": "The tariff classification of an interactive outdoor kiosk from Taiwan",
+   "描述_subject": "interactive outdoor kiosk",
+   "正文长度": 3209
+  },
+  {
+   "裁定号": "N342478",
+   "日期": "2024-09-26",
+   "描述": "Style A17192 “T-LIFTY-CAMOU” is a men’s upper body garment constructed from 94% cotton and 6% elastane rib knit fabric that measures more than nine stitches per two centimeters in the direction the stitches were formed.",
+   "金标": "61102020",
+   "subject": "The tariff classification of men’s upper body garments from China and Bulgaria",
+   "描述_subject": "men’s upper body garments",
+   "正文长度": 5010
+  },
+  {
+   "裁定号": "N342897",
+   "日期": "2024-10-22",
+   "描述": "Tranexamic Acid, imported in 1000 mg/10 mL (100 mg/mL) vials, is an antifibrinolytic. It is used to reduce or prevent hemorrhagic episodes, especially in the context of hyperfibrinolytic disorders.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Tranexamic Acid in dosage form, from China",
+   "描述_subject": "Tranexamic Acid in dosage form,",
+   "正文长度": 3069
+  },
+  {
+   "裁定号": "N342983",
+   "日期": "2024-10-10",
+   "描述": "Style S056827 is a boys’ jacket constructed from knit and woven fabric components. The majority of the front panels and back panel is constructed from 100% nylon woven fabric quilted in horizontal and vertical rows to a nonwoven polyester batting. The unlined raglan sleeves and hood are constructed from 82% polyester, 18% spandex knit fabric.",
+   "金标": "62014075",
+   "subject": "The tariff classification of a boys’ jacket from Bangladesh or Vietnam",
+   "描述_subject": "boys’ jacket",
+   "正文长度": 3691
+  },
+  {
+   "裁定号": "N343173",
+   "日期": "2024-10-30",
+   "描述": "Style C-RAZY/A167200IKAP is a woman’s blouse constructed from 100% viscose woven fabric. The wrap-style blouse features a collar with a V-neckline, long sleeves with button cuffs, an unfinished bottom, and a wrap-style front opening secured at the waist by a self-fabric tie.",
+   "金标": "62064030",
+   "subject": "The tariff classification of a woman’s blouse from China",
+   "描述_subject": "woman’s blouse",
+   "正文长度": 3647
+  },
+  {
+   "裁定号": "N343184",
+   "日期": "2024-10-29",
+   "描述": "The “Wild About Gardening” play set, item number 71082, consists of a plastic snail-shaped watering can, three miniature plastic toy gardening tools, 1 pair of gardening gloves, 1 color your own fabric apron, 4 markers, 6 wooden plant stakes, and 2 sticker sheets packaged together for retail sale. All of the articles work together for a child role-playing as a grown-up gardener.",
+   "金标": "95030000",
+   "subject": "The tariff classification of a children’s toy gardening set from China",
+   "描述_subject": "children’s toy gardening set",
+   "正文长度": 2569
+  },
+  {
+   "裁定号": "N343288",
+   "日期": "2024-10-17",
+   "描述": "A photo and description of the item were submitted for our review. The item under consideration is a wooden snowman table décor. The snowman is made of medium density fiberboard (MDF) and features a die-cut MDF single letter monogram applied to its belly. The artwork, such as facial features and buttons, are silk printed on the MDF.",
+   "金标": "44201900",
+   "subject": "The tariff classification of a wooden table décor from China",
+   "描述_subject": "wooden table décor",
+   "正文长度": 3080
+  },
+  {
+   "裁定号": "N343299",
+   "日期": "2024-10-17",
+   "描述": "The merchandise at issue is a mailer bag constructed of low-density polyethylene (LDPE). It incorporates a self-sealing adhesive strip for closure. The bags are printed with a repetitive design of strawberries, pumpkins or other similar patterns solely for decorative purposes.",
+   "金标": "39232100",
+   "subject": "The tariff classification of a polyethylene mailer bag from China",
+   "描述_subject": "polyethylene mailer bag",
+   "正文长度": 4880
+  },
+  {
+   "裁定号": "N343391",
+   "日期": "2024-10-22",
+   "描述": "You submitted a photograph, and a detailed description of an item identified as Harvest 3D Hanging Leaves, item number 671707, which consists of a set of three hanging leaf-shaped paper decorations. There are four sections of folded paperboard with punched-out holes joined together by double-sided tape and staples. They are packed flat.",
+   "金标": "95059040",
+   "subject": "The tariff classification of a party decoration from China.",
+   "描述_subject": "party decoration",
+   "正文长度": 3209
+  },
+  {
+   "裁定号": "N343393",
+   "日期": "2024-10-23",
+   "描述": "Item number 3903917 is a package of three plastic bookmarks. The bookmarks are constructed of two layers of clear, flexible vinyl and measure 8 inches long by 3.25 inches wide. The front of each bookmark is printed with a unique, colorful design of either planets, UFOs, or the saying “The Galaxy is Waiting.” A small charm is attached to a short metal chain at the top.",
+   "金标": "39261000",
+   "subject": "The tariff classification of plastic bookmarks from China",
+   "描述_subject": "plastic bookmarks",
+   "正文长度": 4532
+  },
+  {
+   "裁定号": "N343483",
+   "日期": "2024-11-12",
+   "描述": "Images were provided in lieu of samples. There are two automotive components under consideration that are both described as model name “MOLDING ASSY-FR DR FRAME.” The first is listed as part numbers 82850-R6010(left) and 82860-R6010(right). The second is listed as part numbers 82850-R6000(left) and 82860-R6000(right).",
+   "金标": "39263050",
+   "subject": "The tariff classification of plastic automotive body trim pieces from China.",
+   "描述_subject": "plastic automotive body trim pieces",
+   "正文长度": 4740
+  },
+  {
+   "裁定号": "N343522",
+   "日期": "2024-11-12",
+   "描述": "The item under consideration is described as the Adapt TM Adjustable Wreath Hanger with Stamped or Printed Holly Patterns. This article functions to hang a wreath on a door. It is made of two steel pieces: the top assembly that hangs over the door, and the bottom hooked assembly that holds the wreath and that can slide to adjust the height of the wreath.",
+   "金标": "83025000",
+   "subject": "The tariff classification of a metal wreath hanger from China",
+   "描述_subject": "metal wreath hanger",
+   "正文长度": 4718
+  },
+  {
+   "裁定号": "N343569",
+   "日期": "2024-11-21",
+   "描述": "The article under consideration is described as the AMSCO 70 Series Reprocessing Sink. This item is a free standing, adjustable-height, stainless steel sink that is available with either two or three fabricated sink basins. The steel counter length can range from 80 to 120 inches long.",
+   "金标": "73241000",
+   "subject": "The tariff classification of a steel reprocessing sink from Canada",
+   "描述_subject": "steel reprocessing sink",
+   "正文长度": 6035
+  },
+  {
+   "裁定号": "N344012",
+   "日期": "2024-12-04",
+   "描述": "Images and product literature were provided in lieu of a sample. The product under consideration is described as the “Toto® Lateral Turning System.” It is intended to be used as a reactive pressure redistribution device to prevent bedsores.",
+   "金标": "39269075",
+   "subject": "The tariff classification of a pneumatic pressure redistribution device from China.",
+   "描述_subject": "pneumatic pressure redistribution device",
+   "正文长度": 5692
+  },
+  {
+   "裁定号": "N344257",
+   "日期": "2024-12-13",
+   "描述": "Photos and a description of the item were submitted for our review. The item under consideration is identified as a \"Glass taper candle holder.\" The candle holder is constructed of light brown colored glass and measures approximately 4.08 inches in height by 3.15 in diameter.",
+   "金标": "94055040",
+   "subject": "The tariff classification of a candle holder from China",
+   "描述_subject": "candle holder",
+   "正文长度": 3039
+  },
+  {
+   "裁定号": "N344437",
+   "日期": "2024-12-17",
+   "描述": "Descriptive information and pictures accompanied your letter. The sample submitted will be examined and returned as requested. The North Face brand footwear, identified as TNF X CB Mule, style # NF0A8G67, is a below the ankle, closed toe, closed heel, woman’s, slip-on, casual shoe. The upper is comprised of polyester batting covered with a rubber or plastics (PU foil) film.",
+   "金标": "64029931",
+   "subject": "The tariff classification of slip-on footwear  from Vietnam",
+   "描述_subject": "slip-on footwear",
+   "正文长度": 3419
+  },
+  {
+   "裁定号": "N344559",
+   "日期": "2025-01-06",
+   "描述": "This position is set forth in Title 19, Code of Federal Regulations (CFR), Section 177.9(b)(1). This section states that a ruling letter is issued on the assumption that all of the information furnished in the ruling letter, whether directly, by reference, or by implication, is accurate and complete in every material respect.",
+   "金标": "94032000",
+   "subject": "The tariff classification of an adjustable workstation from Mexico",
+   "描述_subject": "adjustable workstation",
+   "正文长度": 6022
+  },
+  {
+   "裁定号": "N345071",
+   "日期": "2025-02-07",
+   "描述": "An ingredients breakdown, manufacturing flowchart, product specification sheet and a picture of the product accompanied your inquiry. The subject merchandise, “Whole Shrimp Mandu,” is described as frozen shrimp wrapped in a pastry paper with sauce inside.",
+   "金标": "19022000",
+   "subject": "The tariff classification of a stuffed food preparation from Vietnam",
+   "描述_subject": "stuffed food preparation",
+   "正文长度": 5253
+  },
+  {
+   "裁定号": "N345344",
+   "日期": "2025-02-12",
+   "描述": "Images and a product description were provided in lieu of a sample. The merchandise under consideration is a polymeric mesh/netting made wholly of polyethylene plastic. The mesh is made through an extrusion die process and weighs 550 to 580 grams per square meter. It is used in construction to facilitate water drainage by creating an air space between the inner wall and the exterior cladding.",
+   "金标": "39269099",
+   "subject": "The tariff classification of plastic mesh from China.",
+   "描述_subject": "plastic mesh",
+   "正文长度": 4480
+  },
+  {
+   "裁定号": "N345475",
+   "日期": "2025-02-11",
+   "描述": "Photos and a product description were provided for our review in lieu of a sample. The subject merchandise is the “161-149 OOLY x Peanuts: Color-in Wooden Scene Kit.” The kit consists of eight thin (3 mm thick) die-cut wooden “coloring boards” that are pieces of wood shaped and printed to resemble characters from the Peanuts comic strip, a wooden stand, and twelve color markers, all packaged toget",
+   "金标": "49119140",
+   "subject": "The tariff classification of printed wooden figures and pens from China",
+   "描述_subject": "printed wooden figures and pens",
+   "正文长度": 5340
+  },
+  {
+   "裁定号": "N345569",
+   "日期": "2025-02-05",
+   "描述": "The product under consideration is an empty plastic nasal spray bottle with integrated applicator tip and a removable plastic cap. After importation, the bottles will be filled with the medicament. The bottles are designed to permit patients to self-administer nasal spray and are disposable. The product is dispensed by pressing the “belly” of the bottle.",
+   "金标": "39233000",
+   "subject": "The tariff classification of empty plastic bottles with caps from China",
+   "描述_subject": "empty plastic bottles with caps",
+   "正文长度": 3779
+  },
+  {
+   "裁定号": "N345669",
+   "日期": "2025-03-03",
+   "描述": "Item # SEO00526, described as a “Versace Elastic Loop with Bow” consists of a textile prepared bow and band intended to slip over and securely wrap around a gift box. The prepared bow and band are each composed of a 100 percent Tencel dyed black narrow-woven fabric and features a continuous gold silk screen printing “Versace®” logo.",
+   "金标": "63079098",
+   "subject": "The tariff classification of a Versace Elastic Loop with Bow from China",
+   "描述_subject": "Versace Elastic Loop with Bow",
+   "正文长度": 6423
+  },
+  {
+   "裁定号": "N345733",
+   "日期": "2025-02-11",
+   "描述": "In your request, you describe the product, a tin oxide nano-particle suspension, as a combination of tin oxide and acetic acid.",
+   "金标": "38249993",
+   "subject": "The tariff classification of a tin oxide nano-particle suspension from Japan",
+   "描述_subject": "tin oxide nano-particle suspension",
+   "正文长度": 3218
+  },
+  {
+   "裁定号": "N345901",
+   "日期": "2025-02-18",
+   "描述": "The merchandise under consideration is identified as the Dimension Tripper and is further described as a guitar effect controller unit. The completed unit is presented as two devices, a receiver and a transmitter, which are packaged together and will be used in conjunction with one another. The receiver is comprised of various knobs and switches as well as audio cable connection points.",
+   "金标": "85437098",
+   "subject": "The tariff classification of a guitar effect processor from Japan",
+   "描述_subject": "guitar effect processor",
+   "正文长度": 4945
+  },
+  {
+   "裁定号": "N345907",
+   "日期": "2025-02-20",
+   "描述": "Item 1 is referred to as ELVALOY™ AC 3217 Acrylate Copolymer. The product is a copolymer of ethylene and butyl acrylate. The ethylene monomer comprises greater than 50 percent, but less than 95 percent by weight of the copolymer. Documentation was provided to demonstrate that the product meets the definition of “elastomeric” as provided for in Chapter 39 Additional U.S. Note 1.",
+   "金标": "39019010",
+   "subject": "The tariff classification of elastomeric ethylene copolymers from Belgium",
+   "描述_subject": "elastomeric ethylene copolymers",
+   "正文长度": 3202
+  },
+  {
+   "裁定号": "N346196",
+   "日期": "2025-03-06",
+   "描述": "You submitted samples of four different nonwoven fabrics to this office. The nonwovens referred to as “WL26230N,” “WL26403G,” “WL26424N,” and “WL26440N”, are lightweight nonwoven fabrics composed of man-made filament fibers; each fabric is of similar construction and weight. The laminated nonwovens feature a layer of plastic sandwiched between nonwoven fabrics.",
+   "金标": "56031200",
+   "subject": "The tariff classification of four laminated nonwoven fabrics from India",
+   "描述_subject": "four laminated nonwoven fabrics",
+   "正文长度": 3289
+  },
+  {
+   "裁定号": "N346239",
+   "日期": "2025-03-19",
+   "描述": "This position is clearly set forth in Title 19, Code of Federal Regulations (CFR), Section 177.9(b)(1). This section states that a ruling letter is issued on the assumption that all of the information furnished in the ruling letter, whether directly, by reference, or by implication, is accurate and complete in every material respect.",
+   "金标": "76109000",
+   "subject": "The tariff classification of aluminum shutters from Honduras",
+   "描述_subject": "aluminum shutters",
+   "正文长度": 4077
+  },
+  {
+   "裁定号": "N346399",
+   "日期": "2025-04-01",
+   "描述": "This position is clearly set forth in Title 19, Code of Federal Regulations (CFR), Section 177.9(b)(1). This section states that a ruling letter is issued on the assumption that all of the information furnished in the ruling letter, whether directly, by reference, or by implication, is accurate and complete in every material respect.",
+   "金标": "71159060",
+   "subject": "The tariff classification of spooled wire of precious metal",
+   "描述_subject": "spooled wire of precious metal",
+   "正文长度": 4397
+  },
+  {
+   "裁定号": "N346536",
+   "日期": "2025-03-26",
+   "描述": "Inc. The request was returned for additional information, which was received by this office on March 6, 2025. The ruling was requested on live edge wood boards and rectangular-cut wood boards. Product information and photos were submitted for our review. The items under consideration are pine wood boards that are marketed to be used for furniture and shelving.",
+   "金标": "44071100",
+   "subject": "The tariff classification of live edge wood boards from Canada",
+   "描述_subject": "live edge wood boards",
+   "正文长度": 7822
+  },
+  {
+   "裁定号": "N346628",
+   "日期": "2025-04-01",
+   "描述": "The product under consideration is powdered bromelain consisting of 90 percent bromelain powder and 10 percent maltodextrin (as a carrier). The product is produced from pineapple plant stems of the Bromeliceae family (Ananas Comosus) undergoing both an extraction and a purification process. The bromelain is extracted from the raw material (pineapple stems) using water.",
+   "金标": "35079070",
+   "subject": "The tariff classification of powdered bromelain from India",
+   "描述_subject": "powdered bromelain",
+   "正文长度": 3666
+  },
+  {
+   "裁定号": "N346688",
+   "日期": "2025-03-18",
+   "描述": "You submitted a photograph and detailed description of an item identified as Resin Flocking Nutcracker, item number X253-PXPRB009AB, which consists of an assortment of two nutcracker figures composed of polyresin and stone powder with the outer surface covered with polyester flocking. The figures depict a classic king nutcracker wearing a crown and holding a scepter.",
+   "金标": "95051025",
+   "subject": "The tariff classification of a nutcracker figure from China.",
+   "描述_subject": "nutcracker figure",
+   "正文长度": 3608
+  },
+  {
+   "裁定号": "N346733",
+   "日期": "2025-03-20",
+   "描述": "In lieu of samples, photos and detailed descriptions were submitted for our review. Item 1 is a hanger designed to hold both an upper body garment and a lower body garment simultaneously, for example a suit jacket and pants. The hanger is made primarily of wood with a top section that slopes down on each side and is notched near each end, and a metal top hook.",
+   "金标": "44211000",
+   "subject": "The tariff classification of clothes hangers from China",
+   "描述_subject": "clothes hangers",
+   "正文长度": 6282
+  },
+  {
+   "裁定号": "N346885",
+   "日期": "2025-03-20",
+   "描述": "You submitted photographs and a detailed description of three items described as Christmas stocking holders which will be used on shelves or mantels to hang Christmas stockings during the Christmas holiday. They are all constructed of aluminum alloy, iron and plastic with a silver finish. Each holder has a rectangular base with a hook and is topped with a different figure.",
+   "金标": "95051025",
+   "subject": "The tariff classification of Christmas stocking holders from China.",
+   "描述_subject": "Christmas stocking holders",
+   "正文长度": 3940
+  },
+  {
+   "裁定号": "N347111",
+   "日期": "2025-04-21",
+   "描述": "The subject merchandise is a concentrated fish oil ethyl ester. It is composed of concentrated anchovy, sardine, and tuna oil, to which an antioxidant is added to prevent rancidity. The product will either be used as is in a dietary supplement called VivoMega 3322 EE 23010-10 or further refined.",
+   "金标": "38249941",
+   "subject": "The tariff classification of a fish oil mixture from Norway",
+   "描述_subject": "fish oil mixture",
+   "正文长度": 3780
+  },
+  {
+   "裁定号": "N347153",
+   "日期": "2025-04-15",
+   "描述": "As an initial matter, we note that we will provide a tariff classification opinion on this issue, however we point out the below stipulations and limitations to our review.",
+   "金标": "85434000",
+   "subject": "The tariff classification of a cannabis vaporizer kit from China",
+   "描述_subject": "cannabis vaporizer kit",
+   "正文长度": 7497
+  },
+  {
+   "裁定号": "N347382",
+   "日期": "2025-04-15",
+   "描述": "The product under consideration is referred to as synthetic rubber ramps. They consist of ethylene propylene diene monomer (EPDM) rubber that is extruded into a “Double P” profile shape which creates a recessed trough throughout the length of the profile. They are produced in widths of 0.75 inches and 1.75 inches and lengths of 25 feet.",
+   "金标": "40082920",
+   "subject": "The tariff classification of rubber profile shapes from China",
+   "描述_subject": "rubber profile shapes",
+   "正文长度": 5468
+  },
+  {
+   "裁定号": "N347454",
+   "日期": "2025-04-29",
+   "描述": "The item consists of a wooden board with a steel hook and a steel ring that is attached to a 40” nylon string. The board is attached to a wall, and the string is attached to the ceiling with an eyehook, which is provided. The object of the game is to swing the ring on the string, so that it will catch it on to the hook on the wall, in order to score points.",
+   "金标": "95049090",
+   "subject": "The tariff classification of a “PGAT Hook & Toss” game from China.",
+   "描述_subject": "“PGAT Hook & Toss” game",
+   "正文长度": 5625
+  },
+  {
+   "裁定号": "N347486",
+   "日期": "2025-04-09",
+   "描述": "The product consists of 3 metal ball markers and a magnetic hat clip. The metal golf ball markers are used in the game of golf to mark the position of golf ball when it is in the way of another player's shot. The magnetic hat clip is used to hold the metal golf ball markers for easy access when needed. The 3-piece Ball Marker Set is considered an accessory used in the sport of golf.",
+   "金标": "95063900",
+   "subject": "The tariff classification of a Ball Marker 3 Piece Set from China.",
+   "描述_subject": "Ball Marker 3 Piece Set",
+   "正文长度": 3874
+  },
+  {
+   "裁定号": "N347488",
+   "日期": "2025-04-22",
+   "描述": "The product under consideration is a metal tie bar, product number S25ER203. It is a tie bar made of base metal used to keep a tie in place.",
+   "金标": "71171990",
+   "subject": "The tariff classification of a metal tie bar from China",
+   "描述_subject": "metal tie bar",
+   "正文长度": 3385
+  },
+  {
+   "裁定号": "N347565",
+   "日期": "2025-04-23",
+   "描述": "The item is a stand-up play kitchen made primarily of Medium-Density Fiberboard (MDF) and measuring approximately 36.69” wide by 13.39” deep and 41.38” tall. The play kitchen features lights and sounds, toy accessories, a turntable two-tier shelf, under-shelf hooks, slotted dish rack, towel rack, and 3 wooden storage shelves. The stove-top burner lights up and makes a sizzling sound.",
+   "金标": "95030000",
+   "subject": "The tariff classification of a play kitchen from China.",
+   "描述_subject": "play kitchen",
+   "正文长度": 5616
+  },
+  {
+   "裁定号": "N347619",
+   "日期": "2025-04-15",
+   "描述": "The product under consideration is solid wood flooring panels consisting of rubberwood (Hevea brasiliensis). Rubberwood is a tropical wood as designated Appellation of Tropical Woods annex to The Explanatory Notes to the Harmonized System (ENs) for Chapter 44. The panels measure approximately four inches in width and 18mm in thickness.",
+   "金标": "44189991",
+   "subject": "The tariff classification of solid wood flooring from Indonesia",
+   "描述_subject": "solid wood flooring",
+   "正文长度": 3915
+  },
+  {
+   "裁定号": "N347761",
+   "日期": "2025-05-08",
+   "描述": "Images were provided in lieu of samples. There are two automotive components under consideration described as “MOLDING ASSY-ROOF, LH,” part number 87230S9500, and “MOLDING ASSY-ROOF, RH,” part number 87240S9500. They are a pair of side roof moldings, left and right, in a rectangular shape. The main body is made of polyvinyl chloride (PVC) plastic and includes an aluminum reinforcement inside.",
+   "金标": "39263050",
+   "subject": "The tariff classification of plastic automotive body trim pieces from South Korea.",
+   "描述_subject": "plastic automotive body trim pieces",
+   "正文长度": 4265
+  },
+  {
+   "裁定号": "N347781",
+   "日期": "2025-04-22",
+   "描述": "In lieu of a sample, photographs of the beverage holder were provided with your request. Item #H0512, described as a “can cooler,” is a textile beverage holder designed to insulate a 12-ounce or a 16-ounce canned or bottled beverage.",
+   "金标": "63079098",
+   "subject": "The tariff classification of a beverage holder from China",
+   "描述_subject": "beverage holder",
+   "正文长度": 4891
+  },
+  {
+   "裁定号": "N347822",
+   "日期": "2025-05-12",
+   "描述": "DBA Defent. Additional information was provided via email on April 24, 2025 and May 9, 2025. DEFENT ONE is a forensic-use detection device that helps to detect trace amounts of fentanyl in a substance. It is in the form of immunoassay fentanyl detection strips housed in an all-in one unit.",
+   "金标": "38221900",
+   "subject": "The tariff classification of a forensic-use fentanyl detection device from China",
+   "描述_subject": "forensic-use fentanyl detection device",
+   "正文长度": 6563
+  },
+  {
+   "裁定号": "N347885",
+   "日期": "2025-05-09",
+   "描述": "Images were provided in lieu of a sample. The product under consideration is described as the “frida baby® NoseFrida® SnotSucker.” It is a plastic nasal aspirator that allows a parent/caregiver to remove excess mucus from an infant’s nose. The device consists of a large tube with a tapered end, a disposable filter, a filter cap, a tube, and a mouthpiece.",
+   "金标": "39269099",
+   "subject": "The tariff classification of a nasal aspirator from Sweden.",
+   "描述_subject": "nasal aspirator",
+   "正文长度": 4520
+  },
+  {
+   "裁定号": "N348214",
+   "日期": "2025-05-16",
+   "描述": "His Tag ELISA Detection Kit is a competition ELISA (Enzyme-Linked Immunosorbent Assay), developed for rapid and high throughput detection of His-tagged proteins.",
+   "金标": "38221900",
+   "subject": "The tariff classification of a His Tag ELISA (Enzyme-Linked Immunosorbent Assay) Detection Kit from China",
+   "描述_subject": "His Tag ELISA (Enzyme-Linked Immunosorbent Assay) Detection Kit",
+   "正文长度": 6989
+  },
+  {
+   "裁定号": "N348323",
+   "日期": "2025-05-09",
+   "描述": "The merchandise under consideration is identified as the TP53A Miniature Ceramic SMD Oscillator. The subject devices are electrical components that are comprised of an Application Specific Integrated Circuit (ASIC) combined with a quartz crystal within a ceramic and metal enclosure.",
+   "金标": "85437098",
+   "subject": "The tariff classification of a quartz oscillator from South Korea",
+   "描述_subject": "quartz oscillator",
+   "正文长度": 4837
+  },
+  {
+   "裁定号": "N348388",
+   "日期": "2025-05-16",
+   "描述": "The merchandise under consideration, identified as the Dog Silencer Max, is described as an anti-bark device for dogs. It uses high frequency ultrasonic sound that is powerful enough to quiet the dogs within the range of 300 feet from the device.",
+   "金标": "85437098",
+   "subject": "The tariff classification of an ultrasonic dog barking control device from China",
+   "描述_subject": "ultrasonic dog barking control device",
+   "正文长度": 6719
+  },
+  {
+   "裁定号": "N348517",
+   "日期": "2025-05-16",
+   "描述": "The items under consideration are the AlCNow+ and the AlCNow Self Check HbAlc blood testing meter systems, which are systems intended to quantitatively measure the percentage of glycated hemoglobin in fresh capillary blood samples from the fingertip.",
+   "金标": "90275040",
+   "subject": "The tariff classification of blood testing meter systems from Malaysia",
+   "描述_subject": "blood testing meter systems",
+   "正文长度": 12652
+  },
+  {
+   "裁定号": "N348691",
+   "日期": "2025-05-20",
+   "描述": "The first item under consideration is identified as a Constant Velocity (CV) Joint Assembly, Part number 8100005JS, which is a component that connects from the drive shaft or axle to the wheel hub.",
+   "金标": "87089968",
+   "subject": "The tariff classification of a CV Joint assembly and outboard boot from South Korea",
+   "描述_subject": "CV Joint assembly and outboard boot",
+   "正文长度": 6030
+  },
+  {
+   "裁定号": "N348766",
+   "日期": "2025-05-09",
+   "描述": "Part number 816D0AR000 is described as a sunroof drain hose. It consists of a polyvinyl chloride (PVC) hose with a plastic connector on one end and either plastic or steel fasteners to connect the drain hose to the vehicle chassis. The purpose of the hose is to channel water that accumulates in the sunroof groove to the vehicle exterior.",
+   "金标": "39173300",
+   "subject": "The tariff classification of a polyvinyl chloride (PVC) hose from Korea",
+   "描述_subject": "polyvinyl chloride (PVC) hose",
+   "正文长度": 3567
+  },
+  {
+   "裁定号": "N348898",
+   "日期": "2025-05-19",
+   "描述": "Photos, as well as additional descriptive information were provided for our review. The “Doodle Fun” activity kit consists of a 60-page drawing book (measuring 7” x 9”), 1 black marker, 1 pencil, 1 eraser, 1 sharpener, and 12 double-ended color markers. The goods are packaged together in a box for retail sale.",
+   "金标": "49030000",
+   "subject": "The tariff classification of a drawing activity kit from China",
+   "描述_subject": "drawing activity kit",
+   "正文长度": 6238
+  },
+  {
+   "裁定号": "N348931",
+   "日期": "2025-06-11",
+   "描述": "The first and second items are a sudoku and an adult level wordsearch puzzle paperback book, each measuring 5” x 7” with an elastic book band and 256 pages. The third item is a large print, adult level, wordsearch puzzle paperback book measuring approximately 10.6” x 8.9” and containing 352 pages.",
+   "金标": "95030000",
+   "subject": "The tariff classification of sudoku and word puzzle paperback books from China.",
+   "描述_subject": "sudoku and word puzzle paperback books",
+   "正文长度": 4297
+  },
+  {
+   "裁定号": "N349024",
+   "日期": "2025-06-09",
+   "描述": "Item 1 is described as Dalric D1, D2, and D3 Heel Extensions. They are said to be therapeutic foal shoes with heel extensions used for foals to treat weak flexor tendons (flaccidity). They feature a flat plate in the bottom with a hole and a curve in the back to fit the curve of the hoof. Item 2 is described as Dalric Ext1 and Dalric Ext2 (Dalric Lateral / Medial Extensions Shoes).",
+   "金标": "90211000",
+   "subject": "The tariff classification of orthopedic appliances for foals from Germany",
+   "描述_subject": "orthopedic appliances for foals",
+   "正文长度": 4859
+  },
+  {
+   "裁定号": "N349200",
+   "日期": "2025-05-22",
+   "描述": "A photograph of the item was submitted with your request. The product is a decorative ceramic lantern, item #X321-QSMRA001A-C. The article measures approximately 4.00 inches long by 4.00 inches wide by 5.75 inches high. The yellow lantern is square and made of dolomite ceramic. Its inside bottom contains a flat surface. The lantern features a yellow floral cutout design in the center.",
+   "金标": "69139050",
+   "subject": "The tariff classification of a ceramic decoration from China",
+   "描述_subject": "ceramic decoration",
+   "正文长度": 5033
+  },
+  {
+   "裁定号": "N349201",
+   "日期": "2025-05-27",
+   "描述": "A photograph of the item was submitted with your request. The product is a decorative ceramic lantern, item #X336-QSMR004A-C. The article measures approximately 4.75 inches long by 4.75 inches wide by 4.875 inches high. The blue, cylindrical-shaped lantern is made of dolomite ceramic. Its inside bottom contains a flat surface. The lantern features a blue butterfly cutout design in the center.",
+   "金标": "69139050",
+   "subject": "The tariff classification of a ceramic decoration from China",
+   "描述_subject": "ceramic decoration",
+   "正文长度": 5043
+  },
+  {
+   "裁定号": "N349261",
+   "日期": "2025-06-13",
+   "描述": "Images were provided in lieu of samples. There are two automotive components under consideration described as the “MOLDING ASSY-WINDSHIELD GLASS,” part number 86120-P1000, and “MOLDING-WINDSHIELD GLASS UPR,” part number 86121-S9000. Both parts are made of plastic and mounted between the windshield glass and the roof panel.",
+   "金标": "39263050",
+   "subject": "The tariff classification of plastic automotive body trim pieces from South Korea.",
+   "描述_subject": "plastic automotive body trim pieces",
+   "正文长度": 3649
+  },
+  {
+   "裁定号": "N349268",
+   "日期": "2025-06-17",
+   "描述": "located in St Catherines, Ontario, Canada. The subject of this ruling request is the prospective importation of a finished road-marking truck and the applicability of . Core Equipment Inc. (the “Importer”) is a non-resident importer of record located in Ontario, Canada.",
+   "金标": "87059000",
+   "subject": "The tariff classification of a road marking truck from Canada",
+   "描述_subject": "road marking truck",
+   "正文长度": 11039
+  },
+  {
+   "裁定号": "N349349",
+   "日期": "2025-06-04",
+   "描述": "The merchandise under consideration is identified as two models of a Shift By Wire (SBW) Control Unit Assembly, further identified by part numbers 42950-2D085 and 42950-2N110.",
+   "金标": "85437098",
+   "subject": "The tariff classification of a transmission control unit from Korea",
+   "描述_subject": "transmission control unit",
+   "正文长度": 5638
+  },
+  {
+   "裁定号": "N349543",
+   "日期": "2025-06-06",
+   "描述": "The item under consideration is described as the 222 Low Pressure Flash Gas Separator Module, which is a filter module installed in the Nanushuk Processing Facility (NPF) in Alaska. The module consists of a low-pressure flash gas separator, low pressure flash gas separator pumps, piping, valves, instrumentation, and controls to create a complete operational module.",
+   "金标": "84212900",
+   "subject": "The tariff classification of a flash gas separator module from Canada",
+   "描述_subject": "flash gas separator module",
+   "正文长度": 7134
+  },
+  {
+   "裁定号": "N349685",
+   "日期": "2025-06-10",
+   "描述": "As requested, your sample is being retained by this office. Item number S99367/A702610 is a women’s top constructed from 90 percent rayon and 10 percent spandex knit fabric.",
+   "金标": "61143010",
+   "subject": "The tariff classification of a women’s knit garment from Vietnam",
+   "描述_subject": "women’s knit garment",
+   "正文长度": 3874
+  },
+  {
+   "裁定号": "N349823",
+   "日期": "2025-06-27",
+   "描述": "The products under consideration are identified as aluminum “scrap cut, off-grade foundry products” which are products that are unusable by customers in the current form due to physical defects, incorrect chemistry specifications, or slab or billet cut-offs. According to your submission, the alloy and non-alloyed slabs and billets are smelted and cast at the Rio Tinto Alcan Canadian facility.",
+   "金标": "76020000",
+   "subject": "The tariff classification of aluminum scrap from Canada",
+   "描述_subject": "aluminum scrap",
+   "正文长度": 5080
+  },
+  {
+   "裁定号": "N349842",
+   "日期": "2025-06-24",
+   "描述": "DBA Gamma Sports. Product information was submitted with your request. The items under consideration are described as ball hopper pick up baskets that assist users in picking up tennis balls after a practice drill or exercise. During use, a user positions the ball hopper pick up basket over a tennis ball and pushes the basket down onto it.",
+   "金标": "73269086",
+   "subject": "The tariff classification of ball hopper baskets from China",
+   "描述_subject": "ball hopper baskets",
+   "正文长度": 6679
+  },
+  {
+   "裁定号": "N349944",
+   "日期": "2025-07-02",
+   "描述": "The product under consideration is listed in your submission as Junkosha peelable heat shrink tubing. It is constructed from a fluoropolymer blend (FEP) which would be considered a plastic material. This tubing serves as a manufacturing aid to apply compression in catheter production processes such as bonding lamination and tip-forming.",
+   "金标": "39269099",
+   "subject": "The tariff classification of plastic peelable heat shrink tubing from Japan.",
+   "描述_subject": "plastic peelable heat shrink tubing",
+   "正文长度": 4380
+  },
+  {
+   "裁定号": "N349965",
+   "日期": "2025-06-12",
+   "描述": "The product under consideration is a steel cord conveyor belt. It is composed of vulcanized rubber reinforced with carbon steel cords.",
+   "金标": "40101100",
+   "subject": "The tariff classification of a vulcanized rubber conveyor belt reinforced with steel cord from China",
+   "描述_subject": "vulcanized rubber conveyor belt reinforced with steel cord",
+   "正文长度": 4847
+  },
+  {
+   "裁定号": "N350173",
+   "日期": "2025-07-09",
+   "描述": "The merchandise under consideration is identified as the Universal Clip-on Light, Product no. 90012 (the “clip-on light”). The submission material and sample review indicate that the clip-on light measures approximately 2.75 inches in length by 0.75 inches in diameter.",
+   "金标": "85131040",
+   "subject": "The tariff classification of an LED clip-on light from China",
+   "描述_subject": "LED clip-on light",
+   "正文长度": 10056
+  },
+  {
+   "裁定号": "N350426",
+   "日期": "2025-07-11",
+   "描述": "Images were provided in lieu of a sample. The product under consideration is described as the “PIECE-FENDER GARNISH, LH,” model number X87715-IY020-NRB. It is a plastic exterior component that forms part of the garnish attached to the front left fender of a vehicle. It is designed to be a decorative cover, concealing the gap between the fender and adjacent components.",
+   "金标": "39263050",
+   "subject": "The tariff classification of a plastic automotive body trim piece from South Korea.",
+   "描述_subject": "plastic automotive body trim piece",
+   "正文长度": 3798
+  },
+  {
+   "裁定号": "N350482",
+   "日期": "2025-07-16",
+   "描述": "The articles under consideration are steel retail store display channels displaying pre-printed cards with a picture or live sample (door hinges, mending plates, etc.). The steel channels will be fastened to the front of product shelves in a hardware store to display an example of the product for sale in that bin.",
+   "金标": "83024230",
+   "subject": "The tariff classification of steel retail display channels from China",
+   "描述_subject": "steel retail display channels",
+   "正文长度": 7845
+  },
+  {
+   "裁定号": "N350568",
+   "日期": "2025-07-09",
+   "描述": "The products under consideration are unassembled ladders and platforms.",
+   "金标": "73089095",
+   "subject": "The tariff classification of steel structures from Mexico",
+   "描述_subject": "steel structures",
+   "正文长度": 7164
+  },
+  {
+   "裁定号": "N350577",
+   "日期": "2025-07-14",
+   "描述": "The item is a plastic sterilizer bag, item number B11659. The oval-shaped sterilizer bag has a flat bottom, is made of silicone plastic, and features a foamed polypropylene (PP) plastic handle. The item measures approximately 8.7 inches high with the carry plastic handle up by 8.7 inches wide by 5.7 inches deep. The plastic sterilizer bag is reusable and includes a latch to seal it.",
+   "金标": "39249056",
+   "subject": "The tariff classification of a plastic sterilizer bag from Vietnam",
+   "描述_subject": "plastic sterilizer bag",
+   "正文长度": 4060
+  },
+  {
+   "裁定号": "N350591",
+   "日期": "2025-07-03",
+   "描述": "An image was provided in lieu of a sample. The product under consideration is a trophy intended to be presented as an award to recognize an employee’s years of service. At the top is a statuette made of acrylonitrile butadiene styrene (ABS) plastic that is plated to have a golden appearance.",
+   "金标": "39264000",
+   "subject": "The tariff classification of a plastic trophy from China.",
+   "描述_subject": "plastic trophy",
+   "正文长度": 4095
+  },
+  {
+   "裁定号": "N350598",
+   "日期": "2025-07-15",
+   "描述": "Images were provided in lieu of samples. The product under consideration is described as “MOLDING-FRT DR SPEAKER GRL LH,” model number 82375-S9010SA1. It is an interior decorative molding component, designed for installation around the outer edge of the speaker grill on the front door panel of a vehicle.",
+   "金标": "39263050",
+   "subject": "The tariff classification of plastic automotive body trim pieces from South Korea.",
+   "描述_subject": "plastic automotive body trim pieces",
+   "正文长度": 4046
+  },
+  {
+   "裁定号": "N350636",
+   "日期": "2025-07-09",
+   "描述": "Style J28025-O is a women’s blouse constructed from 100 percent cotton terry knit fabric that measures at least 10 or more stitches per linear centimeter measured in both directions.",
+   "金标": "61061000",
+   "subject": "The tariff classification of women’s knit blouses from China",
+   "描述_subject": "women’s knit blouses",
+   "正文长度": 5502
+  },
+  {
+   "裁定号": "N350696",
+   "日期": "2025-07-02",
+   "描述": "You submitted pictures and product information with your request. The items under consideration are described as modular building components used exclusively in the motion picture industry. Specifically, you explain that they are used by grips in the film and television industry for setting up and rigging camera equipment.",
+   "金标": "76169951",
+   "subject": "The tariff classification of modular building components from Canada",
+   "描述_subject": "modular building components",
+   "正文长度": 8465
+  },
+  {
+   "裁定号": "N350951",
+   "日期": "2025-08-01",
+   "描述": "The article under consideration is described as a hexalobular socket bolt, Part number 11548002. This socket head screw is made of steel with a zinc-nickel coating. It measures 5 mm in diameter and 15 mm in length.",
+   "金标": "73181560",
+   "subject": "The tariff classification of a steel automotive fastener from Taiwan",
+   "描述_subject": "steel automotive fastener",
+   "正文长度": 6340
+  },
+  {
+   "裁定号": "N350952",
+   "日期": "2025-08-01",
+   "描述": "The article under consideration is described as a hexalobular socket bolt, Part number 11602136. This socket head screw is made of steel with a zinc coating. It measures 5 mm in diameter and 17.6 mm in length.",
+   "金标": "73181560",
+   "subject": "The tariff classification of a steel automotive fastener from Taiwan",
+   "描述_subject": "steel automotive fastener",
+   "正文长度": 6335
+  },
+  {
+   "裁定号": "N351151",
+   "日期": "2025-08-05",
+   "描述": "According to the testing information provided subsequent to your request, as well as visual examination of the sample, the material referred to as “Slender Rich Suede SN-2025SD PT” is a textile fabric of man-made fibers that is coated with a polyurethane base and then covered with flocking of leather fibers on one side.",
+   "金标": "59070060",
+   "subject": "The tariff classification of a leather flocked fabric from China.",
+   "描述_subject": "leather flocked fabric",
+   "正文长度": 4563
+  },
+  {
+   "裁定号": "N351191",
+   "日期": "2025-07-21",
+   "描述": "In your submission, the subject product is described as a liquid micronutrient preparation, which is comprised of boron, pH stabilizer, and other substances.",
+   "金标": "38249993",
+   "subject": "The tariff classification of a liquid micronutrient preparation from Spain",
+   "描述_subject": "liquid micronutrient preparation",
+   "正文长度": 3714
+  },
+  {
+   "裁定号": "N351244",
+   "日期": "2025-07-29",
+   "描述": "The merchandise under consideration is identified as the Colibrick Analog/Digital (A/D) converter, which",
+   "金标": "85437098",
+   "subject": "The tariff classification of an analog digital converter from Japan",
+   "描述_subject": "analog digital converter",
+   "正文长度": 3887
+  },
+  {
+   "裁定号": "N351417",
+   "日期": "2025-07-25",
+   "描述": "The merchandise under review is a powder coating consisting of barium titanate, diniobium pentaoxide, and trontium titanate.",
+   "金标": "38249939",
+   "subject": "The tariff classification of a powder coating from Japan",
+   "描述_subject": "powder coating",
+   "正文长度": 3802
+  },
+  {
+   "裁定号": "N351670",
+   "日期": "2025-07-30",
+   "描述": "The product under consideration is an oil hose reel. It consists of an oil hose and a reel. The reel is made of steel, while the hose is constructed acrylonitrile-butadiene rubber (NBR) reinforced with braided steel wire and features fittings composed of zinc plated steel. The hose reels are used in garages, auto shops and construction sites.",
+   "金标": "40092200",
+   "subject": "The tariff classification of oil hose reels from China",
+   "描述_subject": "oil hose reels",
+   "正文长度": 5002
+  },
+  {
+   "裁定号": "N351764",
+   "日期": "2025-08-25",
+   "描述": "Images were provided in lieu of a sample. The product under consideration is described as the “BRKT-FENDER GARNISH NO.1, LH/RH,” model number 877C1-R6100EBR. It is a plastic bracket mounted on the lower part of an automobile fender to support and secure a sensor. We note that this component will function as a mounting for the sensor.",
+   "金标": "39269099",
+   "subject": "The tariff classification of a plastic automotive mounting bracket from South Korea.",
+   "描述_subject": "plastic automotive mounting bracket",
+   "正文长度": 3599
+  },
+  {
+   "裁定号": "N351814",
+   "日期": "2025-08-15",
+   "描述": "The merchandise under consideration is identified as battery packs for the R90 power assist device, a battery powered accessory for propelling manual wheelchairs. Each battery pack consists of cylindrical lithium-ion battery cells in a sealed housing with indicator LEDs and an electrical contact interface specific to the power assist device.",
+   "金标": "85076000",
+   "subject": "The tariff classification of battery packs from China",
+   "描述_subject": "battery packs",
+   "正文长度": 9334
+  },
+  {
+   "裁定号": "N352108",
+   "日期": "2025-08-19",
+   "描述": "The merchandise under consideration is the Samsung mixed reality headset, product number SM-I610*. This mixed reality headset has an Android XR operating system, a CPU, a storage device (256 GB), and memory (16 GB). In addition, this extended reality (XR) device contains Qualcomm Snapdragon XR Plus2 Gen 2, cameras, sensors, Wi-Fi, BLE, speakers, and microphones.",
+   "金标": "84714101",
+   "subject": "The tariff classification of a mixed reality headset from South Korea",
+   "描述_subject": "mixed reality headset",
+   "正文长度": 3813
+  },
+  {
+   "裁定号": "N352196",
+   "日期": "2025-08-25",
+   "描述": "The first item under consideration is identified as an electric motor, Item Number 70-594-00 (211105A). This item is described as a 12 Volts Direct Current (VDC) permanent magnet brushed electric motor, with black and red leads that stripped 30 mm long. The maximum power output is 300 W.",
+   "金标": "85013140",
+   "subject": "The tariff classification of electric motors from China",
+   "描述_subject": "electric motors",
+   "正文长度": 6806
+  },
+  {
+   "裁定号": "N352198",
+   "日期": "2025-08-25",
+   "描述": "The first item under consideration is identified as an electric motor, Item Number 223010A-F. This item is described as a 12 Volts Direct Current (VDC), permanent magnet brushed electric motor, with black and red leads that stripped 30mm long. The 223010A-F has a front end bell housing for Remco Zeus series, a rear end bell includes mechanical driven fan for cooling, and a standard mounting base.",
+   "金标": "85013140",
+   "subject": "The tariff classification of electric motors from China",
+   "描述_subject": "electric motors",
+   "正文长度": 8082
+  },
+  {
+   "裁定号": "N352206",
+   "日期": "2025-08-15",
+   "描述": "The item under consideration has been identified as a 1999 Subaru Sambar, chassis number is TV1-008356.",
+   "金标": "87032101",
+   "subject": "The tariff classification of a 1999 Subaru Sambar from Japan",
+   "描述_subject": "1999 Subaru Sambar",
+   "正文长度": 4479
+  },
+  {
+   "裁定号": "N352273",
+   "日期": "2025-08-14",
+   "描述": "The items under consideration are described as unfinished brass cartridge cases with integrated primer percussion caps fixed at the base. After importation, the cartridge cases will be filled with propellant powder and capped with a lead and antimony projectile for use as ammunition.",
+   "金标": "93063080",
+   "subject": "The tariff classification of brass cartridge cases from multiple countries",
+   "描述_subject": "brass cartridge cases from multiple countries",
+   "正文长度": 4288
+  },
+  {
+   "裁定号": "N352534",
+   "日期": "2025-09-09",
+   "描述": "Ltd. Images were provided in lieu of a sample. The product under consideration is described as the “GARNISH ASSY - ‘D’ PILLAR, LH,” part number 87130P6000EBR. It is a plastic trim component mounted on the exterior of a vehicle door frame. It is intended to fill the gap between the body and the window, enhance the vehicle’s overall appearance, and prevent the entrance of foreign materials.",
+   "金标": "39263050",
+   "subject": "The tariff classification of a plastic automotive body trim piece from South Korea.",
+   "描述_subject": "plastic automotive body trim piece",
+   "正文长度": 3635
+  },
+  {
+   "裁定号": "N352565",
+   "日期": "2025-09-04",
+   "描述": "You have submitted photos and descriptive literature for our review. The article at issue is a zippered lipstick case constructed of polyester textile material. It features a keyring and serves the useful functions of providing storage, protection, and portability to a lipstick or other similarly sized personal item.",
+   "金标": "42023293",
+   "subject": "The tariff classification of a lipstick case from China",
+   "描述_subject": "lipstick case",
+   "正文长度": 4327
+  },
+  {
+   "裁定号": "N352581",
+   "日期": "2025-09-04",
+   "描述": "The articles under consideration are brake hose fittings, Part Numbers GH122-02340-F, GH122-05310-A, and GH122-00800-A, which are used in passenger vehicles. The brake fittings are composed of cold forging carbon steel and used specifically in braking systems of an automobile. You describe them as components of a device that applies braking to the rotation of an automobile’s tire.",
+   "金标": "87083050",
+   "subject": "The tariff classification of brake hose fittings from Japan",
+   "描述_subject": "brake hose fittings",
+   "正文长度": 5192
+  },
+  {
+   "裁定号": "N352598",
+   "日期": "2025-09-17",
+   "描述": "An ingredients breakdown, a manufacturers certification and pictures of the product accompanied your inquiry. The subject merchandise, “Marlenka Honey Cake,” is described as a ready-to-eat layered bakery product consisting of honey sponge cake, milk-honey cream filling, and a cocoa coating.",
+   "金标": "19059010",
+   "subject": "The tariff classification of honey cakes from the Czech Republic",
+   "描述_subject": "honey cakes from the Czech Republic",
+   "正文长度": 4379
+  },
+  {
+   "裁定号": "N352608",
+   "日期": "2025-09-10",
+   "描述": "Spirit - 8050 is a 5 L stationary oxygen concentrator designed to provide continuous oxygen therapy for patients who are experiencing low oxygen levels due to various respiratory conditions such as chronic obstructive pulmonary disease (COPD) and other disorders requiring long-term oxygen supplementation. It measures 14.96 × 8.97 x 23.3 inches (L x W x H) and weighs 31.96 lbs.",
+   "金标": "90192000",
+   "subject": "The tariff classification of an oxygen concentrator from China",
+   "描述_subject": "oxygen concentrator",
+   "正文长度": 8421
+  },
+  {
+   "裁定号": "N352636",
+   "日期": "2025-09-11",
+   "描述": "Images were provided in lieu of samples. The products under consideration are described as ½ cubic yard and one cubic yard plastic utility bins. They both have single piece molded high-density polyethylene (HDPE) plastic bodies with integrated handles, a smooth interior surface, reinforced edges for durability, and are designed for stacking to optimize storage and freight efficiency.",
+   "金标": "39269099",
+   "subject": "The tariff classification of plastic utility bins from Taiwan.",
+   "描述_subject": "plastic utility bins",
+   "正文长度": 3742
+  },
+  {
+   "裁定号": "N352935",
+   "日期": "2025-09-16",
+   "描述": "The merchandise under consideration is an adjustable laptop riser, identified as Novaport LLC part number CXA001. This item is designed to elevate and support a laptop computer, between 10 and 15.6 inches in size, for ergonomic purposes.",
+   "金标": "84733051",
+   "subject": "The tariff classification of a laptop accessory from China",
+   "描述_subject": "laptop accessory",
+   "正文长度": 5805
+  },
+  {
+   "裁定号": "N353081",
+   "日期": "2025-09-09",
+   "描述": "The items under consideration are tree climbing spurs designed for use by professional arborists and utility workers to climb trees and utility poles. As you describe, all models to be imported share the same construction, function, and material composition.",
+   "金标": "73269086",
+   "subject": "The tariff classification of tree climbing spurs from Germany",
+   "描述_subject": "tree climbing spurs",
+   "正文长度": 7332
+  },
+  {
+   "裁定号": "N353118",
+   "日期": "2025-10-01",
+   "描述": "The subject merchandise under review is herbal tincture extracts prepared from various botanicals namely Houttuynia cordata, Isatis indigotica, Japanese knotweed, Pueraria lobata (Kudzu), and Licorice Root. Each is produced by macerating powdered plant parts in 55 percent ethanol at a ratio of one part plant to four parts solvent.",
+   "金标": "13021941",
+   "subject": "The tariff classification of Herbal Tinctures from Canada",
+   "描述_subject": "Herbal Tinctures",
+   "正文长度": 5711
+  },
+  {
+   "裁定号": "N353292",
+   "日期": "2025-09-18",
+   "描述": "The item under consideration is described as the Mazlite System, which is an imaging-based instrument designed for monitoring spray patterns in automotive paint and coating applications.",
+   "金标": "90314990",
+   "subject": "The tariff classification of the Mazlite System from Canada",
+   "描述_subject": "Mazlite System",
+   "正文长度": 7249
+  },
+  {
+   "裁定号": "N353377",
+   "日期": "2025-09-23",
+   "描述": "The product under consideration is a packet of 8 pocket-sized paper booklets measuring approximately 5.25\" x 3.5\". Each 16-page booklet primarily features pre-printed matching, word search, maze, connect the dot, and other puzzles. While the booklet also includes valentines, simple games, and drawings intended to be colored, the majority of the pages are puzzles.",
+   "金标": "95030000",
+   "subject": "The tariff classification of a Valentine's Day themed puzzle booklet from China.",
+   "描述_subject": "Valentine's Day themed puzzle booklet",
+   "正文长度": 4401
+  },
+  {
+   "裁定号": "N353386",
+   "日期": "2025-09-19",
+   "描述": "The item under consideration is Decodify™ educational flash cards. The Decodify™ system consists of 12 sets of 112 flash cards designed to provide literacy instruction. The paper cardstock cards measure 63x88mm, and are printed by means of offset lithography. The 12 sets represent 12 instructional levels.",
+   "金标": "49119960",
+   "subject": "The tariff classification of instructional flash cards from India",
+   "描述_subject": "instructional flash cards",
+   "正文长度": 4743
+  },
+  {
+   "裁定号": "N353460",
+   "日期": "2025-09-24",
+   "描述": "The item concerned is a Pre-Amp, printed circuit board assembly (PCBA), part number 200-00011-000.A2. This PCBA is used within a noise canceling aviation headset. The PCBA will be incorporated within the boom assembly (microphone assembly) of the Sierra Aviation headset (model# HCC-90). This PCBA holds the electronic components that process the analog signal generated by the microphone.",
+   "金标": "85184020",
+   "subject": "The tariff classification of a Pre-Amp PCBA from China",
+   "描述_subject": "Pre-Amp PCBA",
+   "正文长度": 5469
+  },
+  {
+   "裁定号": "N353462",
+   "日期": "2025-10-02",
+   "描述": "Ltd. Images were provided in lieu of a sample. The product under consideration is described as the “BUMPER-TAILGATE SIDE GUIDE,” item number 81738-A9100. It is a plastic component installed in the rear trunk of a motor vehicle. It is intended to absorb shocks generated during the opening and closing of the trunk door, assist in proper alignment of the door, and reduce noise and vibration.",
+   "金标": "39263050",
+   "subject": "The tariff classification of a plastic automotive component from South Korea.",
+   "描述_subject": "plastic automotive component",
+   "正文长度": 3758
+  },
+  {
+   "裁定号": "N353514",
+   "日期": "2025-09-29",
+   "描述": "Product specification sheets were submitted along with your request. Please note, this letter is part of a split ruling. The Halloween corkboards, item #GNC-GF-3757, 3758, and 3759, were addressed in New York Ruling N353587. The remaining items will be addressed herein.",
+   "金标": "96100000",
+   "subject": "The tariff classification of three chalkboards from China",
+   "描述_subject": "three chalkboards",
+   "正文长度": 5213
+  },
+  {
+   "裁定号": "N353605",
+   "日期": "2025-10-10",
+   "描述": "Pemetrexed Disodium Hemipentahydrate for Injection, imported in 100 mg and 500 mg vials, is in a class of medications called antifolate antineoplastic agents. It is indicated for the treatment of various types of cancer including pleural mesothelioma and non-small cell lung cancer (NSCLC).",
+   "金标": "30049092",
+   "subject": "The tariff classification of Pemetrexed Disodium Hemipentahydrate for Injection in dosage form, from China",
+   "描述_subject": "Pemetrexed Disodium Hemipentahydrate for Injection in dosage form,",
+   "正文长度": 4619
+  },
+  {
+   "裁定号": "N353640",
+   "日期": "2025-10-06",
+   "描述": "A photograph was submitted along with your request. The items concerned are stainless-steel wastebaskets. The stainless-steel wastebaskets all have a padded base, a removable open top lid and are leak proof. The five round steel wastebaskets each measure approximately 11 7/8 inches high and have a diameter of 7 5/8 inches. The capacity is 2.9 gallons.",
+   "金标": "73239300",
+   "subject": "The tariff classification of stainless-steel wastebaskets from China",
+   "描述_subject": "stainless-steel wastebaskets",
+   "正文长度": 4527
+  },
+  {
+   "裁定号": "N353699",
+   "日期": "2025-09-26",
+   "描述": "In lieu of a sample, photographs of two textile bag charms were provided with your request. Style K16479, described as a “Sven Monkey Keychain,” is a textile charm depicting a monkey designed to be attached to a handbag. The monkey shaped charm is composed of 72 percent acrylic and 28 percent polyester knit fabric and stuffed with polyester filling.",
+   "金标": "63079098",
+   "subject": "The tariff classification of textile bag charms from Cambodia",
+   "描述_subject": "textile bag charms",
+   "正文长度": 7206
+  },
+  {
+   "裁定号": "N353703",
+   "日期": "2025-10-07",
+   "描述": "You submitted photographs and detailed descriptions of two items identified as Halloween Disco Mirror Silver Witch Hats, item numbers HG35-QX121, and EDP-I009703. The items consist of two foam-based tabletop decorations depicting conical witch hats said to be covered in reflective mirror glass squares, similar to a disco ball.",
+   "金标": "95059060",
+   "subject": "The tariff classification of Halloween decorations from China.",
+   "描述_subject": "Halloween decorations",
+   "正文长度": 4534
+  },
+  {
+   "裁定号": "N353829",
+   "日期": "2025-10-08",
+   "描述": "Ltd. The merchandise under consideration is described as an Open Lever Sub Assy, product number 50963-0F000. It is a steel lever combined with a plastic clip and a steel pin. This sub assembly is situated within the actuator-endgate system, which is a component of a motor vehicle endgate locking latch.",
+   "金标": "83016000",
+   "subject": "The tariff classification of metal sub assembly from South Korea",
+   "描述_subject": "metal sub assembly",
+   "正文长度": 3697
+  },
+  {
+   "裁定号": "N353893",
+   "日期": "2025-10-10",
+   "描述": "The four types of headgear clips under consideration are integral to CPAP masks designed exclusively for Philips DreamStation™ CPAP Sleep Therapy devices. These devices deliver continuous airway pressure (CPAP) and Bilevel Positive Airway Pressure (BiPAP) therapy for patients with obstructive sleep apnea. The headgear clips serve to attach the headgear to the mask frame.",
+   "金标": "90192000",
+   "subject": "The tariff classification of headgear clips from China and Costa Rica",
+   "描述_subject": "headgear clips",
+   "正文长度": 11342
+  },
+  {
+   "裁定号": "N353912",
+   "日期": "2025-10-14",
+   "描述": "A photograph was submitted along with your request. The items concerned are stainless-steel wastebaskets. The stainless-steel wastebaskets all have a padded base, a removable open top lid and are leak proof. The five square-shaped wastebaskets each measure approximately 11 7/8 inches high by 8 inches wide. The capacity is 3 gallons.",
+   "金标": "73239300",
+   "subject": "The tariff classification of stainless-steel wastebaskets from China",
+   "描述_subject": "stainless-steel wastebaskets",
+   "正文长度": 5131
+  },
+  {
+   "裁定号": "N353978",
+   "日期": "2025-10-01",
+   "描述": "The merchandise under consideration is identified as the RSA-SID700 SecurID Token, which is further described as a mobile security authentication fob. The subject device is comprised of a printed circuit assembly within a plastic housing with an LCD screen on the face. The LCD screen displays a 6-digit code, which changes at certain timed intervals.",
+   "金标": "85437098",
+   "subject": "The tariff classification of a security token from Mexico",
+   "描述_subject": "security token",
+   "正文长度": 4777
+  },
+  {
+   "裁定号": "N354199",
+   "日期": "2025-10-22",
+   "描述": "The subject merchandise is boneless eye of round beef. The beef is said to be vacuum tumbled in a marinade of spices, sodium phosphate, corn starch, and carrageenan with about 17.5 percent pick up of the marinade on the roast. After marination, the beef roast is vacuum packed in plastic and sous vide cooked for about eight hours, after which the beef is ready to eat.",
+   "金标": "16025021",
+   "subject": "The tariff classification of Frozen Seasoned Boneless Beef from Canada",
+   "描述_subject": "Frozen Seasoned Boneless Beef",
+   "正文长度": 5070
+  },
+  {
+   "裁定号": "N354399",
+   "日期": "2025-10-10",
+   "描述": "The BioCV livestock monitoring system is an AI-powered system that uses Bluetooth sensor ear tags to continuously monitor the health and activity of farm animals, such as pigs and cattle. Data on temperature, movement, and activity levels are collected, with machine learning and neural networks analyzing the data to detect early signs of disease, injury, or to identify fertility status.",
+   "金标": "90318080",
+   "subject": "The tariff classification of a livestock monitoring system from Germany",
+   "描述_subject": "livestock monitoring system",
+   "正文长度": 5841
+  },
+  {
+   "裁定号": "N354522",
+   "日期": "2025-10-24",
+   "描述": "The merchandise under consideration is described as fuel injection rails (FIR), which are identified by part numbers 17522AB04A-JPN Rev N, 17522AB07A-JPN Rev N, 17522AB07B-JPN Rev N, and 17523AB09A-JPN Rev N. The components are used in motor vehicles such as small SUVs and sedans. The FIRs are designed to supply pressurized fuel evenly to fuel injectors in automobile engines.",
+   "金标": "87089981",
+   "subject": "The tariff classification of fuel injection rails from Japan",
+   "描述_subject": "fuel injection rails",
+   "正文长度": 5006
+  },
+  {
+   "裁定号": "N354666",
+   "日期": "2025-10-15",
+   "描述": "The item under consideration is described as an outdoor electrical outlet cover used to protect electrical receptacles from environmental exposure. It consists of a weather-resistant aluminum alloy shell to surround and house an electrical receptacle, a hinged polycarbonate (PC) lid to open and close over the front of the receptacle, a cross-linked polyethylene (XPE) foam gasket for weather sealin",
+   "金标": "76169951",
+   "subject": "The tariff classification of an outdoor electrical outlet cover from Vietnam",
+   "描述_subject": "outdoor electrical outlet cover",
+   "正文长度": 7815
+  },
+  {
+   "裁定号": "N354811",
+   "日期": "2026-05-05",
+   "描述": "The merchandise under consideration is referred to as Caravelas stone. A sample was submitted with your ruling request and was forwarded to the Customs and Border Protection Laboratory for analysis. This analysis has been completed. Caravelas is a cream-colored stone with streaks of dark gray to charcoal, mottled with amber.",
+   "金标": "68029300",
+   "subject": "The tariff classification of Caravelas stone from Brazil.",
+   "描述_subject": "Caravelas stone",
+   "正文长度": 4764
+  },
+  {
+   "裁定号": "N354854",
+   "日期": "2025-10-27",
+   "描述": "The item in question is a Tread Cart, Width ID 50500027, also referred to as a tread cassette cart. The tread cassette cart consists of two rotating steel drums resembling spools that are permanently mounted on a steel wheeled frame.",
+   "金标": "84798995",
+   "subject": "The tariff classification of tread cassette carts from Czech Republic",
+   "描述_subject": "tread cassette carts",
+   "正文长度": 4589
+  },
+  {
+   "裁定号": "N354998",
+   "日期": "2025-11-14",
+   "描述": "According to your submission, the subject material consists of two layers. The top layer is a compact layer of polyurethane (“PU”) coated to a plain woven 100 percent aramid backing fabric.",
+   "金标": "59039025",
+   "subject": "The tariff classification of a coated fabric from Japan",
+   "描述_subject": "coated fabric",
+   "正文长度": 5133
+  },
+  {
+   "裁定号": "N355070",
+   "日期": "2025-10-30",
+   "描述": "Poly(3-hydroxybutyrate)-co-3-hydroxyhexanoate) (PHBH) CAS# 147398-31-0 is a biodegradable polymer produced by bacterial fermentation of palm and similar plant oils.",
+   "金标": "39139050",
+   "subject": "The tariff classification of poly(3-hydroxybutyrate)-co-3-hydroxyhexanoate) from Japan",
+   "描述_subject": "poly(3-hydroxybutyrate)-co-3-hydroxyhexanoate)",
+   "正文长度": 3657
+  },
+  {
+   "裁定号": "N355171",
+   "日期": "2025-10-30",
+   "描述": "Electrically Calcined Petroleum Coke (ECP Coke) is a premium carbon material produced by heating green petroleum coke under carefully controlled conditions below 2 000 °C in an Electrically Fluidized-Bed (EFB) Calciner. The calcined petroleum coke will be used for the production of electrodes.",
+   "金标": "27131200",
+   "subject": "The tariff classification of calcined petroleum coke from Brazil",
+   "描述_subject": "calcined petroleum coke",
+   "正文长度": 4107
+  },
+  {
+   "裁定号": "N355190",
+   "日期": "2025-11-06",
+   "描述": "This position is clearly set forth in Title 19, Code of Federal Regulations (CFR), Section 177.9(b)(1). This section states that a ruling letter is issued on the assumption that all of the information furnished in the ruling letter, whether directly, by reference, or by implication, is accurate and complete in every material respect.",
+   "金标": "16055460",
+   "subject": "The tariff classification of Seasoned Squid from South Korea. Correction to Ruling Number N352331",
+   "描述_subject": "Seasoned Squid from South Korea. Correction to Ruling Number N352331",
+   "正文长度": 9685
+  },
+  {
+   "裁定号": "N355390",
+   "日期": "2025-11-10",
+   "描述": "The items concerned are foam cups used in Lightspeed’s aviation headsets. The applicable SKU numbers are 250-00013-000.B1 and 315-00080-000.A1. The first item is the foam cup (250-00013-000.B1 Foam, Cup) used within the Sierra aviation headset. The foam cups are shaped pieces of polyester filter foam that have 80 pores per inch. This foam piece gets installed within the ear cups of the headset.",
+   "金标": "85189081",
+   "subject": "The tariff classification of foam components for aviation headsets from the Philippines",
+   "描述_subject": "foam components for aviation headsets from the Philippines",
+   "正文长度": 4892
+  },
+  {
+   "裁定号": "N355833",
+   "日期": "2025-11-20",
+   "描述": "Descriptive information was provided with your submission The product under consideration is a dispenser head, item number 943011006. The dispenser head is constructed of aluminum, zinc alloy, and plastic material, and is designed to be imported screwed onto a refillable steel reservoir that has a capacity of 0.5 or 1.0 liters.",
+   "金标": "84818050",
+   "subject": "The tariff classification of a dispenser head from China",
+   "描述_subject": "dispenser head",
+   "正文长度": 6030
+  },
+  {
+   "裁定号": "N355870",
+   "日期": "2025-11-25",
+   "描述": "The product under consideration is planed and sanded Taeda pine (Pinus taeda) boards. The boards have been finger jointed (end-jointed) to increase length. The boards are blanks for molding and are imported in sizes of 1 1/8” thick by 1 1/8” wide by 80 1/2”, 70 1/2\", or 96 1/2\" in length.",
+   "金标": "44071100",
+   "subject": "The tariff classification of finger-jointed lumber from Brazil",
+   "描述_subject": "finger-jointed lumber",
+   "正文长度": 3600
+  },
+  {
+   "裁定号": "N355940",
+   "日期": "2025-12-01",
+   "描述": "Item SW-605-12-L is a men’s one-piece step-in-garment constructed from 88% cotton, and 12% nylon woven fabric. The garment extends from the neck to the ankles and features a stand-up collar with hook and loop closures, a left-over-right front with hook and loop closures, long sleeves with ribbed knit cuffs, and hemmed leg openings with hook and loop closures at the ankles.",
+   "金标": "62113290",
+   "subject": "The tariff classification of men’s coveralls from Mexico",
+   "描述_subject": "men’s coveralls",
+   "正文长度": 8638
+  },
+  {
+   "裁定号": "N355963",
+   "日期": "2025-12-03",
+   "描述": "The ruling was for children’s soft books. The ruling request was returned to you for additional information, which was received November 12, 2025. Product information and samples were submitted for our review. While several samples were submitted, we will focus on five.",
+   "金标": "49030000",
+   "subject": "The tariff classification of children’s soft books from China",
+   "描述_subject": "children’s soft books",
+   "正文长度": 7113
+  },
+  {
+   "裁定号": "N356036",
+   "日期": "2025-12-02",
+   "描述": "Item #BC100, described as a “Boss Kitty Bag Charm” is an embroidered textile charm designed to hang on a handbag or backpack. The charm is composed of two layers of 100 percent polyester woven twill fabric embroidered with 100 percent rayon filament yarn. The two layers of fabric are glued together.",
+   "金标": "63079098",
+   "subject": "The tariff classification of an embroidered bag charm from Taiwan",
+   "描述_subject": "embroidered bag charm",
+   "正文长度": 5520
+  },
+  {
+   "裁定号": "N356154",
+   "日期": "2025-12-10",
+   "描述": "The merchandise in question consists of four robotic platforms manufactured by AgiBot in China. The robots are programmable, embodied-intelligence robotic systems incorporating mechanical actuators, control processors, sensors, and AI-based software enabling autonomous or semi-autonomous operation.",
+   "金标": "84798995",
+   "subject": "The tariff classification of robotic platforms from China",
+   "描述_subject": "robotic platforms",
+   "正文长度": 10273
+  },
+  {
+   "裁定号": "N356414",
+   "日期": "2025-12-16",
+   "描述": "The merchandise under consideration is referred to as a sorting grab, model DSG1000, and is a claw-like attachment for excavators. It is a grapple designed for sorting and handling, with two opposing jaws that allow loose materials to fall through while the jaws hold onto larger materials.",
+   "金标": "84314100",
+   "subject": "The tariff classification of a sorting grab from South Korea",
+   "描述_subject": "sorting grab",
+   "正文长度": 4240
+  },
+  {
+   "裁定号": "N356491",
+   "日期": "2025-12-16",
+   "描述": "The items concerned are referred to as Headband Slider A, Painted (303-00120-000.A5) and Headband Slider B, Painted (303-00121-000.A4). The headband sliders (A & B) are used on the headband assembly of Lightspeed ’s Zulu 3 aviation headset. They connect the headband top to the ear cups of the Zulu 3 headset and allow adjustability for use among all head shapes and sizes.",
+   "金标": "85189081",
+   "subject": "The tariff classification of aviation headset parts from China",
+   "描述_subject": "aviation headset parts",
+   "正文长度": 4499
+  },
+  {
+   "裁定号": "N356909",
+   "日期": "2026-01-05",
+   "描述": "The merchandise under consideration is described as passive optical network (PON) cabinets. The subject cabinets are comprised of multiple fiber optic cassettes, which are made up of various fiber optic splitter modules, fiber optic connectors, and cabling within a metal cabinet.",
+   "金标": "90138091",
+   "subject": "The tariff classification of fiber optic cabinets from Mexico",
+   "描述_subject": "fiber optic cabinets",
+   "正文长度": 4831
+  },
+  {
+   "裁定号": "N356971",
+   "日期": "2026-01-08",
+   "描述": "The merchandise in question is a long chain fatty acid prill that has the product name of NUTRACOR 80P. NUTRACOR 80P is described as a palm fatty acid distillate with elevated palmitic fatty acids which is suitable for use as a rumen bypass fat.",
+   "金标": "38231920",
+   "subject": "The tariff classification of a long chain fatty acid prill from Malaysia",
+   "描述_subject": "long chain fatty acid prill",
+   "正文长度": 4442
+  },
+  {
+   "裁定号": "N357215",
+   "日期": "2026-01-08",
+   "描述": "The merchandise under consideration is identified as the P702(2) Lens Holder Assembly and described as a lens cover for an automobile headlamp. The subject article is comprised of a plastic, laser welded lens piece mounted to a polycarbonate holder.",
+   "金标": "90029095",
+   "subject": "The tariff classification of an automobile lens assembly from Malaysia",
+   "描述_subject": "automobile lens assembly",
+   "正文长度": 4109
+  },
+  {
+   "裁定号": "N357266",
+   "日期": "2026-01-21",
+   "描述": "The subject merchandise is described as “Genmaicha Tea Bags (Roasted Brown Rice Green Tea).” It is composed of 60 percent Roasted Brown Rice, 37 percent Green Tea (camelia sinensis), and 3 percent Matcha (camelia sinensis).",
+   "金标": "19049001",
+   "subject": "The tariff classification of “Genmaicha Tea Bags (Roasted Brown Rice Green Tea)” from Japan",
+   "描述_subject": "“Genmaicha Tea Bags (Roasted Brown Rice Green Tea)”",
+   "正文长度": 4348
+  },
+  {
+   "裁定号": "N357365",
+   "日期": "2026-01-13",
+   "描述": "The request was returned to you for additional information, which was received by this office on December 28, 2025. The ruling was requested for SPF (spruce-pine-fir) dimensional lumber used for manufacturing mattress box springs. Product information and photos were submitted for our review. The product under consideration is SPF dimensional lumber.",
+   "金标": "44071300",
+   "subject": "The tariff classification of SPF dimensional lumber from Canada",
+   "描述_subject": "SPF dimensional lumber",
+   "正文长度": 5245
+  },
+  {
+   "裁定号": "N357645",
+   "日期": "2026-01-28",
+   "描述": "The product under consideration is the Smart Hygiene AI BidetTM It is comprised of a toilet seat with an . incorporated bidet which is controlled by an electronic control panel attached to the side of the toilet seat. The device is installed on an existing toilet and provides automated, hands free cleansing and positioning assistance.",
+   "金标": "39222000",
+   "subject": "The tariff classification of a toilet seat incorporating an electronic bidet from Korea",
+   "描述_subject": "toilet seat incorporating an electronic bidet",
+   "正文长度": 8406
+  },
+  {
+   "裁定号": "N357689",
+   "日期": "2026-01-30",
+   "描述": "Style 260108A, described as a girl’s blouse, is a girl’s upper body garment constructed of 55% cotton and 45% polyester fleece knit fabric that is lightly napped on its inner surface. The outer surface of the fabric measures more than nine stitches per two centimeters in the direction the stitches were formed.",
+   "金标": "61102020",
+   "subject": "The tariff classification of an upper body garment from South Korea",
+   "描述_subject": "upper body garment",
+   "正文长度": 4033
+  },
+  {
+   "裁定号": "N358151",
+   "日期": "2026-02-17",
+   "描述": "In lieu of samples, illustrative literature and a product description were provided. The “RoadLoft Camper Conversion Kit” is constructed of poplar plywood and designed to temporarily transform an SUV into a camper van. The kit consists of a satin finished bedframe that holds a sectional high-density polyurethane foam mattress for the top of the platform.",
+   "金标": "94036080",
+   "subject": "The tariff classification of a RoadLoft Minivan Camper Conversion Kit from Canada",
+   "描述_subject": "RoadLoft Minivan Camper Conversion Kit",
+   "正文长度": 5933
+  },
+  {
+   "裁定号": "N358187",
+   "日期": "2026-02-25",
+   "描述": "Sacubitril and Valsartan Tablets, imported in 24 mg/26 mg, 49 mg/51 mg, and 97 mg/103 mg consist of a combination of Sacubitril (a neprilisin inhibitor) and Valsartan (an angiotensin II receptor blocker), as the active ingredients. It is indicated to reduce the risk of cardiovascular death and hospitalization for heart failure in adult patients with chronic heart failure.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Sacubitril and Valsartan Tablets in dosage form, from India",
+   "描述_subject": "Sacubitril and Valsartan Tablets in dosage form,",
+   "正文长度": 4517
+  },
+  {
+   "裁定号": "N358212",
+   "日期": "2026-02-11",
+   "描述": "In your submission, you identify the subject product as LFX, a synthetic bio-equivalent lactoferrin protein isolate produced through fermentation.",
+   "金标": "35040010",
+   "subject": "The tariff classification of LFX Synthetic Protein Isolate from China",
+   "描述_subject": "LFX Synthetic Protein Isolate",
+   "正文长度": 4227
+  },
+  {
+   "裁定号": "N358304",
+   "日期": "2026-02-17",
+   "描述": "The item(s) concerned is referred to as the Sereonic Wireless TV Assistive Speaker (Model #’s: BT-200Pro Series and BT-300Pro Series). Both models of speaker system consist of a wireless transmitter/charging base that connects to a television set, and an amplified wireless speaker module that can be placed up to 100 ft from the transmitter.",
+   "金标": "85182200",
+   "subject": "The tariff classification of a wireless speaker system from China",
+   "描述_subject": "wireless speaker system",
+   "正文长度": 9317
+  },
+  {
+   "裁定号": "N358409",
+   "日期": "2026-02-27",
+   "描述": "Photos and a detailed description were submitted for our review. The product under consideration is a printed reproduction of an original abstract painting created by the artist Parbbonni. The reproduction artwork is digitally printed on canvas, then stretched over wooden stretcher bars with an external synthetic resin frame that measures approximately 58 inches x 58 inches.",
+   "金标": "49119140",
+   "subject": "The tariff classification of a printed reproduction of original artwork from India",
+   "描述_subject": "printed reproduction of original artwork",
+   "正文长度": 4210
+  },
+  {
+   "裁定号": "N358581",
+   "日期": "2026-03-02",
+   "描述": "The item under consideration has been identified as the “Blue Phoenix Swift,” a racing go-kart chassis imported in kit form without an engine or tires.",
+   "金标": "87039001",
+   "subject": "The tariff classification of a Racing Go Kart chassis without an engine and tires from the Czech Republic.",
+   "描述_subject": "Racing Go Kart chassis without an engine and tires from the Czech Republic",
+   "正文长度": 4769
+  },
+  {
+   "裁定号": "N358626",
+   "日期": "2026-03-09",
+   "描述": "Clodronic Acid Disoduim Salt Tetrahydrate is also known as Clodronate Disodium, a first-generation (non-nitrogenous) bisphosphonate. It is indicated for the treatment of hypercalcemia associated with malignancies, osteoporosis and Paget’s disease.",
+   "金标": "29315900",
+   "subject": "The tariff classification of Clodronic Acid Disoduim Salt Tetrahydrate (CAS No. 88416-50-6) in bulk powder form, from Italy",
+   "描述_subject": "Clodronic Acid Disoduim Salt Tetrahydrate (CAS No. 88416-50-6) in bulk powder form,",
+   "正文长度": 4211
+  },
+  {
+   "裁定号": "N358675",
+   "日期": "2026-03-05",
+   "描述": "The items under consideration, the Bender S, Bender Max, and Bender-L, are specialized machines designed to bend medical-grade stainless steel wires into prescribed shapes for various orthodontic appliance components, including retainers, labial bows, lingual arches, transpalatal arches, Nance arches and claps.",
+   "金标": "90184980",
+   "subject": "The tariff classification of dental orthodontic wire-bending machines from China.",
+   "描述_subject": "dental orthodontic wire-bending machines",
+   "正文长度": 5172
+  },
+  {
+   "裁定号": "N358988",
+   "日期": "2026-03-17",
+   "描述": "The submitted sample, “Bamboo Blanket,” size medium, is an oversized bib shaped covering with a neck opening and rounded corners, specifically intended for use by individuals with permanent or chronic physical disabilities while using a mobility device such as a wheelchair, power chair, stroller, or tilt-in-space model. The covering is composed of a single layer of dyed fabric which",
+   "金标": "63079098",
+   "subject": "The tariff classification of textile bib-shaped covering from China.",
+   "描述_subject": "textile bib-shaped covering",
+   "正文长度": 8941
+  },
+  {
+   "裁定号": "N359071",
+   "日期": "2026-03-04",
+   "描述": "The items under consideration are referred to as Sub-Assy, Cup, Left, Delta Zulu (Part number: 250-00061-000.A1) and Sub-Assy, Badge, Right, Delta Zulu (Part number: 250-00063-000.A1). The Sub-Assy, Cup, Left, Delta Zulu ear cup is a housing assembly for Lightspeed’s Delta Zulu aviation headset. The left ear cup sub assembly is composed of a dome-shaped inner magnesium housing.",
+   "金标": "85189081",
+   "subject": "The tariff classification of parts of aviation headsets from China",
+   "描述_subject": "parts of aviation headsets",
+   "正文长度": 4841
+  },
+  {
+   "裁定号": "N359289",
+   "日期": "2026-03-13",
+   "描述": "The merchandise under consideration is identified as a Fischer Plug connector, part number 117-00063.000.A1, which",
+   "金标": "85366940",
+   "subject": "The tariff classification of a Fischer Plug connector from China",
+   "描述_subject": "Fischer Plug connector",
+   "正文长度": 4347
+  },
+  {
+   "裁定号": "N359397",
+   "日期": "2026-03-24",
+   "描述": "The “Speedball” game is a free-standing, indoor gaming unit measuring approximately 106” L x 24.5” W x 60.5” H, and is primarily composed of MDF (medium-density fiberboard). It is designed to emulate the classic “Skee-Ball” arcade game. The unit features a 9-foot long inclined playfield, an electronic scorer, automated ball return, and 7 target holes.",
+   "金标": "95049040",
+   "subject": "The tariff classification of the “Speedball” game from China.",
+   "描述_subject": "“Speedball” game",
+   "正文长度": 4495
+  },
+  {
+   "裁定号": "N359513",
+   "日期": "2026-03-25",
+   "描述": "The item under consideration is described as The DISCAL air separator, model 551-5517-NA 551 Series, which is a device engineered for the continuous removal of entrained air, including micro-bubbles, from water or glycol-based fluids in closed-loop hydronic heating and cooling systems.",
+   "金标": "84212900",
+   "subject": "The tariff classification of an air separator from Italy",
+   "描述_subject": "air separator",
+   "正文长度": 5368
+  },
+  {
+   "裁定号": "N359740",
+   "日期": "2026-04-02",
+   "描述": "A photograph, material breakdown, and material composition were submitted along with your request. The item is a salad bar bowl, item COMP06-MOD-WW. The rectangular, white, aluminum salad bar bowl contains an enamel interior finish. It is made of approximately 98% aluminum and 2% resin plastic material. The item measures approximately 9.84 inches long by 5.04 inches wide and is 3 inches deep.",
+   "金标": "76151030",
+   "subject": "The tariff classification of a salad bar bowl from China",
+   "描述_subject": "salad bar bowl",
+   "正文长度": 4329
+  },
+  {
+   "裁定号": "N359763",
+   "日期": "2026-04-06",
+   "描述": "The merchandise under consideration is the LytxOne™ camera module, which is a dual-channel camera designed to attach to the LytxOne™ Gateway, referred to as model/variant \"dual-channel windshield-mount camera unit.\" This camera module captures video images and transmits them to the connected gateway for processing and recording.",
+   "金标": "85258930",
+   "subject": "The tariff classification of a camera module from Vietnam",
+   "描述_subject": "camera module",
+   "正文长度": 4026
+  },
+  {
+   "裁定号": "N359804",
+   "日期": "2026-03-30",
+   "描述": "The IndeeLift People Picker Upper (model PPU-S) is described as equipment used to lift individuals from the floor to a sitting or standing position. Its main components include a vertical post, a mounting ramp seat, an actuator assembly, a battery unit, a wired remote, rise-assist handles, and dual safety belts.",
+   "金标": "84289003",
+   "subject": "The tariff classification of the Indeelift People Picker Upper from China",
+   "描述_subject": "Indeelift People Picker Upper",
+   "正文长度": 7906
+  },
+  {
+   "裁定号": "N359826",
+   "日期": "2026-04-14",
+   "描述": "A photograph of the item was submitted along with your request. As per your email received by this office on March 31, 2026, this ruling will address only one style, Item 671072, the Oogie Boogie ceramic planter with succulent. Item 671072 consists of a ceramic planter pot containing a plastic artificial succulent plant. The ceramic planter is made of dolomite ceramic.",
+   "金标": "69139050",
+   "subject": "The tariff classification of a ceramic decoration from China",
+   "描述_subject": "ceramic decoration",
+   "正文长度": 5629
+  },
+  {
+   "裁定号": "N359899",
+   "日期": "2026-04-16",
+   "描述": "The CosmeRNA ARI Intensive Hair Revitalizing Tonic and CosmeRNA ARI SalonPro Hair Revitalizing Tonic are each packaged for retail sale in sets of ten 1 mL (0.03 fluid ounce) ampoules. The ComeRNA ARI Hair Revitalizing Tonic is packaged for retail sale in a single 2 mL (0.06 fluid ounce) pen-type dispenser.",
+   "金标": "33059000",
+   "subject": "The tariff classification of CosmeRNA ARI Intensive Hair Revitalizing Tonic, CosmeRNA ARI SalonPro Hair Revitalizing Tonic and ComeRNA ARI Hair Revitalizing Tonic from South Korea",
+   "描述_subject": "CosmeRNA ARI Intensive Hair Revitalizing Tonic, CosmeRNA ARI SalonPro Hair Revitalizing Tonic and ComeRNA ARI Hair Revitalizing Tonic",
+   "正文长度": 4433
+  },
+  {
+   "裁定号": "N359982",
+   "日期": "2026-04-08",
+   "描述": "SKU# 500-00000-016.A1 is a self-adhesive polyvinyl chloride PVC gel mat. It is a square shaped mat with dimensions of 9 inches by 9 inches. The product is backed with release paper to prevent contamination of the mat. The mat will be used at the noise-cancelling calibration workstation in the production line for aviation headsets.",
+   "金标": "39199050",
+   "subject": "The tariff classification of a self-adhesive polyvinyl chloride (PVC) gel mat from the Philippines",
+   "描述_subject": "self-adhesive polyvinyl chloride (PVC) gel mat from the Philippines",
+   "正文长度": 3894
+  },
+  {
+   "裁定号": "N360180",
+   "日期": "2026-04-28",
+   "描述": "Brimonidine Tartrate and Timolol Maleate Ophthalmic Drops, imported in 5 mL, 10 mL, and 15 mL, is a combination medication containing, Brimonidine Tartrate (an alpha-2 adrenergic receptor agonist) and Timolol Maleate (a beta-adrenergic receptor blocker), as the active ingredients.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Brimonidine Tartrate and Timolol Maleate Ophthalmic Drops 0.2%/0.5% in dosage form, from India",
+   "描述_subject": "Brimonidine Tartrate and Timolol Maleate Ophthalmic Drops 0.2%/0.5% in dosage form,",
+   "正文长度": 4613
+  },
+  {
+   "裁定号": "N360185",
+   "日期": "2026-04-21",
+   "描述": "Images were provided in lieu of a sample. The product under consideration is described as the “Sparta Spectrum 30-inch Broiler/Grill Cleaning Brush with Scraper,” item number 4029000. It is intended to scrub away food buildup and carbon deposits on grilling and broiling surfaces.",
+   "金标": "96039080",
+   "subject": "The tariff classification of a cleaning brush from China.",
+   "描述_subject": "cleaning brush",
+   "正文长度": 4217
+  },
+  {
+   "裁定号": "N360242",
+   "日期": "2026-04-24",
+   "描述": "The first item under consideration is an Output Carrier Assembly, part number H418C-3. The assembly consists of three gears on a shaft. Once installed in a ring gear, it meshes with a sun gear of a stepper motor located on the engine of an aircraft. The assembly is part of a planetary gear set used in a fuel control system and is primarily constructed of stainless-steel material.",
+   "金标": "84839050",
+   "subject": "The tariff classification of an output carrier assembly from Mexico and a gear from Canada",
+   "描述_subject": "output carrier assembly",
+   "正文长度": 4520
+  },
+  {
+   "裁定号": "N360246",
+   "日期": "2026-04-29",
+   "描述": "Doxorubicin Hydrochloride Liposome Injection, imported in dosages of 20 mg/10 mL and 50 mg/25 mL vials, is a cytotoxic anthracycline antibiotic. It is indicated for the treatment of patients with ovarian cancer, AIDS-related Kaposi’s sarcoma, and in combination with bortezomib in patients with multiple myeloma.",
+   "金标": "30042000",
+   "subject": "The tariff classification of Doxorubicin Hydrochloride Liposome Injection in dosage form, from Germany",
+   "描述_subject": "Doxorubicin Hydrochloride Liposome Injection in dosage form,",
+   "正文长度": 4292
+  },
+  {
+   "裁定号": "N360493",
+   "日期": "2026-05-06",
+   "描述": "Colestipol Hydrochloride, imported in 1 gram tablets, is a bile acid sequestrant. It is indicated for use as an adjunct to diet and exercise to reduce LDL-C cholesterol levels in patients with primary hypercholesterolemia.",
+   "金标": "30049092",
+   "subject": "The tariff classification of Colestipol Hydrochloride Tablets in dosage form, from Taiwan",
+   "描述_subject": "Colestipol Hydrochloride Tablets in dosage form,",
+   "正文长度": 4213
+  },
+  {
+   "裁定号": "N360739",
+   "日期": "2026-05-14",
+   "描述": "An ingredients breakdown and photographs of the retail packaging accompanied your inquiry. The subject merchandise, “Quorn Meatless ChiQin Pieces,” and “Quorn Meatless Grounds,” are a Quorn branded line of meat free products made from the principal ingredient mycoprotein, a meat free protein.",
+   "金标": "21069099",
+   "subject": "The tariff classification of imitation meat products from the United Kingdom",
+   "描述_subject": "imitation meat products from the United Kingdom",
+   "正文长度": 4749
+  },
+  {
+   "裁定号": "N360761",
+   "日期": "2026-05-12",
+   "描述": "In lieu of samples, a product description and photographs were provided. The subject merchandise, “Wooden Trunk,” is described as a tropical wood storage chest. The trunk depicts symmetrical metal brass designs and patterns throughout the exterior and the lid. The trunk is intended for the storage of blankets, bedding, clothes, and similar items.",
+   "金标": "94036080",
+   "subject": "The tariff classification of wooden furniture from Germany",
+   "描述_subject": "wooden furniture",
+   "正文长度": 4019
+  },
+  {
+   "裁定号": "N360809",
+   "日期": "2026-05-01",
+   "描述": "In lieu of samples, illustrative literature and product descriptions were provided. Item 1, the “WorkPro Storage Chests,” and item 2, the “WorkPro Storage Cabinets,” are a series of wall-mounted and unequipped steel metal chests and cabinets that will be available in different paint finishes.",
+   "金标": "94032000",
+   "subject": "The tariff classification of metal furniture from China",
+   "描述_subject": "metal furniture",
+   "正文长度": 5483
+  },
+  {
+   "裁定号": "N361284",
+   "日期": "2026-05-21",
+   "描述": "Part numbers E10294, E10295, J39037, and J38938 are referred to as air conditioning fittings. The fittings consist of pipes that are bent to shape to fit within a designated space in a motor vehicle and fittings that interface with the components of an air conditioning system. The aluminum fittings facilitate refrigerant flow between the condenser, compressor, and evaporator.",
+   "金标": "84159080",
+   "subject": "The tariff classification of air conditioning fittings from Japan",
+   "描述_subject": "air conditioning fittings",
+   "正文长度": 4909
+  },
+  {
+   "裁定号": "N361405",
+   "日期": "2026-05-13",
+   "描述": "In lieu of samples, illustrative literature and product descriptions were provided. The “WorkPro Tool Storage System” is a three-tier stackable tool chest and tool cabinet unit constructed from steel. The product consists of two separate chests and one cabinet that are stacked vertically.",
+   "金标": "94032000",
+   "subject": "The tariff classification of metal furniture from China",
+   "描述_subject": "metal furniture",
+   "正文长度": 5520
+  },
+  {
+   "裁定号": "N361556",
+   "日期": "2026-06-12",
+   "描述": "Our response was delayed due to laboratory analysis. Your submitted sample was destroyed during this analysis and will not be returned. Style MC00046 is a women’s blouse constructed from 95 percent polyester and 5 percent spandex, velour knit fabric. The U.S.",
+   "金标": "61062020",
+   "subject": "The tariff classification of a women’s blouse from Vietnam",
+   "描述_subject": "women’s blouse",
+   "正文长度": 6338
+  },
+  {
+   "裁定号": "N361559",
+   "日期": "2026-06-01",
+   "描述": "The item under consideration is described as the CellVoyager CV8000, which is an advanced high-content imaging system designed for rapid phenotypic screening, high-resolution imaging, and long-term live-cell studies. This fully integrated unit includes a main imaging instrument, an integrated control workstation with dual 27-inch monitors, and communication cables.",
+   "金标": "90118000",
+   "subject": "The tariff classification of a confocal microscope system from Japan",
+   "描述_subject": "confocal microscope system",
+   "正文长度": 5350
+  },
+  {
+   "裁定号": "N361696",
+   "日期": "2026-06-01",
+   "描述": "Technical information was submitted with your request. The product under consideration is a 5-ply clad metal disc, Part # 10-14908E-36. The disc is 300 millimeters (mm) in diameter, 3 mm thick, and is composed of five different metal alloy layers. The two outer layers are made of stainless steel alloys and make up 55% of the total weight.",
+   "金标": "73269086",
+   "subject": "The tariff classification of a 5-ply clad metal disc from South Korea",
+   "描述_subject": "5-ply clad metal disc",
+   "正文长度": 5717
+  },
+  {
+   "裁定号": "N361811",
+   "日期": "2026-06-23",
+   "描述": "The articles under consideration are described as sheet metal street number plates. These door address plates measure approximately 2” x 3” and are imported with the numbers printed on them. They have pre-drilled mounting holes, but mounting hardware is not included.",
+   "金标": "83100000",
+   "subject": "The tariff classification of enameled sheet metal street number plates from the Netherlands",
+   "描述_subject": "enameled sheet metal street number plates from the Netherlands",
+   "正文长度": 3807
+  },
+  {
+   "裁定号": "N361875",
+   "日期": "2026-06-01",
+   "描述": "In lieu of samples, technical and illustrative literature, a product description, and a manufacturing synopsis were provided for review. The “Pontoon Chair Frame” is a seating component constructed of linear, non-linear, concave, and convex aluminum metal frame rails.",
+   "金标": "94019990",
+   "subject": "The tariff classification of a seat component from Vietnam",
+   "描述_subject": "seat component",
+   "正文长度": 4129
+  },
+  {
+   "裁定号": "N361982",
+   "日期": "2026-06-15",
+   "描述": "The item under consideration has been identified as two (2) unfinished trailers. The first item has been identified as the Kinetic High Capacity “CTU” Trailer. The Kinetic trailer is a purpose-built trailer chassis that will be fitted with highly specialized equipment to provide oil well intervention and maintenance services at the oil well site.",
+   "金标": "87164000",
+   "subject": "The tariff classification of incomplete trailers from Canada",
+   "描述_subject": "incomplete trailers",
+   "正文长度": 6171
+  },
+  {
+   "裁定号": "N362291",
+   "日期": "2026-06-18",
+   "描述": "In lieu of a sample, photographs were submitted with your request. The subject merchandise, item name “ZANZIBAR No 56,” is a decorative pillow cover measuring 20 x 20 inches, designed to encase a removable pillow insert, imported separately. The decorative pillow cover is made of 100 percent linen woven fabric.",
+   "金标": "63049935",
+   "subject": "The tariff classification of decorative pillow cover from France",
+   "描述_subject": "decorative pillow cover",
+   "正文长度": 4518
+  },
+  {
+   "裁定号": "N362304",
+   "日期": "2026-07-10",
+   "描述": "An ingredients breakdown, nutrition label, and photos of the product accompanied your inquiry. The “Yukan One Ingredient Pizza Crust” is described as a thin, circular, casava based flatbread which is intended to be used as a base for gluten free pizza preparations, bread alternatives and meal accompaniments.",
+   "金标": "20089965",
+   "subject": "The tariff classification of casava flatbread from Venezuela.",
+   "描述_subject": "casava flatbread",
+   "正文长度": 4824
+  },
+  {
+   "裁定号": "N362489",
+   "日期": "2026-06-24",
+   "描述": "In lieu of samples, technical and illustrative literature, a product description, and a manufacturing synopsis were provided for review. Model 5150, the “Power Reclining Chaise Sectional Sofa,” is an upholstered sofa sectional constructed of a wooden frame.",
+   "金标": "94016160",
+   "subject": "The tariff classification of a sofa sectional and sofa sectional components from China.",
+   "描述_subject": "sofa sectional and sofa sectional components",
+   "正文长度": 5512
+  },
+  {
+   "裁定号": "N362665",
+   "日期": "2026-07-15",
+   "描述": "The products under consideration are CapLOX II® Polyaxial Pedicle Screws, TowerLOX® Polyaxial Pedicle Screws, MIS Extended-Tab Pedicle Screws (TowerLOX-EXT®), CapLOX II® Locking Set Screws, and TowerLOX® Locking Set Screws.",
+   "金标": "90211000",
+   "subject": "The tariff classification of Polyaxial Pedicle Screws, MIS Extended-Tab Pedicle Screws, and Locking Set Screws from Taiwan",
+   "描述_subject": "Polyaxial Pedicle Screws, MIS Extended-Tab Pedicle Screws, and Locking Set Screws",
+   "正文长度": 18422
+  },
+  {
+   "裁定号": "N362694",
+   "日期": "2026-07-16",
+   "描述": "Item/SKU DM0030003 is an Epoxy Resin “Create Your Own Keychain” kit. A sample of the kit was provided with your submission. The kit is comprised of a clear liquid two-component epoxy resin AB (resin plus hardener), 2 silicone molds, 3 packets of colored glitter, 2 bottles of pigment, 2 stirring rods, 2 mixing cups, 2 droppers, 5 metal open jump rings and 5 metal keychains.",
+   "金标": "39073000",
+   "subject": "The tariff classification of an epoxy resin key chain making kit from China",
+   "描述_subject": "epoxy resin key chain making kit",
+   "正文长度": 4034
+  },
+  {
+   "裁定号": "N362816",
+   "日期": "2026-07-15",
+   "描述": "The “Squishy Cloud Buddies,” SKU# 7550, come in three character shapes: bunny, carrot, and chick, each measuring approximately 13 inches long by 3.75 inches wide. The product’s exterior is composed of thermoplastic rubber and has a polyvinyl alcohol filling making the item very soft, pliable, and stretchy.",
+   "金标": "95030000",
+   "subject": "The tariff classification of “Squishy Cloud Buddies” from China",
+   "描述_subject": "“Squishy Cloud Buddies”",
+   "正文长度": 4277
+  },
+  {
+   "裁定号": "N362965",
+   "日期": "2026-07-14",
+   "描述": "The product under consideration is Item 865823, a decorative hedgehog figure. You do not provide the dimensions of the figure. The form of the figure is constructed of Styrofoam, and the form is covered with multiple materials. The front of the hedgehog (approximately 40 percent) is covered with natural, unspun sisal fibers.",
+   "金标": "46021980",
+   "subject": "The tariff classification of a decorative hedgehog figure from China",
+   "描述_subject": "decorative hedgehog figure",
+   "正文长度": 5046
+  },
+  {
+   "裁定号": "N363001",
+   "日期": "2026-07-29",
+   "描述": "The Turnout Remover and Carrier System (TRACS) is a type of railroad infrastructure maintenance and construction machine. It is designed to lift and transport prefabricated railway track sections, such as railway switch and crossing track panels, underneath its frame. The machine has an adjustable frame, allowing it to straddle railway tracks of different rail gauges.",
+   "金标": "84261900",
+   "subject": "The tariff classification of the Turnout Remover and Carrier System from Australia",
+   "描述_subject": "Turnout Remover and Carrier System",
+   "正文长度": 4797
+  },
+  {
+   "裁定号": "N363652",
+   "日期": "2026-08-13",
+   "描述": "The subject mini apparel is composed of synthetic fabric and designed to be worn by standard plastic minifigures and Lego® people. All the pieces are laser-cut and sized to fit a standard 4 centimeters (1.57 inches) tall minifigure toy. The items submitted are the: “Baldric,” a strap that crosses the shoulder and torso, allowing a sword to hang at the hip.",
+   "金标": "95030000",
+   "subject": "The tariff classification of toy minifigure apparel from Spain",
+   "描述_subject": "toy minifigure apparel",
+   "正文长度": 5580
+  }
+ ]
+}

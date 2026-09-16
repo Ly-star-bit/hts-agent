@@ -896,20 +896,46 @@ class TestOriginSemantics(unittest.TestCase):
         self.assertEqual(core.query_one(self.db, "61091000", origin="OTHER")["特殊税率提示"], "")
 
     def test_unmodeled_measures_detected_for_origin(self):
-        # 墨西哥：9903.01（note 2）里有提及墨西哥的标目，工具未建模 → 探测出来并标不完整
-        r = core.query_one(self.db, "61091000", origin="MX")
+        # 欧盟：note 40 药品（9903.04）、note 33 汽车（9903.94）等标目提及 EU，工具未建模
+        # → 探测出来并标不完整
+        r = core.query_one(self.db, "61091000", origin="DE")
         groups = {u["标目组"]: u for u in r["未建模措施"]}
-        self.assertIn("9903.01", groups)
-        self.assertIn("U.S. note 2", groups["9903.01"]["依据"])
-        self.assertTrue(groups["9903.01"]["示例"])
+        self.assertIn("9903.94", groups)
+        self.assertIn("U.S. note 33", groups["9903.94"]["依据"])
+        self.assertTrue(groups["9903.94"]["示例"])
         self.assertIn("总税负不完整", r["备注"])
-        t = rate.calc_total(self.db, "61091000", origin="MX")
+        t = rate.calc_total(self.db, "61091000", origin="DE")
         self.assertIn("不含 AD/CVD", t["总税负估算"])
         self.assertIn("原产地类未建模标目待核", t["总税负估算"])
         self.assertIn("未建模措施（探测，需人工核实）", {s["类型"] for s in r["来源"]})
-        # 中国也有 note 2 的标目提及中国
-        self.assertIn("9903.01", {u["标目组"] for u in
-                                  core.query_one(self.db, "61091000", origin="CN")["未建模措施"]})
+
+    def test_terminated_note2_headings_do_not_warn(self):
+        # IEEPA 一族（9903.01/.02）2026-02-24 终止、Section 122（9903.03.01–.11）2026-07-23 到期，
+        # Rev18 的 htsdata 没标。此前对中国 / 墨西哥 / 越南每一行都报"总税负不完整"，
+        # 现在按状态表判死：不进备注、不进总税负，只进来源弹窗的"已终止措施"。
+        st = self.db["c99_heading_status"]
+        self.assertEqual(st["99030124"]["状态"], "terminated")
+        self.assertEqual(st["99030124"]["自"], "2026-02-24")
+        self.assertIn("2026-02-20", st["99030124"]["依据"])
+        self.assertEqual(st["99030269"]["状态"], "terminated")           # 越南对等 +20%
+        self.assertEqual(st["99030301"]["状态"], "expired")              # Section 122
+        self.assertEqual(st["99030143"]["来源"], "编者注")                 # 官方编者注自动识别
+        self.assertEqual(st["99030143"]["状态"], "terminated")
+        self.assertEqual(st["99030184"]["自"], "2026-02-07")             # 印度段编者注带日期
+        for o in ("CN", "MX", "VN"):
+            r = core.query_one(self.db, "61091000", origin=o)
+            self.assertEqual([u["标目组"] for u in r["未建模措施"]], [], o)
+            self.assertNotIn("总税负不完整", r["备注"])
+            dead = {t["标目组"]: t for t in r["已终止措施"]}
+            self.assertIn("9903.01", dead, o)
+            self.assertIn("9903.02", dead, o)
+            self.assertIn("已终止措施（不计）", {s["类型"] for s in r["来源"]})
+            self.assertNotIn("原产地类未建模标目待核",
+                             rate.calc_total(self.db, "61091000", origin=o)["总税负估算"])
+        # 未核实段（note 51 加拿大 9903.03.12–.16）保守按仍在执行处理
+        self.assertEqual(st["99030312"]["状态"], "unverified")
+        ca = {u["标目组"] for u in core.query_one(self.db, "61091000", origin="CA")["未建模措施"]}
+        self.assertIn("9903.03", ca)
 
     def test_total_text_always_states_exclusions(self):
         # 总税负文本常驻"不含"说明：AD/CVD 没数据、232 未建模
@@ -917,6 +943,56 @@ class TestOriginSemantics(unittest.TestCase):
         self.assertRegex(t["总税负估算"], r"^\d")
         self.assertIn("不含 AD/CVD、232", t["总税负估算"])
         self.assertEqual(rate._total_num(t["总税负估算"]), 40.9)   # 3.4 + 25 + 12.5
+
+    def test_232_case_shown_alongside(self):
+        # 锂电池 8507.60 在 note 33(g) 汽车零件清单：FLIP 情形 40.9%，232 情形 3.4 + 25 + 25 = 53.4%
+        # （FLIP 按 note 52(f) 免，9903.94.05 +25%）。此前 53.4 从没显示过。
+        t = rate.calc_total(self.db, "85076000", origin="CN")
+        self.assertEqual(t["232情形数值"], 53.4)
+        self.assertIn("9903.94.05 +25%", t["232情形"])
+        self.assertIn("note 52(f)", t["232情形"])
+        hits = t["产品类未建模措施"]
+        self.assertTrue(any(h["note"] == "33" and any(c["标目"] == "9903.94.05" for c in h["可能标目"])
+                            for h in hits))
+        # 韩国：有专用标目 9903.94.63 +15%，不取通用的 25%
+        k = rate.calc_total(self.db, "85076000", origin="KR")
+        self.assertEqual(k["232情形数值"], 18.4)   # 3.4 + 15
+        self.assertIn("9903.94.63", k["232情形"])
+        # 螺钉 7318.15：note 16 衍生钢制品按金属含量计，且同子条有 50% / 10% 两档 → 只给文本
+        f = rate.calc_total(self.db, "73181580", origin="CN")
+        self.assertIsNone(f["232情形数值"])
+        self.assertIn("按金属含量", f["232情形"])
+        self.assertIn("9903.82.02 +50%", f["232情形"])
+        # 没命中清单：空
+        v = rate.calc_total(self.db, "61091000", origin="VN")
+        self.assertEqual(v["232情形"], "")
+        self.assertIsNone(v["232情形数值"])
+
+    def test_customs_fees_in_estimate(self):
+        # 规费不是关税，但报关一样要交：MPF 0.3464%（每票 33.58–651.50）、HMF 0.125%（海运）
+        self.assertEqual(rate.customs_fees(1000), {"MPF": 33.58, "HMF": 1.25, "规费合计": 34.83,
+                                                    "说明": rate.customs_fees(1000)["说明"]})
+        self.assertEqual(rate.customs_fees(500000, ocean=False)["MPF"], 651.5)
+        self.assertEqual(rate.customs_fees(500000, ocean=False)["HMF"], 0.0)
+        self.assertEqual(rate.customs_fees(0)["规费合计"], 0.0)
+        out = rate.estimate_lines(self.db, [{"code": "8507600020", "qty": 1000, "unit_value": 12},
+                                            {"code": "6109100012", "qty": 500, "unit_value": 3}], origin="CN")
+        s = out["summary"]
+        self.assertEqual(s["货值合计"], 13500.0)
+        self.assertEqual(s["MPF"], 46.76)                      # 13500 × 0.3464%
+        self.assertEqual(s["HMF"], 16.88)
+        self.assertEqual(s["税费含规费合计"], round(s["税费合计"] + s["规费合计"], 2))
+        self.assertEqual(s["232情形行数"], 1)
+        # 232 情形合计：电池行按 53.4%（6408），T 恤行不变（1500 × 36.5% = 547.5）
+        self.assertEqual(s["232情形税费合计"], 6955.5)
+        self.assertEqual(out["rows"][0]["232情形税费"], 6408.0)
+        self.assertIsNone(out["rows"][1]["232情形税费"])
+        self.assertIn("FY2026", s["规费说明"])
+        # 非海运：HMF 为 0
+        s2 = rate.estimate_lines(self.db, [{"code": "6109100012", "qty": 1, "unit_value": 100}],
+                                 origin="CN", ocean=False)["summary"]
+        self.assertEqual(s2["HMF"], 0.0)
+        self.assertEqual(s2["MPF"], 33.58)
 
     def test_origin_options_cover_flip_economies(self):
         opts = core.origin_options(self.db)

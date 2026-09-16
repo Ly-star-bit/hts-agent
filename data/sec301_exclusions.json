@@ -3,8 +3,8 @@
   "source": "Chapter 99_2026HTSRev18.pdf",
   "source_note": "USITC HTS Chapter 99，subchapter III U.S. note 20 各子条正文",
   "dates_from": "htsdata.csv（9903 排除标目品名里的生效起止）",
-  "extracted_at": "2026-09-03 22:16:33",
-  "status_as_of": "2026-09-03",
+  "extracted_at": "2026-09-15 20:06:45",
+  "status_as_of": "2026-09-15",
   "covers_note": "covers=full：条目正文就是一个统计号 → 该号下所有中国产商品排除，可机器判定；covers=described：排除按产品描述授予 → 只能给出原文供人工核对，不可按编码自动判免。",
   "status_note": "status 按 status_as_of 当日计算，查询时会用当天重算——生效中 / 已过期 / 未生效 / 有效期未标注。『有效期未标注』是老标目在 htsdata.csv 里不带 Effective 字样所致，不等于长期有效，一律不自动判免。"
  },

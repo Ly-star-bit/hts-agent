@@ -1,0 +1,43 @@
+{
+  "version": "2026-09-15",
+  "note": "htsdata.csv / Chapter 99 里没有标注、但已不再执行的 9903 标目段。USITC 对已终止的标目通常加 [Compiler's note: provision terminated]（如 9903.01.43–.76），但 note 2 的 IEEPA 标目（9903.01.24/.25、9903.02.xx）在 2026HTSRev18 里既无编者注也无阴影。这里按段手工维护，依据只引主文件（行政令 / CBP CSMS / 联邦公报），构建时套进 c99_heading_status；带编者注的标目由 build_db 自动识别，不必写在这里。状态：terminated 已终止 / expired 已到期 / suspended 已中止 / unverified 未核实（按仍在执行处理）。",
+  "entries": [
+    {
+      "headings": "9903.01.01–9903.01.90",
+      "status": "terminated",
+      "since": "2026-02-24",
+      "measure": "IEEPA 关税：墨西哥/加拿大/中国香港芬太尼与边境（note 2(a)–(u)）、全球对等 10% 与各国对等档（note 2(v)）、巴西 40%（note 2(x)）、印度（note 2(z)）",
+      "basis": "最高法院 2026-02-20 判决 IEEPA 不授权征收关税；总统 2026-02-20 行政令终止全部 IEEPA 关税；CBP CSMS 2026-02-22：2026-02-24 00:00 ET 起进口不再征收。note 2(z) 印度段另有编者注 terminated as of February 7, 2026。",
+      "sources": [
+        "https://www.whitecase.com/insight-alert/united-states-terminates-ieepa-based-tariffs-following-supreme-court-decision",
+        "https://www.wilmerhale.com/en/insights/client-alerts/20260220-supreme-court-strikes-down-ieepa-tariffs-what-now"
+      ]
+    },
+    {
+      "headings": "9903.02.01–9903.02.91",
+      "status": "terminated",
+      "since": "2026-02-24",
+      "measure": "IEEPA 各国对等关税（EO 14326，note 2(v)），含转运 40%（9903.02.01）与各国档（如越南 9903.02.69 +20%）",
+      "basis": "同 9903.01 段：最高法院 2026-02-20 判决 + 同日行政令 + CBP CSMS 2026-02-22，2026-02-24 起停征。",
+      "sources": [
+        "https://www.whitecase.com/insight-alert/united-states-terminates-ieepa-based-tariffs-following-supreme-court-decision"
+      ]
+    },
+    {
+      "headings": "9903.03.01–9903.03.11",
+      "status": "expired",
+      "since": "2026-07-24",
+      "measure": "全球 10% 临时关税（note 2(aa)，按生效日期与 150 天期限推断为 Trade Act Section 122）",
+      "basis": "Chapter 99 note 2(aa) 编者注：Subdivisions (aa)(i)–(viii) and headings 9903.03.01–9903.03.11 expired at the close of July 23, 2026. See 91 Fed. Reg. 9339.",
+      "sources": []
+    },
+    {
+      "headings": "9903.03.12–9903.03.16",
+      "status": "unverified",
+      "since": "",
+      "measure": "U.S. note 51 加拿大特定产品条款",
+      "basis": "未核实其执行状态，按仍在执行处理（保守方向）。",
+      "sources": []
+    }
+  ]
+}

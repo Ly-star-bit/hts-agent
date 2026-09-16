@@ -686,12 +686,14 @@ def _parse_doc_bytes(data):
     """
     裁定文件字节 → 纯文本。按魔数分派：
       PDF（%PDF）        → pdfplumber（项目已有依赖）
+      HTML（<html）      → 剥标签解实体（2026-09 起 NY 裁定的 .doc 实为 Word HTML）
       OLE2（D0CF11E0）   → 提取可打印 ASCII 连续串
     2025 年起 CBP 新裁定发 PDF，之前是 OLE2 .doc。两种都实测 ~100% 可读。
     解析不出关键段返回 None——个体失败不猜，退回仅链接。
     """
     if not data:
         return None
+    head = data[:400].lstrip().lower()
     if data[:4] == b"%PDF":
         try:
             import io
@@ -701,6 +703,16 @@ def _parse_doc_bytes(data):
                 txt = " ".join((p.extract_text() or "") for p in pdf.pages)
         except Exception:
             return None
+    elif head.startswith(b"<html") or head.startswith(b"<!doctype") or b"<html" in head:
+        # 2026-09 起 getdoc 对 NY 裁定回的是 Word 另存的 HTML（Content-Type 仍是
+        # application/msword）。剥掉 <style>/<script> 与标签，解实体。
+        import html as _html
+        raw = data.decode("utf-8", "ignore") if b"charset=utf-8" in head or b"\xc3" in data[:2000] \
+            else data.decode("cp1252", "ignore")
+        raw = re.sub(r"(?is)<(style|script|head)\b.*?</\1>", " ", raw)
+        raw = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>", " ", raw)
+        raw = re.sub(r"<[^>]+>", " ", raw)
+        txt = _html.unescape(raw).replace("\xa0", " ")
     elif data[:4] == b"\xd0\xcf\x11\xe0":
         # OLE2：正文以明文 ASCII 躺在字节流里（TARIFF NO.: 8506.50.0000 直接可见）。
         # 不能先剥 HTML 标签——一个杂散 '<' 到下个 '>' 之间会把大段正文整块删掉
@@ -778,6 +790,31 @@ def ruling_meta(number, db_path=None):
     if not row or not row[0] or not row[1]:
         return None
     return str(row[0]).lower(), str(row[1])[:10]
+
+
+def ruling_subjects(numbers, db_path=None):
+    """
+    一批裁定号 → {裁定号: (subject 去套话, 年份)}，一条 SQL 从本地镜像取。
+    精排候选行要引用"CBP 把类似的货判到了这个码"的证据，光给裁定号模型看不懂，
+    得给它 subject。镜像没建 / 都查不到 → {}。
+    """
+    nums = [str(n).strip() for n in (numbers or []) if str(n or "").strip()]
+    if not nums or not db_available(db_path):
+        return {}
+    try:
+        con = _open_ro(db_path or DB_PATH)
+        try:
+            q = "SELECT number, subject, date FROM rulings WHERE number IN (%s)" % ",".join("?" * len(nums))
+            rows = con.execute(q, nums).fetchall()
+        finally:
+            con.close()
+    except Exception:
+        return {}
+    out = {}
+    for num, subj, date in rows:
+        subj = re.sub(r"^\s*the\s+tariff\s+classification\s+of\s+", "", str(subj or ""), flags=re.I).strip()
+        out[str(num)] = (subj, str(date or "")[:4])
+    return out
 
 
 # 裁定正文里的固定小节标题（HQ 结构最完整：FACTS / ISSUE / LAW AND ANALYSIS / HOLDING；
