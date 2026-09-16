@@ -230,7 +230,13 @@ def eval_recall(items, channels, ks=(5, 20), log=print):
     return stats
 
 
-def eval_llm(items, log=print):
+def eval_llm(items, log=print, guided=False):
+    """
+    归类 top-k。guided=True 时每条强制走 GRI 逐级链（classify_product force_guided），
+    另报逐步数：品目对 / 下钻后对 / 先例改判 救几坏几；guided=False 时按 ai_config.json 的
+    guided 开关决定是否对低置信度行升级（与线上一致）。留一法：裁定号本身从召回投票与
+    逐级链的三条先例路径里全部剔除。
+    """
     import ai
     import core
 
@@ -241,7 +247,8 @@ def eval_llm(items, log=print):
     import rate
 
     alive = {c for c in db["rates_8"] if c[:2] not in ("98", "99")}
-    res = {"n": 0, "top1": 0, "top3": 0, "top1_6": 0, "错误": 0, "耗时": 0.0, "明细": []}
+    res = {"n": 0, "top1": 0, "top3": 0, "top1_6": 0, "错误": 0, "耗时": 0.0, "明细": [],
+           "升级": 0, "品目对": 0, "下钻对": 0, "先例改判救": 0, "先例改判坏": 0, "guided": bool(guided)}
     orig_votes = rate._default_votes
     for it in items:
         # 留一法同样适用于归类：先例通道要剔除这条裁定自己，否则 top-1 是漏答出来的
@@ -255,7 +262,8 @@ def eval_llm(items, log=print):
         rate._default_votes = _votes
         t = time.time()
         try:
-            out = ai.classify_product(db, it["描述"], origin="CN")
+            out = ai.classify_product(db, it["描述"], origin="CN", force_guided=guided,
+                                      exclude_ruling=it["裁定号"])
         finally:
             rate._default_votes = orig_votes
         res["耗时"] += time.time() - t
@@ -268,8 +276,24 @@ def eval_llm(items, log=print):
         res["top1"] += bool(picks) and picks[0] == it["金标"]
         res["top3"] += it["金标"] in picks[:3]
         res["top1_6"] += bool(picks) and picks[0][:6] == it["金标"][:6]
-        res["明细"].append({"裁定号": it["裁定号"], "描述": it["描述"][:60], "金标": it["金标"],
-                          "结果": picks[:3]})
+        row = {"裁定号": it["裁定号"], "描述": it["描述"][:60], "金标": it["金标"], "结果": picks[:3],
+               "归类方式": out.get("归类方式", "平铺")}
+        arg = out.get("论证") or {}
+        if out.get("归类方式") == "逐级" and arg:
+            # 逐步拆解：品目步对不对、下钻后对不对、先例步改判是救是坏
+            res["升级"] += 1
+            res["品目对"] += arg.get("品目") == it["金标"][:4]
+            desc_code = re.sub(r"\D", "", str(arg.get("下钻编码") or ""))
+            res["下钻对"] += desc_code == it["金标"]
+            if (arg.get("先例核对") or {}).get("改判"):
+                final_ok = bool(picks) and picks[0] == it["金标"]
+                res["先例改判救"] += final_ok and desc_code != it["金标"]
+                res["先例改判坏"] += (not final_ok) and desc_code == it["金标"]
+            row.update({"品目": arg.get("品目"), "下钻编码": desc_code, "平铺结果": out.get("平铺结果", ""),
+                        "先例改判": (arg.get("先例核对") or {}).get("改判", "")})
+        elif out.get("升级失败"):
+            row["升级失败"] = out["升级失败"][:80]
+        res["明细"].append(row)
         log(f"  {res['n']}/{len(items)} top1={res['top1']} top3={res['top3']}")
     return res
 
@@ -292,6 +316,8 @@ def main(argv=None):
     ap.add_argument("--limit", type=int, default=0, help="只评前 N 条")
     ap.add_argument("--channels", default="keyword,semantic,precedent")
     ap.add_argument("--llm", action="store_true", help="再跑 classify_product 的 top-k（慢）")
+    ap.add_argument("--guided", action="store_true",
+                    help="配合 --llm：每条强制走 GRI 逐级链（注释→品目→子目→先例），另报逐步数（更慢、约 3 倍 token）")
     ap.add_argument("--build-text", action="store_true",
                     help="给金标集配裁定正文的商品描述段（联网抓 CROSS，永久缓存）")
     ap.add_argument("--golden", default="", help="评测用的金标文件（默认 subject 口径；--text 用正文口径）")
@@ -319,14 +345,17 @@ def main(argv=None):
     details = stats.pop("_明细", [])
     report = {"at": dt.datetime.now().isoformat(timespec="seconds"), "n": len(items),
               "golden": os.path.basename(golden), "channels": channels, "recall": stats, "明细": details}
-    if a.llm:
-        print("\n归类 top-k（classify_product）：")
-        report["llm"] = eval_llm(items)
+    if a.llm or a.guided:
+        print("\n归类 top-k（classify_product" + ("，强制逐级链" if a.guided else "") + "）：")
+        report["llm"] = eval_llm(items, guided=a.guided)
         r = report["llm"]
         if "error" not in r:
             m = r["n"] or 1
             print(f"  n={r['n']} top1={r['top1']/m:.2f} top3={r['top3']/m:.2f} "
                   f"6位top1={r['top1_6']/m:.2f} 错误={r['错误']} 平均 {r['耗时']/m:.1f}s")
+            if r.get("升级"):
+                print(f"  逐级链 {r['升级']} 条：品目对 {r['品目对']}  下钻后8位对 {r['下钻对']}  "
+                      f"先例改判 救 {r['先例改判救']} / 坏 {r['先例改判坏']}")
         else:
             print("  ", r["error"])
     os.makedirs(OUT_DIR, exist_ok=True)

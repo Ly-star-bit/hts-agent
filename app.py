@@ -81,6 +81,18 @@ def index():
     return FileResponse(TEMPLATE_HTML, headers={"Cache-Control": "no-cache"})
 
 
+GUIDE_HTML = os.path.join(BASE_DIR, "templates", "agent_guide.html")
+
+
+@app.get("/guide")
+def guide():
+    """
+    「工作原理」页：用一件真实商品（CBP 裁定 N332157 的雨衣）把整条归类链一步步走给人看。
+    静态页，与主页面同一套主题 token 与 hts_theme 记忆；no-cache 的理由同 index()。
+    """
+    return FileResponse(GUIDE_HTML, headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/api/info")
 def api_info():
     """数据源信息（页面头部展示）"""
@@ -409,6 +421,19 @@ def _flatten_for_export(row):
         o["AD/CVD案件"] = ""
     if isinstance(o.get("归类路径"), list):
         o["归类路径"] = " > ".join(str(x) for x in o["归类路径"])
+    v = o.get("论证")
+    if isinstance(v, dict):
+        # 逐级归类的论证：品目理由 + 排除 + 先例核对，摊成一段文字，不让整个 dict 进单元格
+        parts = [f"品目 {v.get('品目', '')}：{v.get('品目理由', '')}"]
+        if v.get("排除"):
+            parts.append("排除：" + "；".join(f"{e.get('heading', '')}（{e.get('why', '')}）" for e in v["排除"] if isinstance(e, dict)))
+        if v.get("缺事实"):
+            parts.append("缺事实：" + "；".join(str(x) for x in v["缺事实"]))
+        pc = v.get("先例核对") or {}
+        if pc:
+            parts.append(f"先例核对：{'一致' if pc.get('一致') else '不一致'}，{pc.get('理由', '')}"
+                         + (f"；{pc['改判']}" if pc.get("改判") else ""))
+        o["论证"] = " | ".join(parts)
     if isinstance(o.get("来源"), list):
         o["来源"] = j(o["来源"], lambda x: f"{x.get('类型', '')}: {x.get('文件', '')}")
     for k, val in list(o.items()):
@@ -525,6 +550,12 @@ class AIConfigRequest(BaseModel):
     temperature: float = Field(default=None)
     timeout: float = Field(default=None)
     think: bool = Field(default=None, description="仅 ollama：思考模式，默认关（qwen3 开着每次多烧几百 token）")
+    num_ctx: int = Field(default=None, description="仅 ollama：上下文窗口 token 数；逐级归类需 ≥ 16384")
+    reasoning_effort: str = Field(default=None, description="仅 openai_compat：推理强度（none/low/medium/high…），空 = 不传")
+    guided: bool = Field(default=None, description="低置信度行升级到 GRI 逐级归类链")
+    guided_threshold: float = Field(default=None, description="平铺置信度低于此值才升级（0–1）")
+    guided_max_calls: int = Field(default=None, description="升级链每件商品的调用上限")
+    guided_effort: str = Field(default=None, description="升级链的推理强度；空 = 不传（模型默认）")
 
 
 class MeasuresConfigRequest(BaseModel):
@@ -581,7 +612,8 @@ def api_ai_save_config(req: AIConfigRequest):
     import ai
 
     updates = {}
-    for field in ("provider", "base_url", "model", "api_key", "temperature", "timeout", "think"):
+    for field in ("provider", "base_url", "model", "api_key", "temperature", "timeout", "think",
+                  "num_ctx", "reasoning_effort", "guided", "guided_threshold", "guided_max_calls", "guided_effort"):
         v = getattr(req, field)
         if v is not None:
             updates[field] = v
@@ -1017,6 +1049,32 @@ def api_ai_classify(req: AIClassifyRequest):
     import ai
 
     return ai.classify_product(get_db(), req.description.strip(), origin=req.origin)
+
+
+class AIGuidedRequest(BaseModel):
+    description: str = Field(default="", description="商品描述（中/英）")
+    origin: str = Field(default="CN", description="原产地")
+
+
+@app.post("/api/ai/classify/guided")
+def api_ai_classify_guided(req: AIGuidedRequest):
+    """
+    GRI 逐级归类（注释 → 品目 → 子目 → 先例），不经平铺精排。
+
+    搜索页的「逐级归类」按钮调这里：本地结果与 AI 辅助已经在页面上，这一步只补
+    带论证的一个结论。每次 3–4 次模型调用、约 1.75 万 token，比平铺贵 3 倍，
+    所以是按钮不是默认；清单页的自动升级见 ai_config.json 的 guided 开关。
+    """
+    if not (req.description or "").strip():
+        raise HTTPException(status_code=400, detail="请输入商品描述")
+    import ai
+
+    db = get_db()
+    try:
+        return ai.classify_guided_only(db, req.description.strip(), origin=req.origin)
+    except Exception as e:
+        traceback.print_exc()
+        return {"error": f"逐级归类异常：{e}"}
 
 
 @app.post("/api/ai/ask")

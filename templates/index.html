@@ -242,6 +242,14 @@
   }
 
   /* 主题切换：从右上角绝对定位改为顶栏内的常规流元素 */
+  .guide-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 20px; text-decoration: none;
+    font-size: 12px; font-weight: 600; font-family: inherit;
+    color: var(--primary); background: var(--primary-bg); border: 1px solid transparent;
+    transition: border-color .15s;
+  }
+  .guide-link:hover { border-color: var(--primary); }
   .theme-switch {
     display: flex; gap: 2px; padding: 3px;
     background: var(--surface-2); border: 1px solid var(--border);
@@ -835,6 +843,7 @@
   .list-progress .ptext { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
   /* 「备选 N」：不是警告，是"这里还有别的选择"。用中性描边，别和存疑抢注意力 */
+  .alt-btn.guided { border-style: solid; }
   .alt-btn {
     font-family: var(--mono); font-size: 10.5px; padding: 1px 7px; border-radius: 10px;
     background: var(--surface-2); color: var(--muted);
@@ -1039,6 +1048,9 @@
       <!-- #info 由 loadInfo 填成「● 数据就绪 · 构建日期」，完整数据源清单进 title 与弹窗 -->
       <button type="button" class="status-pill" id="info" onclick="showSourceFiles()"
               title="查看数据来源"><span class="dot"></span>数据加载中</button>
+      <!-- 「工作原理」：新标签打开 /guide，用一件真实商品把整条归类链走一遍，给新同事和客户看 -->
+      <a class="guide-link" href="/guide" target="_blank" rel="noopener"
+         title="这个工具怎么把一句商品描述变成一个税号：逐步图解">📖 工作原理</a>
       <div class="theme-switch" role="group" aria-label="界面主题">
         <button type="button" data-theme-btn="modern" onclick="setTheme('modern')">现代</button>
         <button type="button" data-theme-btn="wukong" onclick="setTheme('wukong')">黑神话</button>
@@ -1284,10 +1296,16 @@
                 onclick="doSearchAssist()" title="用 AI 把商品描述翻译成税则原文用词重新召回，并在候选中论证">
           ✨ AI 补充分析
         </button>
+        <button class="btn-ghost" id="btnSearchGuided" style="padding:5px 14px;font-size:12px;display:none;"
+                onclick="doSearchGuided()"
+                title="按归类员的顺序做一遍：读类注章注定品目（GRI 1）→ 品目内逐级下钻（GRI 6）→ 拿 CBP 先例核对。3–4 次调用、约 1.75 万 token，比 AI 补充分析慢一倍">
+          📐 逐级归类
+        </button>
       </h2>
       <div id="searchNotes"></div>
       <div id="disputeBox"></div>
       <div id="aiAssistBox"></div>
+      <div id="guidedBox"></div>
       <div class="result-count" id="searchResultCount"></div>
       <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
         <table>
@@ -1433,6 +1451,31 @@
           <input type="password" id="cfgApiKey" class="grow" placeholder="api_key（留空保持不变）">
           <button class="btn-primary" id="btnCfgSave" onclick="saveAiConfig()">保存</button>
           <button class="btn-ghost" id="btnCfgTest" onclick="testAiConfig()">测试连接</button>
+        </div>
+        <!-- 推理强度与逐级升级。2026-09 在 60 条正文金标上的实测：gpt-5.6 关推理每次调用 5s vs 12s，
+             top-3 持平、top-1 低 8 个点；逐级链在平铺做错的 23 条里救回 7、做对的 15 条对照只坏 1，
+             但每行多 3–4 次调用、约 1.75 万 token，所以只对低置信度行升级，且默认关。 -->
+        <div class="inline-form" style="margin-top:10px;flex-wrap:wrap;gap:8px;align-items:center;">
+          <select id="cfgEffort" class="narrow" title="仅 OpenAI 兼容端：推理强度。none 最快（实测每次 5 秒 vs 12 秒），top-1 略低、top-3 持平；留空用模型默认">
+            <option value="">推理强度：模型默认</option>
+            <option value="none">推理强度：none（最快）</option>
+            <option value="low">推理强度：low</option>
+            <option value="medium">推理强度：medium</option>
+            <option value="high">推理强度：high</option>
+          </select>
+          <input type="number" id="cfgNumCtx" class="narrow" placeholder="num_ctx（仅 Ollama）" min="0" step="1024"
+                 title="仅 Ollama：上下文窗口 token 数；逐级归类需 ≥ 16384，否则末尾的注释会被静默截断">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap;"
+                 title="平铺置信度低于阈值（或带存疑信号、或无有效结果）的行，再走 注释→品目→子目→先例 的逐级链；每行多 3–4 次调用">
+            <input type="checkbox" id="cfgGuided"> 低置信度行升级到 GRI 逐级归类</label>
+          <input type="number" id="cfgGuidedTh" class="narrow" placeholder="阈值 0.9" min="0" max="1" step="0.05"
+                 title="升级阈值：实测 0.9 时约三分之一的行升级，其中七成确实是错的">
+          <select id="cfgGuidedEffort" class="narrow" title="升级链的推理强度；留空用模型默认（实测保留推理 top-1 高 8 个百分点）">
+            <option value="">升级链推理：模型默认</option>
+            <option value="low">升级链推理：low</option>
+            <option value="medium">升级链推理：medium</option>
+            <option value="high">升级链推理：high</option>
+          </select>
         </div>
         <div id="cfgMsg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
       </div>
@@ -1657,7 +1700,9 @@ function refreshAiStatus() {
       const el = document.getElementById('aiStatus');
       // Provider 类名（OllamaProvider 之类）是实现细节，对用户无意义；
       // 模型号保留——归类结论出问题时，第一个要问的就是"哪个模型给的"。
-      el.textContent = d.enabled ? `AI 引擎 ${d.model} ✓` : '⚠ ' + d.message;
+      el.textContent = d.enabled
+        ? `AI 引擎 ${d.model} ✓${d.guided ? (d.notes_available ? ' · 逐级升级开' : ' · 逐级升级开（缺章注数据）') : ''}`
+        : '⚠ ' + d.message;
       el.title = d.enabled ? `${d.provider} / ${d.model}` : (d.message || '');
       if (!d.enabled) el.style.color = 'var(--warn)';
       else el.style.color = 'var(--miss)';
@@ -1671,6 +1716,8 @@ refreshAiStatus();
 function syncSearchAiButton() {
   const btn = document.getElementById('btnSearchAi');
   if (btn) btn.style.display = aiEnabled ? 'inline-flex' : 'none';
+  const gb = document.getElementById('btnSearchGuided');
+  if (gb) gb.style.display = aiEnabled ? 'inline-flex' : 'none';
   // 「清单归类」整页依赖 AI（品名→编码没有本地兜底），未配置时按钮点了必然报错，
   // 不如直接禁用并说清楚要去哪配
   const lb = document.getElementById('btnAnalyzeList');
@@ -1746,6 +1793,11 @@ async function toggleAiConfig() {
       document.getElementById('cfgProvider').value = d.provider || '';
       document.getElementById('cfgBaseUrl').value = d.base_url || '';
       document.getElementById('cfgModel').value = d.model || '';
+      document.getElementById('cfgEffort').value = d.reasoning_effort || '';
+      document.getElementById('cfgNumCtx').value = d.num_ctx || '';
+      document.getElementById('cfgGuided').checked = !!d.guided;
+      document.getElementById('cfgGuidedTh').value = (d.guided_threshold != null) ? d.guided_threshold : 0.9;
+      document.getElementById('cfgGuidedEffort').value = d.guided_effort || '';
       document.getElementById('cfgApiKey').value = '';
       document.getElementById('cfgApiKey').placeholder =
         d.api_key_set ? `已配置（${d.api_key_masked}），留空保持不变` : '未配置，输入新 api_key';
@@ -1765,6 +1817,11 @@ async function saveAiConfig() {
     base_url: document.getElementById('cfgBaseUrl').value.trim(),
     model: document.getElementById('cfgModel').value.trim(),
     api_key: document.getElementById('cfgApiKey').value.trim() || '__KEEP__',
+    reasoning_effort: document.getElementById('cfgEffort').value,
+    num_ctx: parseInt(document.getElementById('cfgNumCtx').value, 10) || 0,
+    guided: document.getElementById('cfgGuided').checked,
+    guided_threshold: (v => isNaN(v) ? 0.9 : v)(parseFloat(document.getElementById('cfgGuidedTh').value)),
+    guided_effort: document.getElementById('cfgGuidedEffort').value,
   };
   const btn = document.getElementById('btnCfgSave');
   setLoading(btn, true);
@@ -2787,6 +2844,51 @@ function renderAssist(d, addedCount) {
   return h;
 }
 
+/* 搜索页的逐级归类：不动本地结果与 AI 补充分析，单独出一张带论证的卡。
+   走 /api/ai/classify/guided：出词 → 召回 → 注释定品目 → 下钻 → 先例，不跑平铺精排。 */
+async function doSearchGuided() {
+  const kw = document.getElementById('searchKeyword').value.trim();
+  if (!kw) return;
+  const btn = document.getElementById('btnSearchGuided');
+  const box = document.getElementById('guidedBox');
+  setLoading(btn, true);
+  box.innerHTML = `<div class="info-bar">逐级归类中……读类注章注定品目 → 品目内逐级下钻 → 先例核对（约 1 分钟）</div>`;
+  try {
+    const d = await apiPost('/api/ai/classify/guided', {
+      description: kw, origin: document.getElementById('searchOrigin').value
+    });
+    box.innerHTML = renderGuided(d);
+  } catch (e) {
+    box.innerHTML = `<div class="error-bar show">逐级归类失败：${esc(e.message)}。上方本地结果与 AI 补充分析不受影响。</div>`;
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function renderGuided(d) {
+  const p = (d.candidates || [])[0];
+  if (!p) return `<div class="error-bar show">逐级归类未得出编码：${esc(d.error || '模型未给出有效结果')}</div>`;
+  const conf = Math.round((p.confidence || 0) * 100);
+  const crs = (p['判定条件'] || []).map(c => `<li><b>${esc(c['类型'])}</b>：${esc(c['原文'])}</li>`).join('');
+  const ev = (p['证据清单'] || []).map(x => `<li>${esc(x)}</li>`).join('');
+  const nv = (p['需确认'] || []).map(x => `<li>${esc(x)}</li>`).join('');
+  return `<div class="ai-picks"><div class="ai-pick">
+      <div class="ai-pick-head">
+        <span class="rank" title="逐级归类只给一个结论">📐</span>
+        <b class="code">${esc(p['编码'])}</b>
+        ${confBadge(conf, false)}
+        <span class="hint" style="margin:0 0 0 6px;">逐级归类 · 一般税率 ${esc(p['一般税率'] || '')} · 总税负 ${esc(p['总税负估算'] || '—')}</span>
+        <button class="btn-ghost" style="margin-left:auto;padding:3px 10px;font-size:12px;"
+                onclick="pickForCompare('${esc(p['编码'])}')">加入对比</button>
+      </div>
+      <div class="ai-pick-desc">${esc(p['完整品名'] || p['商品描述'] || '')}</div>
+      ${renderArgument(p['论证'] || d['论证'])}
+      ${nv ? `<div class="ai-pick-sub warn"><span>需向工厂/客户确认：</span><ul>${nv}</ul></div>` : ''}
+      ${crs ? `<div class="ai-pick-sub"><span>税则判定条件（官方原文）：</span><ul>${crs}</ul></div>` : ''}
+      ${ev ? `<div class="ai-pick-sub"><span>建议备齐的证据：</span><ul>${ev}</ul></div>` : ''}
+    </div></div><div class="hint" style="margin:8px 0 0;">${esc(d.disclaimer || '')}</div>`;
+}
+
 /* AI 推荐的编码勾进对比区——归类分歧多在 2-3 个候选之间，
    让用户不必回表格里翻找 */
 function pickForCompare(code) {
@@ -3404,6 +3506,7 @@ async function exportGeneric(kind) {
         `${x['9903子目']} ${x['覆盖方式']} ${x['状态']} ${x['有效期']}`).join('；');
     }
     if (Array.isArray(o['存疑'])) o['存疑'] = o['存疑'].join('；');
+    if (o['论证'] && typeof o['论证'] === 'object') o['论证'] = argToText(o['论证']);
     if (Array.isArray(o['来源'])) {
       o['来源'] = o['来源'].map(x => `${x['类型'] || ''}: ${x['文件'] || ''}`).join('；');
     }
@@ -3457,17 +3560,19 @@ const LIST_STAGES = [
 ];
 
 function renderListProgress(stage, done, total, text) {
-  const at = LIST_STAGES.findIndex(s => s.key === stage);
+  // 「升级」不是独立步骤：只在有低置信度行时出现，挂在精排那一格下按行计数
+  const key = stage === 'guided' ? 'rank' : stage;
+  const at = LIST_STAGES.findIndex(s => s.key === key);
   const box = document.getElementById('listProgress');
   box.style.display = 'block';
   const steps = LIST_STAGES.map((s, i) => {
     const cls = i < at ? 'done' : (i === at ? 'active' : '');
-    const cnt = (s.key === 'recall' && i === at && total) ? ` ${done}/${total}` : '';
+    const cnt = ((stage === 'recall' || stage === 'guided') && i === at && total) ? ` ${done}/${total}` : '';
     return `<span class="pstep ${cls}">${esc(s.label)}${cnt}</span>`;
   }).join('<span class="psep">›</span>');
   // 进度按"走到第几步"算，召回那步再按行数细分，条子才不会长时间不动
   const frac = at < 0 ? 0
-    : (at + (s => s)(stage === 'recall' && total ? done / total : 0.5)) / LIST_STAGES.length;
+    : (at + (s => s)((stage === 'recall' || stage === 'guided') && total ? done / total : 0.5)) / LIST_STAGES.length;
   box.innerHTML = `<div class="pbar"><i style="width:${Math.round(frac * 100)}%"></i></div>
     <div class="psteps">${steps}</div>
     <div class="ptext">${esc(text || '')}</div>`;
@@ -3580,6 +3685,63 @@ function showAltOf(seq) {
      </table></div>`);
 }
 
+/* 逐级归类的论证：品目步（GRI 1，引用类注章注）→ 下钻（GRI 6）→ 先例核对。
+   搜索页与清单页共用。改判要带裁定号与理由展示，不能静默替换——先例步实测救 3 坏 1。 */
+function renderArgument(a) {
+  if (!a || typeof a !== 'object') return '';
+  const li = (arr, f) => (arr || []).map(x => `<li>${f(x)}</li>`).join('');
+  const pc = a['先例核对'] || {};
+  let h = '';
+  if (a['注释可用'] === false) {
+    h += `<div class="error-bar show">⚠ 章注数据缺席（未构建 data/hts_notes.json），本次品目判断没有类注章注依据。</div>`;
+  }
+  h += `<div class="ai-pick-sub"><span>品目 ${esc(a['品目'] || '')}（GRI 1，依据类注/章注）：</span>${esc(a['品目理由'] || '')}</div>`;
+  if ((a['品目备选'] || []).length) {
+    h += `<div class="ai-pick-sub"><span>次选品目：</span><ul>${li(a['品目备选'], x => `<b>${esc(x.heading)}</b> ${esc(x.reason)}`)}</ul></div>`;
+  }
+  if ((a['排除'] || []).length) {
+    h += `<div class="ai-pick-sub"><span>已排除的品目（引注释）：</span><ul>${li(a['排除'], x => `<b>${esc(x.heading)}</b> ${esc(x.why)}`)}</ul></div>`;
+  }
+  if ((a['缺事实'] || []).length) {
+    h += `<div class="ai-pick-sub warn"><span>模型点名缺少的商品事实：</span><ul>${li(a['缺事实'], esc)}</ul></div>`;
+  }
+  if ((a['逐级理由'] || []).length) {
+    h += `<div class="ai-pick-sub"><span>品目内逐级（GRI 6）：</span><ol>${li(a['逐级理由'], esc)}</ol></div>`;
+  }
+  if (pc && pc['理由'] !== undefined) {
+    h += `<div class="ai-pick-sub${pc['改判'] ? ' warn' : ''}"><span>先例核对：${pc['一致'] ? '一致' : '不一致'}</span>${esc(pc['理由'] || '')}` +
+         (pc['改判'] ? `<div style="margin-top:4px;"><b>改判：</b>${esc(pc['改判'])}（下钻原给 ${esc(a['下钻编码'] || '')}）</div>` : '') + `</div>`;
+  }
+  const meta = [];
+  if ((a['展示的章'] || []).length) meta.push(`读了第 ${a['展示的章'].join('、')} 章的注释`);
+  if (a['补章']) meta.push(`模型点名补读第 ${a['补章']} 章`);
+  if (a['调用次数']) meta.push(`${a['调用次数']} 次调用`);
+  if ((a['警告'] || []).length) meta.push(a['警告'].join('；'));
+  if (meta.length) h += `<div class="hint" style="margin:8px 0 0;">${esc(meta.join(' ｜ '))}</div>`;
+  return h;
+}
+
+function argToText(a) {
+  if (!a || typeof a !== 'object') return '';
+  const parts = [`品目 ${a['品目'] || ''}：${a['品目理由'] || ''}`];
+  if ((a['排除'] || []).length) parts.push('排除：' + a['排除'].map(x => `${x.heading}（${x.why}）`).join('；'));
+  if ((a['缺事实'] || []).length) parts.push('缺事实：' + a['缺事实'].join('；'));
+  const pc = a['先例核对'] || {};
+  if (pc['理由'] !== undefined) parts.push(`先例核对：${pc['一致'] ? '一致' : '不一致'}，${pc['理由'] || ''}` + (pc['改判'] ? `；${pc['改判']}` : ''));
+  return parts.join(' | ');
+}
+
+function showArgOf(idx) {
+  const r = (currentListRows || []).find(x => x['序号'] === idx);
+  if (!r || !r['论证']) return;
+  openSrcModal(`逐级归类论证 — ${esc(r['品名'] || '')} → ${esc(r['编码'] || '')}`,
+    `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.7;">
+       这一行平铺精排的置信度不够${r['平铺结果'] ? `（平铺给的是 <b>${esc(r['平铺结果'])}</b>）` : ''}，
+       已按归类员的顺序重做：先读类注章注定 4 位品目，再在品目内逐级下钻，最后拿 CBP 先例核对。
+       论证由模型写、依据来自本地税则与 CROSS 镜像；<b>先例改判实测有救有坏</b>，改了的行务必看改判理由。
+     </div>${renderArgument(r['论证'])}`);
+}
+
 // 置信度分档。阈值定在 80 / 60：低于 60 的行实测基本要重写品名再跑，
 // 60-80 之间多半是编码大方向对、但细分档位要核商品描述。
 // 带「存疑」信号的行一律不给绿档——那恰恰是"AI 很自信但归错了"的情形，
@@ -3634,6 +3796,8 @@ function renderList(data) {
       : '';
     const why = [flagHtml,
                  r.reason ? `${esc(r.reason)}` : '',
+                 r['平铺结果'] ? `<span style="color:var(--muted)">平铺精排给的是 ${esc(r['平铺结果'])}，逐级链改为当前编码，见「论证」</span>` : '',
+                 r['升级失败'] ? `<span style="color:var(--warn)">逐级升级未完成：${esc(r['升级失败'])}，当前为平铺结果</span>` : '',
                  r['备注'] ? `<span style="color:var(--warn)">${esc(r['备注'])}</span>` : '']
                 .filter(Boolean).join('<br>');
     tr.innerHTML = `
@@ -3647,6 +3811,10 @@ function renderList(data) {
           (r['候选'] || []).length
             ? `<button class="alt-btn" onclick="showAltOf(${r['序号']})"
                  title="看 AI 在什么范围里挑的">备选 ${r['候选'].length}</button>` : ''
+        }${
+          r['归类方式'] === '逐级'
+            ? `<button class="alt-btn guided" onclick="showArgOf(${r['序号']})"
+                 title="该行置信度不足，已按 注释→品目→子目→先例 逐级归类，点开看论证">逐级 · 论证</button>` : ''
         }</div></td>
       <td class="desc" data-full="${esc(r['商品描述'])}" title="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
       <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>

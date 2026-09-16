@@ -116,9 +116,12 @@ class OllamaProvider(BaseProvider):
     """本地 Ollama 服务（默认 http://127.0.0.1:11434）"""
 
     def __init__(self, model="qwen2.5:7b", base_url="http://127.0.0.1:11434", temperature=0.2, timeout=120,
-                 think=False, seed=None):
+                 think=False, seed=None, num_ctx=0):
         super().__init__(model, temperature, timeout, seed=seed)
         self.base_url = base_url.rstrip("/")
+        # 上下文窗口。Ollama 默认值小且**超出即静默截断提示词末尾**，逐级归类把注释放在末尾，
+        # 截掉的恰是法律依据。0 = 不传（用 Ollama 默认），guided.classify_guided 会要求 ≥ 16384。
+        self.num_ctx = int(num_ctx or 0)
         # 思考模式默认关。qwen3 这类模型默认先吐几百 token 的隐藏推理再给答案，
         # 本项目的每次调用都是"按格式出 JSON"，推理链只烧时间：实测同一提示
         # think 开 3.8s / 关 0.2s（eval 290 → 9 token），两轮调用的搜索辅助
@@ -127,14 +130,16 @@ class OllamaProvider(BaseProvider):
         self.think = bool(think)
 
     def _call(self, messages, json_mode, cache=True):
-        key = _cache_key(f"ollama:think={int(self.think)}", self.model, self.temperature,
-                         self.seed, json_mode, messages)
+        key = _cache_key(f"ollama:think={int(self.think)}" + (f":ctx={self.num_ctx}" if self.num_ctx else ""),
+                         self.model, self.temperature, self.seed, json_mode, messages)
         hit = _cache_get(key) if cache else None
         if hit is not None:
             return hit
         options = {"temperature": self.temperature}
         if self.seed is not None:
             options["seed"] = int(self.seed)
+        if self.num_ctx:
+            options["num_ctx"] = self.num_ctx
         payload = {"model": self.model, "messages": messages, "stream": False,
                    "think": self.think, "options": options}
         if json_mode:
@@ -163,28 +168,40 @@ class OllamaProvider(BaseProvider):
 class OpenAICompatProvider(BaseProvider):
     """OpenAI 兼容 API（DeepSeek / 通义 / OpenAI / 硅基流动 等）"""
 
-    def __init__(self, model, base_url, api_key, temperature=0.2, timeout=60, seed=None):
+    def __init__(self, model, base_url, api_key, temperature=0.2, timeout=60, seed=None, reasoning_effort=""):
         super().__init__(model, temperature, timeout, seed=seed)
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        # 推理强度（gpt-5 / o 系列及兼容端的 reasoning_effort）。2026-09 实测 gpt-5.6：默认档每次调用
+        # 先出 300–500 个隐藏推理 token，"none" 档 5 秒 vs 12 秒；60 条金标 top-1 58% vs 50%、top-3 持平。
+        # 空 = 不传该参数（模型默认）。逐级归类链可用 guided_effort 单独设。
+        self.reasoning_effort = str(reasoning_effort or "").strip().lower()
 
     def _post(self, payload):
-        resp = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}"},
-            json=payload, timeout=self.timeout,
-        )
+        url = f"{self.base_url}/chat/completions"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        resp = httpx.post(url, headers=headers, json=payload, timeout=self.timeout)
+        if (resp.status_code == 400 and any(k in payload for k in ("temperature", "seed"))
+                and re.search(r"temperature|seed", getattr(resp, "text", "") or "")):
+            # 推理类模型直连 OpenAI 时拒绝 temperature/seed（"Unsupported parameter"）：
+            # 去掉重试。可复现性这时只剩提示词缓存兜底，比整条链路 400 好。
+            payload = {k: v for k, v in payload.items() if k not in ("temperature", "seed")}
+            resp = httpx.post(url, headers=headers, json=payload, timeout=self.timeout)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
 
     def _call(self, messages, json_mode, cache=True):
-        key = _cache_key("openai_compat", self.model, self.temperature, self.seed, json_mode, messages)
+        # 推理强度进缓存键：同一提示在 none 与默认档下答案不同，原型实测时踩过"命中上一档缓存"
+        key = _cache_key("openai_compat" + (f":effort={self.reasoning_effort}" if self.reasoning_effort else ""),
+                         self.model, self.temperature, self.seed, json_mode, messages)
         hit = _cache_get(key) if cache else None
         if hit is not None:
             return hit
         payload = {"model": self.model, "messages": messages, "temperature": self.temperature}
         if self.seed is not None:
             payload["seed"] = int(self.seed)
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
         try:
             if json_mode:
                 try:
@@ -272,6 +289,7 @@ def get_provider():
                     timeout=cfg.get("timeout", 120),
                     think=cfg.get("think", False),
                     seed=cfg.get("seed", 42),
+                    num_ctx=cfg.get("num_ctx", 0) or 0,
                 )
             elif kind == "openai_compat":
                 missing = [k for k in ("base_url", "api_key", "model") if not cfg.get(k)]
@@ -285,6 +303,7 @@ def get_provider():
                         temperature=cfg.get("temperature", 0.2),
                         timeout=cfg.get("timeout", 60),
                         seed=cfg.get("seed", 42),
+                        reasoning_effort=cfg.get("reasoning_effort", "") or "",
                     )
             elif kind in ("", "null"):
                 error = "未启用 AI（provider 为 null）"
@@ -311,7 +330,16 @@ def ai_status():
     p = get_provider()
     if p is None:
         return {"enabled": False, "message": _PROVIDER_CACHE["error"] or "AI 服务未配置"}
-    return {"enabled": True, "provider": type(p).__name__, "model": p.model}
+    gs = guided_settings()
+    try:
+        import hts_notes
+        notes_ok = hts_notes.available()
+    except Exception:
+        notes_ok = False
+    return {"enabled": True, "provider": type(p).__name__, "model": p.model,
+            "reasoning_effort": getattr(p, "reasoning_effort", "") or "",
+            # 逐级归类：开关 + 注释数据是否就绪（缺注释照跑但结果标"注释缺席"）
+            "guided": gs["enabled"], "guided_threshold": gs["threshold"], "notes_available": notes_ok}
 
 
 # ---------- 配置读写（Web 端手动配置） ----------
@@ -325,6 +353,14 @@ DEFAULT_CONFIG = {
     "timeout": 60,
     "think": False,      # 仅 ollama：思考模式（qwen3 等），默认关，见 OllamaProvider
     "seed": 42,          # 固定采样种子，与 temperature 0 一起保证可复现
+    "num_ctx": 0,            # 仅 ollama：上下文窗口（token），0 = 用 Ollama 默认；逐级归类需 ≥ 16384
+    "reasoning_effort": "",  # 仅 openai_compat：推理强度（none/low/medium/high…按服务端词表），空 = 不传
+    # 低置信度行升级到 GRI 逐级归类链（scripts/guided.py）。默认关：它每件商品 3–4 次调用、
+    # 约 1.75 万 token，需要强模型 + data/hts_notes.json；qwen3:8b 这类本地小模型跑不动 1.3 万 token 的注释。
+    "guided": False,
+    "guided_threshold": 0.9,  # 平铺置信度低于此值、或带存疑信号、或平铺无有效结果时升级
+    "guided_max_calls": 6,    # 升级链每件商品的调用上限
+    "guided_effort": "",      # 升级链的推理强度；空 = 不传（平铺可设 none 提速、升级链保留推理）
 }
 
 
@@ -340,6 +376,21 @@ def load_config():
         except (json.JSONDecodeError, OSError):
             pass
     return cfg
+
+
+def guided_settings(cfg=None):
+    """逐级归类升级链的开关与阈值（从 ai_config.json 读；测试可传 cfg）。"""
+    cfg = cfg if cfg is not None else load_config()
+    try:
+        th = float(cfg.get("guided_threshold", 0.9))
+    except (TypeError, ValueError):
+        th = 0.9
+    try:
+        mc = int(cfg.get("guided_max_calls", 6))
+    except (TypeError, ValueError):
+        mc = 6
+    return {"enabled": bool(cfg.get("guided")), "threshold": min(1.0, max(0.0, th)),
+            "max_calls": max(3, mc), "effort": str(cfg.get("guided_effort") or "").strip().lower()}
 
 
 def mask_config(cfg):
@@ -382,8 +433,24 @@ def save_config(updates):
                 v = int(v)
             except (TypeError, ValueError):
                 continue
-        elif k == "think":
+        elif k in ("think", "guided"):
             v = v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
+        elif k in ("num_ctx", "guided_max_calls"):
+            try:
+                v = max(0, int(float(v)))
+            except (TypeError, ValueError):
+                continue
+        elif k == "guided_threshold":
+            try:
+                v = min(1.0, max(0.0, float(v)))
+            except (TypeError, ValueError):
+                continue
+        elif k in ("reasoning_effort", "guided_effort"):
+            # 词表由服务端定（OpenAI 是 minimal/low/medium/high，部分中转站另有 none/xhigh），
+            # 这里只挡明显的脏值，真正的校验交给"测试连接"
+            v = str(v or "").strip().lower()
+            if not re.fullmatch(r"[a-z]{0,12}", v):
+                continue
         else:
             v = str(v).strip() if v else ""
         cfg[k] = v
@@ -574,7 +641,98 @@ def _precedent_evidence(row, max_rulings=2):
 
 # ---------- AI 功能 ----------
 
-def classify_product(db, description, top_n=3, origin="CN"):
+def _candidate_from_row(db, row, origin, confidence, reason, need_verify):
+    """
+    候选行 + 模型的选择 → 返回给调用方的候选。用候选行自身的编码算税，不用模型给的字符串。
+    归类路径与判定条件来自本地税则，不经模型——模型只负责选，不负责论证。
+    """
+    code8 = re.sub(r"\D", "", row["编码"])[:8]
+    total = rate_calc(db, code8, origin=origin)
+    crs = _criteria_safe(db, code8)
+    return {
+        "编码": row["编码"],
+        "商品描述": row["商品描述"],
+        "完整品名": row.get("完整品名", ""),
+        "归类路径": row.get("归类路径", []),
+        "判定条件": crs,
+        "证据清单": _evidence_safe(crs),
+        "一般税率": row["一般税率"],
+        "税率类型": row["税率类型"],
+        "等效从价": row["等效从价"],
+        "301判定": row["301判定"],
+        "9903子目": row["9903子目"],
+        "301加征": row["301加征"],
+        # 警示字段必须跟着数字一起走。只给"总税负 37.5%"而不说其中 12.5% 取决于
+        # 用途、25% 可能已被整号排除，比给错数更糟——它看着像个确定的结论。
+        "FLIP 301加征": (total or {}).get("FLIP 301加征", ""),
+        "FLIP 301说明": (total or {}).get("FLIP 301说明", ""),
+        "301排除": (total or {}).get("301排除", ""),
+        "301排除明细": (total or {}).get("301排除明细", []),
+        "备注": (total or {}).get("备注", ""),
+        "总税负估算": total["总税负估算"] if total else "",
+        "confidence": _clamp_confidence(confidence),
+        "reason": str(reason or "")[:400],
+        "需确认": [str(v)[:80] for v in (need_verify or [])][:5],
+    }
+
+
+def _candidate_from_code(db, code8, origin, confidence, reason, need_verify):
+    """逐级链给出的编码可能不在召回池里，按编码直接构造一行再走同一个候选构造。"""
+    import core
+    import rate
+    row = rate._make_row(db, code8, 0.0, core.load_measures_config())
+    return _candidate_from_row(db, row, origin, confidence, reason, need_verify)
+
+
+def _needs_escalation(top, chapters, threshold):
+    """平铺结果要不要升级：置信度低于阈值，或带存疑信号（建议章与结果章打架）。"""
+    if not top:
+        return True
+    conf = top.get("confidence") or 0
+    return conf < threshold or bool(_classify_flags(conf, chapters, top.get("编码")))
+
+
+class _guided_context:
+    """
+    升级链的调用环境：推理强度换成 guided_effort（空 = 不传，用模型默认），超时抬到 ≥ 180 秒
+    ——品目步带 1.3 万 token 注释，实测慢中转站 30 秒以上，默认 60 秒会掐掉。
+    对没有这些属性的 Provider（测试假件）什么都不做。
+    """
+
+    def __init__(self, provider, effort):
+        self.p, self.effort, self.saved = provider, effort, {}
+
+    def __enter__(self):
+        if hasattr(self.p, "reasoning_effort"):
+            self.saved["reasoning_effort"] = self.p.reasoning_effort
+            self.p.reasoning_effort = self.effort
+        if hasattr(self.p, "timeout"):
+            self.saved["timeout"] = self.p.timeout
+            try:
+                self.p.timeout = max(float(self.p.timeout or 0), 180.0)
+            except (TypeError, ValueError):
+                pass
+        return self
+
+    def __exit__(self, *exc):
+        for k, v in self.saved.items():
+            setattr(self.p, k, v)
+        return False
+
+
+def _run_guided(db, description, origin, provider, rows, exclude_ruling, gs, keywords=None, chapters=None):
+    """跑一次逐级链（scripts/guided.py），任何异常都收成 {"error"}，不影响平铺结果。"""
+    try:
+        import guided
+        with _guided_context(provider, gs["effort"]):
+            return guided.classify_guided(db, description, origin=origin, provider=provider, rows=rows,
+                                          keywords=keywords, chapters=chapters, exclude_ruling=exclude_ruling,
+                                          max_calls=gs["max_calls"])
+    except Exception as e:  # 升级是锦上添花，平铺结果必须保住
+        return {"error": f"逐级归类异常：{e}"}
+
+
+def classify_product(db, description, top_n=3, origin="CN", force_guided=False, exclude_ruling=None):
     """
     商品描述 → HTS 编码推荐。
 
@@ -583,8 +741,12 @@ def classify_product(db, description, top_n=3, origin="CN"):
       2. 本地召回：按关键词在税则库搜索 top 40
       3. LLM：从候选编码中挑选最合适的 top_n，输出编码 + 置信度 + 理由（JSON）
       4. 本地引擎校验：对推荐编码计算 301 状态与总税负
+      5. 升级（配置 guided 开启时）：平铺置信度低于阈值 / 带存疑信号 / 无有效结果的，
+         再走 GRI 逐级链（注释 → 品目 → 子目 → 先例），逐级结果排第一并带「论证」，
+         平铺的第一名记在「平铺结果」里供对照。force_guided=True 不看阈值直接升级（API / 评测用）。
 
-    返回：{'candidates': [...], 'keywords': [...], 'disclaimer': str}
+    返回：{'candidates': [...], 'keywords': [...], '归类方式': '平铺'|'逐级', 'disclaimer': str}
+    exclude_ruling：留一法评测时从升级链的先例路径里剔除的裁定号。
     """
     provider = get_provider()
     if provider is None:
@@ -611,13 +773,12 @@ def classify_product(db, description, top_n=3, origin="CN"):
         return {"error": f"本地税则库未找到与「{description}」匹配的商品（关键词：{' '.join(keywords)}），请尝试调整描述。"}
     rows = _rank_by_chapters(rows, chapters)
 
-    # 第二轮：精排
+    # 第二轮：精排（平铺）。失败不立刻返回：配置了升级链时还有第二条路
     try:
         picks = _ai_rerank(provider, db, description, rows, top_n)
+        flat_error = "" if picks else "AI 未返回有效归类结果，请重试或联系人工复核。"
     except AIProviderError as e:
-        return {"error": f"AI 归类失败：{e}"}
-    if not picks:
-        return {"error": "AI 未返回有效归类结果，请重试或联系人工复核。"}
+        picks, flat_error = [], f"AI 归类失败：{e}"
 
     # 引擎校验：编码两边都归一化后比较。
     # 候选表的键带点（'8507.60.00'），模型却常返回不带点的 '85076000'，
@@ -625,51 +786,76 @@ def classify_product(db, description, top_n=3, origin="CN"):
     candidates = []
     code_by_norm = {re.sub(r"\D", "", r["编码"]): r for r in rows}
     for pk in picks[:top_n]:
-        norm = re.sub(r"\D", "", str(pk.get("code") or ""))
-        row = code_by_norm.get(norm)
+        row = code_by_norm.get(re.sub(r"\D", "", str(pk.get("code") or "")))
         if not row:
             continue
-        # 用候选行自身的编码算税，不用模型给的字符串——匹配放宽后两者可能不再等价
-        code8 = re.sub(r"\D", "", row["编码"])[:8]
-        total = rate_calc(db, code8, origin=origin)
-        crs = _criteria_safe(db, code8)
-        candidates.append({
-            "编码": row["编码"],
-            "商品描述": row["商品描述"],
-            # 归类路径与判定条件来自本地税则，不经模型——模型只负责选，不负责论证
-            "完整品名": row.get("完整品名", ""),
-            "归类路径": row.get("归类路径", []),
-            "判定条件": crs,
-            "证据清单": _evidence_safe(crs),
-            "一般税率": row["一般税率"],
-            "税率类型": row["税率类型"],
-            "等效从价": row["等效从价"],
-            "301判定": row["301判定"],
-            "9903子目": row["9903子目"],
-            "301加征": row["301加征"],
-            # 警示字段必须跟着数字一起走。只给"总税负 37.5%"而不说其中 12.5% 取决于
-            # 用途、25% 可能已被整号排除，比给错数更糟——它看着像个确定的结论。
-            "FLIP 301加征": (total or {}).get("FLIP 301加征", ""),
-            "FLIP 301说明": (total or {}).get("FLIP 301说明", ""),
-            "301排除": (total or {}).get("301排除", ""),
-            "301排除明细": (total or {}).get("301排除明细", []),
-            "备注": (total or {}).get("备注", ""),
-            "总税负估算": total["总税负估算"] if total else "",
-            "confidence": _clamp_confidence(pk.get("confidence")),
-            "reason": str(pk.get("reason", ""))[:300],
-            "需确认": [str(v)[:80] for v in (pk.get("need_verify") or [])][:5],
-        })
-    if not candidates:
-        return {"error": "AI 返回的编码不在候选列表中，请重试。"}
-    return {
-        "candidates": candidates,
+        candidates.append(_candidate_from_row(db, row, origin, pk.get("confidence"), pk.get("reason", ""),
+                                              pk.get("need_verify")))
+    if picks and not candidates:
+        flat_error = "AI 返回的编码不在候选列表中，请重试。"
+
+    # 升级：平铺置信度不够 / 带存疑信号 / 没有有效结果 → GRI 逐级链
+    gs = guided_settings()
+    top = candidates[0] if candidates else None
+    result = {"candidates": candidates, "归类方式": "平铺"} if candidates else None
+    if force_guided or (gs["enabled"] and (top is None or _needs_escalation(top, chapters, gs["threshold"]))):
+        g = _run_guided(db, description, origin, provider, rows, exclude_ruling, gs, keywords, chapters)
+        if "error" in g:
+            if result is None:
+                return {"error": flat_error or "AI 未返回有效归类结果", "升级失败": g["error"]}
+            result["升级失败"] = g["error"]
+        else:
+            gc = _candidate_from_code(db, g["code8"], origin, g["confidence"], g["reason"], g["需确认"])
+            gc["归类方式"] = "逐级"
+            gc["论证"] = g["论证"]
+            others = [c for c in candidates if c["编码"] != gc["编码"]]
+            result = {"candidates": [gc] + others[:max(0, top_n - 1)], "归类方式": "逐级",
+                      "论证": g["论证"], "平铺结果": top["编码"] if top else ""}
+    if result is None:
+        return {"error": flat_error}
+    result.update({
         "keywords": keywords,
         "chapters": chapters,
-        "跨章": len({c["编码"][:2] for c in candidates}) > 1,
+        "跨章": len({c["编码"][:2] for c in result["candidates"]}) > 1,
         "降级": degraded,
         "disclaimer": "AI 归类结果仅供参考，正式报关归类以 CBP 裁定与海关税则为准，请人工复核。"
                       "各候选的「判定条件」与「证据清单」来自官方税则原文，可作为论证依据。",
-    }
+    })
+    return result
+
+
+def classify_guided_only(db, description, origin="CN"):
+    """
+    直接走 GRI 逐级链（搜索页「逐级归类」按钮 / API）：出词 → 召回 → 逐级，不跑平铺精排。
+    返回与 classify_product 同形（candidates[0] 带「论证」），失败 {"error"}。
+    """
+    provider = get_provider()
+    if provider is None:
+        return {"error": "AI 服务未配置，无法进行逐级归类。请先在 ai_config.json 配置。"}
+    desc = (description or "").strip()
+    if not desc:
+        return {"error": "请输入商品描述"}
+    try:
+        keywords, chapters = _ai_keywords(provider, desc)
+    except AIProviderError as e:
+        return {"error": f"AI 调用失败：{e}"}
+    rows = _recall_candidates(db, keywords or [desc], description=desc)
+    if not rows and keywords:
+        rows = _recall_candidates(db, [desc], description=desc)
+    if not rows:
+        return {"error": f"本地税则库未找到与「{desc}」匹配的候选，无法开始逐级归类"}
+    rows = _rank_by_chapters(rows, chapters)
+    gs = guided_settings()
+    g = _run_guided(db, desc, origin, provider, rows, None, gs, keywords, chapters)
+    if "error" in g:
+        return {"error": g["error"], "论证": g.get("论证", {})}
+    gc = _candidate_from_code(db, g["code8"], origin, g["confidence"], g["reason"], g["需确认"])
+    gc["归类方式"] = "逐级"
+    gc["论证"] = g["论证"]
+    return {"candidates": [gc], "归类方式": "逐级", "论证": g["论证"], "keywords": keywords, "chapters": chapters,
+            "跨章": False, "降级": "",
+            "disclaimer": "逐级归类依据本地税则的类注、章注与附加美国注释（不含 WCO 解释性注释），"
+                          "先例来自 CROSS 镜像；税率与判定条件仍由本地税则计算。正式归类以 CBP 裁定为准。"}
 
 
 # ---------- 搜索页的 AI 增强（与「税率搜索」合并的入口） ----------
@@ -905,6 +1091,65 @@ def ask_tax_question(db, question, origin="CN"):
                      "无法为政策解释提供依据。"}
 
 
+def _detail_from_row(db, i, it, chosen, conf, reason, note, chs, rows, origin):
+    """清单里一行的结果。平铺精排与逐级升级都走这里，列一致。"""
+    total = rate_calc(db, re.sub(r"\D", "", chosen["编码"]),
+                      unit_value=it.get("unit_value"), origin=origin)
+    chosen_norm = re.sub(r"\D", "", chosen["编码"])
+    return {
+        "序号": i,
+        "品名": it.get("name", ""),
+        "编码": chosen["编码"],
+        "商品描述": chosen["商品描述"],
+        "一般税率": chosen["一般税率"],
+        "税率类型": chosen["税率类型"],
+        "301判定": chosen["301判定"],
+        "301加征": chosen["301加征"],
+        "9903子目": chosen["9903子目"],
+        "FLIP 301加征": (total or {}).get("FLIP 301加征", ""),
+        "301排除": (total or {}).get("301排除", ""),
+        "总税负估算": total["总税负估算"] if total else "",
+        "confidence": conf,
+        "reason": reason,
+        # 走了降级检索的行要标出来，否则用户无从判断这条为什么质量偏低
+        "备注": note,
+        # 存疑信号：让"AI 归错但装得很自信"的行在界面上可见。实测「不锈钢菜刀」
+        # 被归到 7204 钢铁废料（应为 8211 刀具），置信度却给到 0.8——单看置信度
+        # 抓不到，但 AI 建议章(85) 与结果编码章(72) 打架，这个矛盾能标出来。
+        "存疑": _classify_flags(conf, chs, chosen["编码"]),
+        # 同批召回里 AI 没选的那几个，一并交出去。
+        #
+        # 实测同一句品名连跑 5 次会得到 3 个不同编码、置信度全是 0.9——
+        # 单数形式的"编码"一栏因此是有误导性的：它把一次抽样说成了一个结论。
+        # 这些候选本来就在内存里（召回的前 12 条），带出去零成本，
+        # 让人能看见 AI 是在什么范围里挑的、被它放过的是什么。
+        #
+        # 刻意不做的两件事：① 不按"多次采样一致率"排序——按实测那 5 次做
+        # 多数表决会选出 7309（3/5，错的），一致性衡量的是模型的惯性而非正确性；
+        # ② 不标"AI 选的不在本地检索前 N 名"——拿完整品名验证时，它把正确答案
+        # 标记了、把错误答案放过了（「不锈钢菜刀」归到废碎料时本地检索还把废碎料
+        # 排第 1）。会在正确答案上报警的提示，只会训练人忽略所有提示。
+        "候选": [
+            {"编码": r["编码"], "商品描述": r["商品描述"],
+             "一般税率": r["一般税率"],
+             "总税负估算": (rate_calc(db, re.sub(r"\D", "", r["编码"]),
+                                unit_value=it.get("unit_value"),
+                                origin=origin) or {}).get("总税负估算", "")}
+            for r in rows[:6]
+            if re.sub(r"\D", "", r["编码"]) != chosen_norm
+        ][:5],
+    }
+
+
+def _needs_escalation_detail(d, chs, threshold):
+    """清单行要不要升级：精排没给出有效编码、置信度低于阈值、或带存疑信号。"""
+    if not d:
+        return False
+    if "error" in d:
+        return True
+    return (d.get("confidence") or 0) < threshold or bool(d.get("存疑"))
+
+
 def analyze_list_stream(db, items, origin="CN"):
     """
     商品清单批量分析（生成器版）：边算边往外吐进度与阶段结果。
@@ -1060,52 +1305,38 @@ def analyze_list_stream(db, items, origin="CN"):
                               "候选：" + "、".join(r["编码"] for r in rows[:5])),
                 }
                 continue
-            total = rate_calc(db, re.sub(r"\D", "", chosen["编码"]),
-                              unit_value=it.get("unit_value"), origin=origin)
-            conf = _clamp_confidence(pk.get("confidence"))
-            details_map[i] = {
-                "序号": i,
-                "品名": it.get("name", ""),
-                "编码": chosen["编码"],
-                "商品描述": chosen["商品描述"],
-                "一般税率": chosen["一般税率"],
-                "税率类型": chosen["税率类型"],
-                "301判定": chosen["301判定"],
-                "301加征": chosen["301加征"],
-                "9903子目": chosen["9903子目"],
-                "FLIP 301加征": (total or {}).get("FLIP 301加征", ""),
-                "301排除": (total or {}).get("301排除", ""),
-                "总税负估算": total["总税负估算"] if total else "",
-                "confidence": conf,
-                "reason": pk.get("reason", ""),
-                # 走了降级检索的行要标出来，否则用户无从判断这条为什么质量偏低
-                "备注": note,
-                # 存疑信号：让"AI 归错但装得很自信"的行在界面上可见。实测「不锈钢菜刀」
-                # 被归到 7204 钢铁废料（应为 8211 刀具），置信度却给到 0.8——单看置信度
-                # 抓不到，但 AI 建议章(85) 与结果编码章(72) 打架，这个矛盾能标出来。
-                "存疑": _classify_flags(conf, chs, chosen["编码"]),
-                # 同批召回里 AI 没选的那几个，一并交出去。
-                #
-                # 实测同一句品名连跑 5 次会得到 3 个不同编码、置信度全是 0.9——
-                # 单数形式的"编码"一栏因此是有误导性的：它把一次抽样说成了一个结论。
-                # 这些候选本来就在内存里（召回的前 12 条），带出去零成本，
-                # 让人能看见 AI 是在什么范围里挑的、被它放过的是什么。
-                #
-                # 刻意不做的两件事：① 不按"多次采样一致率"排序——按实测那 5 次做
-                # 多数表决会选出 7309（3/5，错的），一致性衡量的是模型的惯性而非正确性；
-                # ② 不标"AI 选的不在本地检索前 N 名"——拿完整品名验证时，它把正确答案
-                # 标记了、把错误答案放过了（「不锈钢菜刀」归到废碎料时本地检索还把废碎料
-                # 排第 1）。会在正确答案上报警的提示，只会训练人忽略所有提示。
-                "候选": [
-                    {"编码": r["编码"], "商品描述": r["商品描述"],
-                     "一般税率": r["一般税率"],
-                     "总税负估算": (rate_calc(db, re.sub(r"\D", "", r["编码"]),
-                                        unit_value=it.get("unit_value"),
-                                        origin=origin) or {}).get("总税负估算", "")}
-                    for r in rows[:6]
-                    if re.sub(r"\D", "", r["编码"]) != re.sub(r"\D", "", chosen["编码"])
-                ][:5],
-            }
+            details_map[i] = _detail_from_row(db, i, it, chosen, _clamp_confidence(pk.get("confidence")),
+                                              pk.get("reason", ""), note, chs, rows, origin)
+
+    # 升级：置信度不够 / 带存疑 / 精排没给出有效编码的行，再走 GRI 逐级链。
+    # 这是本轮唯一会逐行调模型的环节，进度按行报是实的。
+    gs = guided_settings()
+    if pending and gs["enabled"]:
+        esc = [(i, rows, it, chs) for i, rows, it, _note, chs in pending
+               if _needs_escalation_detail(details_map.get(i), chs, gs["threshold"])]
+        if esc:
+            yield {"type": "stage", "stage": "guided",
+                   "text": f"{len(esc)} 行置信度不足，升级到 GRI 逐级归类（注释 → 品目 → 子目 → 先例）",
+                   "done": 0, "total": len(esc)}
+        for k, (i, rows, it, chs) in enumerate(esc, 1):
+            d = details_map.get(i) or {}
+            g = _run_guided(db, it.get("name", ""), origin, provider, rows, None, gs, None, chs)
+            if "error" in g:
+                d["升级失败"] = g["error"]
+                details_map[i] = d
+            else:
+                import core as _core
+                import rate as _rate
+                row = _rate._make_row(db, g["code8"], 0.0, _core.load_measures_config())
+                # chs 传空：存疑里的"建议章 vs 结果章打架"针对的是平铺挑码，逐级链的章是读过注释后
+                # 定的，不再拿平铺第一轮猜的章号去质疑它；低置信度这一条信号照常保留
+                nd = _detail_from_row(db, i, it, row, g["confidence"], g["reason"], d.get("备注", ""), [], rows, origin)
+                nd.update({"归类方式": "逐级", "论证": g["论证"], "平铺结果": d.get("编码", "")})
+                if "error" in d:
+                    nd["平铺结果"] = ""
+                    nd["备注"] = (nd.get("备注") or "") + "（平铺精排未给出有效编码，本行由逐级链归类）"
+                details_map[i] = nd
+            yield {"type": "stage", "stage": "guided", "text": "升级到 GRI 逐级归类", "done": k, "total": len(esc)}
 
     details = [details_map.get(i) or recall_failed.get(i)
                or {"序号": i, "品名": it.get("name", ""),

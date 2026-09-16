@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作原理 · HTS 关税智能查询工具</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a56db'/%3E%3Ctext x='16' y='23' font-size='19' font-family='monospace' font-weight='bold' fill='white' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
+<script>
+  // 与主页面同一套主题记忆（hts_theme），在 <head> 里同步执行，避免闪一下浅色
+  (function () {
+    var valid = { modern: 1, wukong: 1 }, t = null;
+    var q = /[?&]theme=([^&]*)/.exec(location.search);
+    if (q && valid[q[1]]) { t = q[1]; }
+    if (!t) { try { t = localStorage.getItem('hts_theme'); } catch (e) {} }
+    document.documentElement.dataset.theme = valid[t] ? t : 'modern';
+  })();
+</script>
+<style>
+  /* ---------- 主题 token：与 index.html 同名同值，改主题只改这里 ---------- */
+  :root, [data-theme="modern"] {
+    --primary: #1a56db; --primary-dark: #1e429f; --primary-bg: #eff6ff; --on-primary: #ffffff;
+    --bg: #f3f4f6; --card: #ffffff; --surface-2: #f9fafb; --border: #e5e7eb; --border-strong: #d1d5db;
+    --text: #111827; --muted: #6b7280; --hover: #f3f4f6;
+    --hit: #dc2626; --hit-bg: #fef2f2; --hit-border: #fecaca;
+    --miss: #059669; --miss-dark: #047857; --miss-bg: #ecfdf5; --miss-border: #a7f3d0;
+    --warn: #d97706; --warn-bg: #fffbeb; --warn-border: #fde68a;
+    --gray-bg: #f9fafb; --code-bg: #f6f8fa; --hl-bg: #fef3c7;
+    --appbar-bg: rgba(255,255,255,.88); --appbar-border: #e5e7eb;
+    --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
+    --focus-ring: 0 0 0 3px rgba(26,86,219,.12);
+    --title-gradient: none; --title-color: var(--text);
+    --font-ui: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    --font-mono: Consolas, "SF Mono", Menlo, monospace;
+    --font-display: var(--font-ui);
+    --lane-model: var(--primary); --lane-model-bg: var(--primary-bg);
+    --lane-engine: var(--miss); --lane-engine-bg: var(--miss-bg);
+  }
+  [data-theme="wukong"] {
+    --primary: #d8a63f; --primary-dark: #f0cd7a; --primary-bg: rgba(216,166,63,.12); --on-primary: #120d06;
+    --bg: #0a0806; --card: #15100a; --surface-2: #1e1710; --border: #3d2f1c; --border-strong: #7a5f2c;
+    --text: #ece0c6; --muted: #a89574; --hover: #241c12;
+    --hit: #e2503f; --hit-bg: rgba(226,80,63,.11); --hit-border: rgba(226,80,63,.45);
+    --miss: #79b493; --miss-dark: #93c9a8; --miss-bg: rgba(121,180,147,.10); --miss-border: rgba(121,180,147,.36);
+    --warn: #d9a441; --warn-bg: rgba(217,164,65,.12); --warn-border: rgba(217,164,65,.40);
+    --gray-bg: #1e1710; --code-bg: #0f0b07; --hl-bg: rgba(217,164,65,.20);
+    --appbar-bg: rgba(21,16,10,.88); --appbar-border: #3d2f1c;
+    --shadow-card: 0 0 0 1px rgba(216,166,63,.10), 0 3px 20px rgba(0,0,0,.6);
+    --focus-ring: 0 0 0 3px rgba(216,166,63,.22);
+    --title-gradient: linear-gradient(96deg, #8a6a24, #f3d68a 28%, #d8a63f 52%, #f7e2a6 72%, #9a7529);
+    --title-color: transparent;
+    --font-ui: "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-mono: "SF Mono", Consolas, Menlo, monospace;
+    --font-display: "Songti SC", "STSong", "SimSun", "Source Han Serif SC", serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--font-ui); font-size: 15px; line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--primary); }
+  code, .mono { font-family: var(--font-mono); font-size: .92em; }
+  :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 6px; }
+  h1, h2, h3 { font-family: var(--font-display); line-height: 1.25; margin: 0; text-wrap: balance; }
+  h2 { font-size: 22px; font-weight: 700; }
+  h3 { font-size: 16px; font-weight: 700; }
+  p { margin: 0; }
+  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+  /* ---------- 顶栏 ---------- */
+  .appbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--appbar-bg); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--appbar-border);
+  }
+  .appbar-inner { max-width: 1120px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
+  .brand-logo {
+    width: 32px; height: 32px; border-radius: 9px; flex: none; background: var(--primary); color: var(--on-primary);
+    display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 700;
+  }
+  .brand-title { font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+  .brand-title small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; font-family: var(--font-ui); }
+  .appbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .back {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; text-decoration: none; color: var(--primary);
+    background: var(--primary-bg); border: 1px solid transparent;
+  }
+  .back:hover { border-color: var(--primary); }
+  .theme-switch { display: flex; gap: 2px; padding: 3px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 20px; }
+  .theme-switch button {
+    border: none; background: none; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600;
+    color: var(--muted); padding: 5px 14px; border-radius: 16px;
+  }
+  .theme-switch button.active { background: var(--primary); color: var(--on-primary); }
+
+  .container { max-width: 1120px; margin: 0 auto; padding: 28px 20px 80px; display: flex; flex-direction: column; gap: 44px; }
+
+  /* ---------- 开场：一句话 + 泳道图 ---------- */
+  .hero { display: flex; flex-direction: column; gap: 16px; }
+  .hero h1 {
+    font-size: 30px; font-weight: 800;
+    background-image: var(--title-gradient); -webkit-background-clip: text; background-clip: text; color: var(--title-color);
+  }
+  .lede { max-width: 68ch; color: var(--muted); font-size: 16px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .swatch { width: 14px; height: 14px; border-radius: 4px; border: 2px solid; }
+  .swatch.model { border-color: var(--lane-model); background: var(--lane-model-bg); }
+  .swatch.engine { border-color: var(--lane-engine); background: var(--lane-engine-bg); }
+
+  .pipeline-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-card); }
+  .pipeline { display: block; min-width: 940px; width: 100%; height: auto; }
+  .pipeline text { font-family: var(--font-ui); fill: var(--text); }
+  .pipeline .lane-label { font-size: 12px; font-weight: 700; letter-spacing: .08em; fill: var(--muted); }
+  .pipeline .lane-band { fill: var(--surface-2); }
+  .pipeline .link { fill: none; stroke: var(--border-strong); stroke-width: 2; }
+  .pipeline .station { cursor: pointer; }
+  .pipeline .station rect { stroke-width: 1.5; transition: stroke-width .15s; }
+  .pipeline .station.model rect { fill: var(--lane-model-bg); stroke: var(--lane-model); }
+  .pipeline .station.engine rect { fill: var(--lane-engine-bg); stroke: var(--lane-engine); }
+  .pipeline .station.user rect { fill: var(--card); stroke: var(--border-strong); }
+  .pipeline .station:hover rect, .pipeline .station.active rect { stroke-width: 3; }
+  .pipeline .station.active text.name { font-weight: 700; }
+  .pipeline .station .num { font-size: 10px; fill: var(--muted); font-family: var(--font-mono); }
+  .pipeline .station .name { font-size: 12.5px; }
+  .pipeline .gate { fill: var(--warn-bg); stroke: var(--warn); stroke-width: 1.5; }
+  .pipeline .flow-dot { fill: var(--primary); }
+  @media (prefers-reduced-motion: reduce) { .pipeline .flow-dot { display: none; } }
+
+  /* ---------- 逐步走：左侧步骤，右侧面板 ---------- */
+  .walk { display: grid; grid-template-columns: 232px 1fr; gap: 20px; align-items: start; }
+  .steps { position: sticky; top: 70px; display: flex; flex-direction: column; gap: 4px; }
+  .steps button {
+    display: grid; grid-template-columns: 26px 1fr; align-items: center; gap: 8px; text-align: left;
+    padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; background: none; cursor: pointer;
+    font-family: inherit; font-size: 13px; color: var(--muted);
+  }
+  .steps button .idx { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .steps button.active { background: var(--card); border-color: var(--border); color: var(--text); box-shadow: var(--shadow-card); }
+  .steps button.active .idx { color: var(--primary); font-weight: 700; }
+  .steps button .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .dot.model { background: var(--lane-model); } .dot.engine { background: var(--lane-engine); } .dot.user { background: var(--border-strong); }
+
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-card); padding: 22px 24px; display: flex; flex-direction: column; gap: 18px; min-height: 420px; }
+  .panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; }
+  .panel-head .counter { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .panel-head h2 { font-size: 20px; }
+  .who { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; border: 1px solid; }
+  .who.model { color: var(--lane-model); border-color: var(--lane-model); background: var(--lane-model-bg); }
+  .who.engine { color: var(--miss-dark); border-color: var(--lane-engine); background: var(--lane-engine-bg); }
+  .who.user { color: var(--muted); border-color: var(--border-strong); background: var(--surface-2); }
+  .io { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .io > div { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .io .lbl { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .io ul, .io ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+  .io li { font-size: 13.5px; }
+  .why { border-left: 3px solid var(--primary); padding: 6px 14px; color: var(--text); font-size: 14px; background: var(--primary-bg); border-radius: 0 8px 8px 0; }
+  .why b { color: var(--primary); }
+  .nav { display: flex; gap: 10px; margin-top: auto; }
+  .nav button {
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--card); color: var(--text);
+    cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600;
+  }
+  .nav button.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  .nav button:disabled { opacity: .45; cursor: default; }
+  .nav .hint { margin-left: auto; align-self: center; font-size: 12px; color: var(--muted); }
+
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 12px; font-size: 12px; border: 1px solid var(--border-strong); background: var(--card); margin: 2px 4px 2px 0; }
+  .chip.kw { font-family: var(--font-mono); }
+  .chip.src { font-size: 11px; padding: 0 6px; border-color: var(--border); color: var(--muted); }
+  .quote { font-family: var(--font-mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.55; }
+  .tree { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; white-space: pre; overflow-x: auto; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .tree .pick { background: var(--hl-bg); font-weight: 700; }
+  .tree .gold { color: var(--miss-dark); font-weight: 700; }
+  .rate-line { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 12px; font-size: 13.5px; align-items: baseline; }
+  .rate-line .k { color: var(--muted); }
+  .rate-line .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .rate-line .total { border-top: 1px solid var(--border-strong); padding-top: 6px; font-weight: 700; }
+  .gauge { position: relative; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--hit-bg), var(--warn-bg) 60%, var(--miss-bg)); border: 1px solid var(--border); }
+  .gauge i { position: absolute; top: -6px; width: 2px; height: 22px; background: var(--text); }
+  .gauge b { position: absolute; top: -3px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--primary); border: 2px solid var(--card); }
+  .gauge-lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+  .verdict { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--miss-border); background: var(--miss-bg); color: var(--miss-dark); font-weight: 600; }
+  .warnbox { border: 1px solid var(--warn-border); background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+
+  /* ---------- 说明章节 ---------- */
+  .section { display: flex; flex-direction: column; gap: 14px; }
+  .section > p { max-width: 72ch; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .card h3 { display: flex; align-items: center; gap: 8px; }
+  .bars { display: grid; grid-template-columns: 8em 1fr 3.5em; gap: 8px 10px; align-items: center; font-size: 13px; }
+  .bars .bar { height: 14px; border-radius: 4px; background: var(--border); position: relative; overflow: hidden; }
+  .bars .bar i { position: absolute; inset: 0 auto 0 0; background: var(--primary); border-radius: 4px; }
+  .bars .bar.engine i { background: var(--lane-engine); }
+  .bars .val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .flat-list { font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 8px; padding: 8px 12px; }
+  .flat-list b { color: var(--text); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+  td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  th.num { text-align: right; }
+  .table-wrap { overflow-x: auto; }
+  dl.rails { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px 22px; }
+  dl.rails > div { border-left: 3px solid var(--lane-engine); padding: 2px 0 2px 14px; }
+  dl.rails dt { font-weight: 700; margin-bottom: 2px; }
+  dl.rails dd { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13.5px; }
+  .badges span { display: inline-flex; align-items: center; gap: 8px; }
+  .b { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; border: 1px solid; }
+  .b.hi { color: var(--miss-dark); border-color: var(--miss-border); background: var(--miss-bg); }
+  .b.mid { color: var(--warn); border-color: var(--warn-border); background: var(--warn-bg); }
+  .b.lo { color: var(--hit); border-color: var(--hit-border); background: var(--hit-bg); }
+  .b.alt { color: var(--muted); border-color: var(--border-strong); border-style: dashed; background: var(--card); }
+  .b.guided { color: var(--text); border-color: var(--border-strong); background: var(--card); }
+  footer { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--border); padding-top: 18px; max-width: 80ch; }
+
+  @media (max-width: 860px) {
+    .walk { grid-template-columns: 1fr; }
+    .steps { position: static; flex-direction: row; flex-wrap: wrap; }
+    .steps button { grid-template-columns: auto; }
+    .steps button .label { display: none; }
+    .io, .two { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="brand-logo">H</div>
+    <div class="brand-title">工作原理<small>这个工具怎么把一句商品描述变成一个税号</small></div>
+    <div class="appbar-right">
+      <a class="back" href="/">← 返回工具</a>
+      <div class="theme-switch" role="group" aria-label="界面主题">
+        <button type="button" data-theme-btn="modern" onclick="setTheme('modern')">现代</button>
+        <button type="button" data-theme-btn="wukong" onclick="setTheme('wukong')">黑神话</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ===== 开场 ===== -->
+  <section class="hero">
+    <p class="eyebrow">一句话</p>
+    <h1>AI 只负责挑，数字全部来自官方税则</h1>
+    <p class="lede">
+      整条链路是一条固定顺序的流水线，不是会自己决定下一步的机器人。模型只做四件事：把描述翻成税则用词、
+      在本地找出的候选里挑、读注释定品目、写理由。税率、301、FLIP 301、总税负每一个数字都由本地引擎从
+      USITC 税率表算出，能指到 CSV 行号和 PDF 页码。下面用一件真实商品把每一步走一遍。
+    </p>
+    <div class="legend">
+      <span><i class="swatch model"></i>模型做的一步（读、选、写理由）</span>
+      <span><i class="swatch engine"></i>本地引擎做的一步（确定、离线、可追溯）</span>
+      <span>点任一站，下方跟着走到那一步</span>
+    </div>
+
+    <div class="pipeline-wrap">
+      <svg class="pipeline" id="pipeline" viewBox="0 0 1200 300" role="img" aria-label="归类流水线泳道图：模型步骤在上，本地引擎步骤在下">
+        <rect class="lane-band" x="0" y="40" width="1200" height="96" rx="0"></rect>
+        <rect class="lane-band" x="0" y="164" width="1200" height="96" rx="0"></rect>
+        <text class="lane-label" x="16" y="62">模型</text>
+        <text class="lane-label" x="16" y="186">本地引擎</text>
+        <path id="flowpath" class="link"
+              d="M 96 212 L 190 88 L 290 212 L 400 212 L 510 88 L 620 212 L 720 212 L 810 88 L 910 88 L 1010 88 L 1110 212"></path>
+        <g id="stations"></g>
+        <circle class="flow-dot" r="5">
+          <animateMotion dur="16s" repeatCount="indefinite" rotate="0"><mpath href="#flowpath"/></animateMotion>
+        </circle>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ===== 逐步走 ===== -->
+  <section class="walk" id="walk">
+    <aside class="steps" id="steps" aria-label="步骤"></aside>
+    <div class="panel" id="panel"></div>
+  </section>
+
+  <!-- ===== 为什么要三条召回 ===== -->
+  <section class="section" id="recall">
+    <p class="eyebrow">第 ② 步展开</p>
+    <h2>为什么找候选要走三条路</h2>
+    <p>
+      关键词检索是精确匹配：'bluetooth speaker' 在税则里一个词都不出现（官方写 loudspeakers），中文口语更是对不上。
+      所以除了关键词，还用向量按意思找税则行，再用 22 万条 CBP 裁定按"海关实际把同类货判到了哪里"投票。
+      三条路各给一个名次表，按名次倒数加权求和（权重 关键词 0.25、语义 1、先例 3），多条路同时命中的自然浮到最前。
+    </p>
+    <div class="two">
+      <div class="card">
+        <h3>正确答案进前 5 名的比例</h3>
+        <div class="bars">
+          <span>关键词</span><div class="bar engine"><i style="width:0%"></i></div><span class="val">0.00</span>
+          <span>税则行语义</span><div class="bar engine"><i style="width:30%"></i></div><span class="val">0.30</span>
+          <span>裁定先例投票</span><div class="bar engine"><i style="width:69%"></i></div><span class="val">0.69</span>
+          <span>三路融合</span><div class="bar"><i style="width:64%"></i></div><span class="val">0.64</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>正确答案进前 20 名的比例</h3>
+        <div class="bars">
+          <span>关键词</span><div class="bar engine"><i style="width:1%"></i></div><span class="val">0.01</span>
+          <span>税则行语义</span><div class="bar engine"><i style="width:46%"></i></div><span class="val">0.46</span>
+          <span>裁定先例投票</span><div class="bar engine"><i style="width:78%"></i></div><span class="val">0.78</span>
+          <span>三路融合</span><div class="bar"><i style="width:81%"></i></div><span class="val">0.81</span>
+        </div>
+      </div>
+    </div>
+    <p style="color:var(--muted);font-size:13px;">
+      数据：295 条 2023 年后 CBP 裁定的商品描述段，留一法（把裁定自己从先例里剔掉）。融合在前 5 名略低于先例单路，
+      但前 20 名最高，而送给模型挑的是前 40 名，所以按前 20 的口径定权重。
+    </p>
+  </section>
+
+  <!-- ===== 平铺 vs 逐级 ===== -->
+  <section class="section" id="compare">
+    <p class="eyebrow">第 ④ 步与第 ⑦ 步的区别</p>
+    <h2>两种挑法：平铺一次挑，还是像归类员一样逐级走</h2>
+    <div class="two">
+      <div class="card">
+        <h3><i class="swatch model"></i>平铺：40 条摆在一起挑 3 条</h3>
+        <p>模型看到的是一张平的清单。税则末级品名大量是 "Other"，不带父级条件的话就是在 Other 和 Other 之间比：</p>
+        <div class="flat-list">
+          5903.20.25 … &gt; Other &gt; <b>Other (229)</b><br>
+          6210.30.50 … &gt; Of man-made fibers &gt; <b>Other</b><br>
+          6210.30.70 … &gt; Other &gt; Having an outer surface…<br>
+          6211.32.90 … &gt; Of cotton &gt; <b>Other</b><br>
+          6113.00.10 … &gt; Having an outer surface…
+        </div>
+        <p>所以候选行带上归类路径、判定条件和先例证据。快、便宜（约 5 千 token、27 秒），大多数行到这里就够了。</p>
+      </div>
+      <div class="card">
+        <h3><i class="swatch model"></i>逐级：先定品目，再下钻，再核先例</h3>
+        <p>归类员的顺序：先读类注章注排除，按 GRI 1 定 4 位品目；再在品目内按 GRI 6 同级比较；最后拿裁定核对。</p>
+        <ol style="margin:0;padding-left:20px;font-size:13.5px;display:flex;flex-direction:column;gap:4px;">
+          <li>候选按品目分组 + 涉及章全部品目 + 类注/章注/附加美国注释 → 品目、排除了谁、缺什么事实</li>
+          <li>该品目的完整子目树（叶子带税率）→ 8 位行 + 每层理由</li>
+          <li>该编码的历史先例 + 语义最近的先例 + 正文 → 一致与否，改判带裁定号</li>
+        </ol>
+        <p>贵 3 倍（约 1.75 万 token、50 秒），所以只对置信度不够的行做。</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>同一批 60 条商品描述（CBP 裁定正文）</th><th class="num">第一名就对</th><th class="num">前三名里有</th><th class="num">前 6 位对</th></tr></thead>
+        <tbody>
+          <tr><td>本地 8B 模型，平铺</td><td class="num">43%</td><td class="num">48%</td><td class="num">48%</td></tr>
+          <tr><td>云端强模型，平铺</td><td class="num">58%</td><td class="num">70%</td><td class="num">62%</td></tr>
+          <tr><td>云端强模型，平铺做错的 21 条再走逐级</td><td class="num">救回 7 条</td><td class="num">—</td><td class="num">救回 8 条</td></tr>
+          <tr><td>云端强模型，平铺做对的 15 条再走逐级（对照）</td><td class="num">做坏 1 条</td><td class="num">—</td><td class="num">做坏 1 条</td></tr>
+          <tr><td><b>云端强模型，平铺 + 置信度不足的行自动逐级（线上配置）</b></td><td class="num"><b>65%</b></td><td class="num"><b>77%</b></td><td class="num"><b>67%</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:13px;">
+      平铺错的 25 条里 23 条是 6 位就错——方向错，不是细分错——逐级链救回的 7 条里 4 条正是品目方向纠正。
+      整体跑下来 60 条里 25 条触发升级，对照平铺新救回 7 条、做坏 3 条，净多对 4 条。
+      样本 60 条，1 条就是 1.7 个百分点，几条之内的差异是噪声。
+    </p>
+  </section>
+
+  <!-- ===== 护栏 ===== -->
+  <section class="section" id="rails">
+    <p class="eyebrow">贯穿全程</p>
+    <h2>模型再强也不放开的几条护栏</h2>
+    <dl class="rails">
+      <div><dt>选的编码不在候选里就报错</dt><dd>绝不退回第一名。把模型没选过的编码配上它为别的编码写的理由交出去，比没有编码更危险。</dd></div>
+      <div><dt>章号只加权，不过滤</dt><dd>模型猜的章是软信号。硬过滤时猜错章会把正确候选整条滤掉，用户看到的是"库里没有"。</dd></div>
+      <div><dt>数字不经模型</dt><dd>税率、301、FLIP、排除、总税负全由本地引擎算，来源弹窗能定位到 CSV 行号与 PDF 页码。</dd></div>
+      <div><dt>存疑要标出来</dt><dd>置信度低于 60%，或建议章与结果章打架，整行带警示条。实测模型错时自信程度和对时几乎一样。</dd></div>
+      <div><dt>先例改判必须带裁定号</dt><dd>先例核对实测改 5 条：救 3、坏 1。改了的行界面上能看到原判、改判和引用的裁定号，不静默替换。</dd></div>
+      <div><dt>同一份清单今天明天一样</dt><dd>温度 0、固定随机种子、提示词落盘缓存。重跑同一批零等待，评测才可比。</dd></div>
+    </dl>
+  </section>
+
+  <!-- ===== 成本与边界 ===== -->
+  <section class="section" id="cost">
+    <p class="eyebrow">算账</p>
+    <h2>每件商品花多少，哪些事它做不到</h2>
+    <div class="two">
+      <div class="card">
+        <h3>每件商品的开销（云端强模型实测）</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>路径</th><th class="num">输入 token</th><th class="num">调用次数</th><th class="num">耗时</th></tr></thead>
+          <tbody>
+            <tr><td>平铺（出词 + 精排）</td><td class="num">5.4k</td><td class="num">2</td><td class="num">27 s</td></tr>
+            <tr><td>平铺，关闭推理（none 档）</td><td class="num">5.4k</td><td class="num">2</td><td class="num">11 s</td></tr>
+            <tr><td>逐级链（品目 + 下钻 + 先例）</td><td class="num">17.5k</td><td class="num">3–4</td><td class="num">50 s</td></tr>
+          </tbody>
+        </table></div>
+        <p style="font-size:13px;color:var(--muted);">阈值 0.9 时约三分之一的行升级，其中七成确实是平铺做错的。关闭推理前三名不掉、第一名掉 8 个点。</p>
+      </div>
+      <div class="card">
+        <h3>边界</h3>
+        <ul style="margin:0;padding-left:20px;font-size:13.5px;display:flex;flex-direction:column;gap:6px;">
+          <li><b>它不能要资料。</b>归类员遇到描述不全会去问，这里只能列"缺什么事实"。CBP 手里有样品，模型只有 300 字。</li>
+          <li><b>没有 WCO 解释性注释。</b>类注、章注、附加美国注释都读，但解释性注释有版权，不在本地数据里。</li>
+          <li><b>不含反倾销/反补贴与 232。</b>总税负一栏常驻说明，命中范围时另标待核。</li>
+          <li><b>评测口径偏乐观。</b>金标是规范的英文描述段，业务员贴的中文短句信息更少，线上按更低估计。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 怎么看结果 ===== -->
+  <section class="section" id="read">
+    <p class="eyebrow">回到工具</p>
+    <h2>结果页上那些标记是什么意思</h2>
+    <div class="badges">
+      <span><i class="b hi">高 92%</i>模型自报的置信度，高不等于对</span>
+      <span><i class="b lo">待核 80%</i>带存疑信号，置信度不作数，先看这行</span>
+      <span><i class="b alt">备选 5</i>同批候选里模型没选的，看它在什么范围里挑</span>
+      <span><i class="b guided">逐级 · 论证</i>这行走了逐级链，点开看品目理由、排除、缺事实、先例核对</span>
+      <span><i class="b mid">范围存疑</i>FLIP 301 豁免带用途范围，税额按不豁免保守计</span>
+    </div>
+    <p>清单页看短名单，单件要论证去「搜索与归类」页：那里有完整候选表、分歧对照、待确认属性，以及「📐 逐级归类」按钮。</p>
+  </section>
+
+  <footer>
+    本页的示例来自 CBP 裁定 N332157 的申请描述，每一步的产物是工具在 2026-09-16 的真实运行结果（云端强模型）。
+    税率与 301 / FLIP 301 来自 USITC 2026 税率表与 USTR 清单；类注章注来自 USITC 各章 PDF（Rev19）；先例来自 CROSS 镜像。
+    评测数字见仓库 README「GRI 逐级归类」一节。
+  </footer>
+</main>
+
+<script>
+  function setTheme(t) {
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem('hts_theme', t); } catch (e) {}
+    document.querySelectorAll('[data-theme-btn]').forEach(b => b.classList.toggle('active', b.dataset.themeBtn === t));
+  }
+  setTheme(document.documentElement.dataset.theme || 'modern');
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  /* ---------- 步骤数据：全部来自 N332157 的真实运行 ---------- */
+  const STEPS = [
+    { who: 'user', num: '', name: '一句描述进来', title: '一句商品描述进来',
+      input: `<div class="quote">Style L1657 is a women's raincoat constructed from a two-layer laminated fabric consisting of a 100% polyester woven fabric bonded to a thermoplastic polyurethane (TPU) film.</div>
+              <p style="font-size:13px;color:var(--muted)">女式雨衣，两层层压面料：100% 涤纶梭织布贴合 TPU 膜。</p>`,
+      output: `<p>原文原样进入后面每一步，不改写、不翻译。中文描述也一样。</p>`,
+      why: `这是 CBP 裁定 <b>N332157</b> 里申请人的原话，海关最终判 <b>6210.30.50</b>。全页用它走一遍，每一步的产物都是工具的真实运行结果，不是示意。` },
+
+    { who: 'model', num: '①', name: '出检索词', title: '把描述翻成税则用词',
+      input: `<p>商品描述 + 一条约束：只能给税则品名里<b>真实出现</b>的英文词，不要 electric、device 这类宽泛词；顺带猜章号。</p>`,
+      output: `<div><span class="chip kw">raincoat</span><span class="chip kw">anorak</span><span class="chip kw">overcoat</span><span class="chip kw">polyester</span><span class="chip kw">woven</span><span class="chip kw">coated</span></div>
+              <p style="margin-top:6px">章号建议：<span class="chip">62</span><span class="chip">59</span></p>`,
+      why: `税则是英文，描述常是中文，本地同义词表只有 176 条硬映射，覆盖不到组合描述。章号<b>只用来加权排序，不过滤</b>：猜错章不能把正确候选整条滤掉。` },
+
+    { who: 'engine', num: '②', name: '三路找候选', title: '三条路各找一批候选',
+      input: `<ul>
+                <li><b>关键词</b>：拿上一步的英文词，在 1.1 万条税则行里精确匹配（同义词、词干、祖先品名）</li>
+                <li><b>语义</b>：拿原文，在税则行向量库里按意思找最近的 50 条</li>
+                <li><b>先例</b>：拿原文，在 22 万条 CBP 裁定里找最像的 20 条，按它们判的编码投票（撤销的不投，越新权重越高）</li>
+              </ul>`,
+      output: `<ul>
+                <li>关键词：143 条命中，多在 6201 / 6202 的 anorak、overcoat 行</li>
+                <li>语义：50 条，前列 5903.20.30、6210.30.70、6113.00.10</li>
+                <li>先例：9 个编码得票。5903.20.25 <b>4.05 票</b>（E85732、K80040）、5903.20.30 1.75 票、<b>6210.30.50 0.35 票（A87383）</b></li>
+              </ul>`,
+      why: `三条路互补：关键词对不上口语，语义对不上法律用词，先例最强但只覆盖被裁定过的货。正文金标上三路的前五命中率分别是 <b>0.00 / 0.30 / 0.69</b>，下方有图。` },
+
+    { who: 'engine', num: '③', name: '融合排序', title: '三个名次表合成一张候选表',
+      input: `<p>每条路给一个名次表。得分 = Σ 权重 ÷ (60 + 名次)，权重：关键词 0.25、语义 1、先例 3。</p>`,
+      output: `<div class="table-wrap"><table>
+                <thead><tr><th>候选</th><th>来自</th><th class="num">融合分</th></tr></thead>
+                <tbody>
+                  <tr><td class="mono">5903.20.30</td><td><span class="chip src">语义</span><span class="chip src">先例</span></td><td class="num">6.35</td></tr>
+                  <tr><td class="mono">5903.20.25</td><td><span class="chip src">语义</span><span class="chip src">先例</span></td><td class="num">6.31</td></tr>
+                  <tr><td class="mono">6210.30.70</td><td><span class="chip src">语义</span><span class="chip src">先例</span></td><td class="num">6.15</td></tr>
+                  <tr><td class="mono">6113.00.10</td><td><span class="chip src">语义</span><span class="chip src">先例</span></td><td class="num">5.83</td></tr>
+                  <tr><td class="mono">6210.30.50</td><td><span class="chip src">先例</span></td><td class="num">4.69</td></tr>
+                </tbody></table></div>
+              <p style="font-size:12.5px;color:var(--muted)">共 40 条送去挑。每条送出去时长这样（带路径、判定条件、先例证据）：</p>
+              <div class="quote">1. 5903.20.30 | Textile fabrics impregnated, coated… &gt; With polyurethane &gt; Other | 一般税率 2.7% | 301: 是 +25% | FLIP301: +12.5% | 判定条件: 涂层/浸渍/层压 | CBP 先例 1.75 票：g88521(2001) "a PU bonded or laminated textile fabric, for use in women's outer wear"</div>`,
+      why: `这一步没有模型，纯算术，可复现。同时被两三条路命中的编码自然排前。正确答案 6210.30.50 在第 5 位——<b>在候选里，但不在最前</b>，这正是后面要靠模型判断的地方。` },
+
+    { who: 'model', num: '④', name: '平铺精排', title: '在 40 条里挑 3 条',
+      input: `<p>40 条候选行 + 要求：依据路径里的实际措辞（材质、织法、涂层、含量阈值）挑，理由引用原文，拿不准的属性写进"需确认"。</p>`,
+      output: `<p>第一名 <b class="mono">6210.30.70</b>，置信度 <b>0.86</b>。</p>
+              <p style="font-size:13.5px">理由：雨衣由 5903 面料制成，归 6210；面料为涂层/层压结构。</p>
+              <p style="font-size:13.5px">需确认：涂层是否位于外表面且完全遮蔽底布。</p>
+              <div class="warnbox">这次平铺挑错了：.70 是"非化纤"分支，而这件是 100% 涤纶。方向对（6210），细分错。</div>`,
+      why: `模型输出的编码<b>必须来自候选</b>，否则整条报错，不退回第一名。平铺快而便宜，多数商品到这里就够；错的那部分多是像这样在同名的 Other 之间选错，或者品目方向就错。` },
+
+    { who: 'engine', num: '⑤', name: '校验算税', title: '校验编码，算出税负',
+      input: `<p>模型选的 <span class="mono">6210.30.70</span>。先确认它真在候选表里，再用候选行自身的编码算，不用模型给的字符串。</p>`,
+      output: `<div class="rate-line">
+                <span class="k">一般税率</span><span></span><span class="v">3.3%</span>
+                <span class="k">中国 301（9903.88.15）</span><span></span><span class="v">+7.5%</span>
+                <span class="k">FLIP 301</span><span></span><span class="v">+12.5%</span>
+                <span class="k total">总税负</span><span class="total"></span><span class="v total">23.3%</span>
+              </div>
+              <p style="font-size:12.5px;color:var(--muted)">不含反倾销/反补贴与 232。判定条件与证据清单也在这里从税则原文抽出：主材质 Of man-made fibers、涂层/浸渍/层压…</p>`,
+      why: `每个数字都能在来源弹窗里指到 USITC 税率表的行号或 USTR 清单的页码。<b>模型一个数都不产出</b>，它只负责挑。` },
+
+    { who: 'engine', num: '⑥', name: '够不够信', title: '这个结果够不够信',
+      input: `<p>平铺置信度 0.86，阈值 0.9；另看两个存疑信号：置信度低于 0.6，或模型猜的章与结果的章打架。</p>`,
+      output: `<div class="gauge"><i style="left:90%" title="阈值 0.9"></i><b style="left:86%" title="本例 0.86"></b></div>
+              <div class="gauge-lbl"><span>0</span><span>阈值 0.9</span><span>1</span></div>
+              <p style="margin-top:10px">0.86 &lt; 0.9 → <b>升级到逐级链</b>。置信度 0.9 以上的行直接出结果。</p>`,
+      why: `为什么不让模型自己判断"要不要再查"：实测它<b>错的时候置信度 0.84–0.87，对的时候 0.94</b>，没有一条错的低于 0.6，它发现不了自己错。硬阈值 0.9 时约三分之一的行升级，其中七成确实是错的。` },
+
+    { who: 'model', num: '⑦a', name: '读注释定品目', title: '读类注章注，先定 4 位品目',
+      input: `<ul>
+                <li>候选按品目分组：5903 ×2（票 5.8）、6210 ×2、6113、6211…</li>
+                <li>第 59、62、54 章的<b>全部品目</b>条文，让它能选候选之外的品目</li>
+                <li>第 XI 类类注 + 三章章注 + 附加美国注释，约 1.3 万 token</li>
+              </ul>`,
+      output: `<p>品目 <b class="mono">6210</b>：面料符合第 59 章注 3 的"laminated with plastics"，依<b>第 62 章注 6</b>，同时可归 6210 与其他品目的服装归 6210。</p>
+              <p style="font-size:13.5px">排除：5903（第 59 章注 8(a)，已制成的服装不按面料品目归）、5906、5407、6113（针织）、6211、3926。</p>
+              <p style="font-size:13.5px">次选：6202（若面料因第 59 章注 2 的排除条件不归 5903）。</p>
+              <p style="font-size:13.5px;color:var(--warn)">缺事实：TPU 膜是否可见、是否完全遮蔽底布、能否在 15–30℃ 手工弯过 7mm 圆柱。</p>`,
+      why: `注释是法律依据，先例票数只是证据。平铺错的 25 条里 23 条是 6 位就错，这一步专治方向错：正确品目在未列出的章时模型可以点名，补那章注释再判一次。` },
+
+    { who: 'model', num: '⑦b', name: '子目树下钻', title: '在品目里逐级往下走',
+      input: `<p>品目 6210 的完整子目树，叶子带税率，加本章附加美国注释。同一层级并列比较，Other 是排除法的结果。</p>
+              <div class="tree">6210  Garments, made up of fabrics of heading 5602, 5603, 5903, 5906 or 5907
+  Other garments, of the type described in subheadings 6202.11 to 6202.19:   (女式)
+    Of man-made fibers:
+      <span class="pick">6210.30.30  Having an outer surface … completely obscures the underlying fabric  [3.8%]</span>
+      <span class="gold">6210.30.50  Other  [7.1%]</span>
+    Other:
+      6210.30.70  Having an outer surface …  [3.3%]
+      6210.30.90  Other  [6.2%]</div>`,
+      output: `<p>选 <b class="mono">6210.30.30</b>，置信度 0.94。</p>
+              <ol>
+                <li>女式雨衣 → 6202 类型分支 6210.30</li>
+                <li>100% 涤纶梭织 + TPU 膜 → 化纤 "Of man-made fibers"</li>
+                <li>TPU 膜在外表面、连续覆盖 → 选具名行 .30 而非 Other</li>
+              </ol>
+              <p style="font-size:13.5px;color:var(--warn)">需确认：TPU 膜是否构成外表面且完全遮蔽底布。</p>`,
+      why: `这就是 GRI 6。这一步的错误多是像这里一样，把描述里<b>没说的条件当成了满足</b>——"完全遮蔽"描述里并没有。所以还有下一步。code 不在树里会重问一次，再无效直接报错，不兜底。` },
+
+    { who: 'model', num: '⑦c', name: '先例核对', title: '拿 CBP 裁定核一遍',
+      input: `<ul>
+                <li>6210.30.30 的历史先例（按码反查）</li>
+                <li>语义最近的先例：<b>A87383</b> 女式聚酯雨衣，外表面涂层<b>未完全遮盖</b>底布 → 6210.30.5000；G88521 是层压面料本身，不是成衣</li>
+                <li>最相近两条的正文节选</li>
+              </ul>`,
+      output: `<p>判定：<b>不一致</b>。描述只说面料层压，未证明 TPU 膜完全遮盖底布，不足以支持 .30 的具名条件；A87383 对同类货选了 Other。</p>
+              <div class="warnbox">改判：6210.30.30 → <b>6210.30.50</b>（下钻原给 6210.30.30）。改判连同裁定号一起显示在结果里。</div>`,
+      why: `先例只对相似货物有参考价值，差一个属性结论可能相反。这一步实测改 5 条：<b>救 3、坏 1</b>，净正但有波动——所以它可以改，但必须带裁定号和理由展示，让审核员能看到原判和改判。` },
+
+    { who: 'engine', num: '⑧', name: '结论与论证', title: '交给人的东西',
+      input: `<p>最终编码再过一遍引擎：校验存在、算税、抽判定条件与证据清单；平铺的第一名记在旁边做对照。</p>`,
+      output: `<div class="verdict">✓ 6210.30.50 &nbsp;—&nbsp; 与 CBP 裁定 N332157 一致</div>
+              <div class="rate-line" style="margin-top:8px">
+                <span class="k">一般税率</span><span></span><span class="v">7.1%</span>
+                <span class="k">中国 301（9903.88.15）</span><span></span><span class="v">+7.5%</span>
+                <span class="k">FLIP 301</span><span></span><span class="v">+12.5%</span>
+                <span class="k total">总税负</span><span class="total"></span><span class="v total">27.1%</span>
+              </div>
+              <ul style="margin-top:8px">
+                <li><b>论证</b>：品目理由与引用的注释、排除的品目、缺的事实、逐级理由、先例核对与改判</li>
+                <li><b>需确认</b>：TPU 膜是否位于外表面且完全遮蔽</li>
+                <li><b>平铺结果</b>：6210.30.70，供对照</li>
+              </ul>`,
+      why: `结果是给懂行的审核员看的短名单和论证，不是自动报关。前三名里有正确答案的比例约七成，剩下三成要审核员自己找——存疑、待核、备选、论证这些标记就是为了让那三成看得出来。` },
+  ];
+
+  /* ---------- 泳道图：站点按步骤生成 ---------- */
+  const NODES = [
+    { x: 96,  y: 212 }, { x: 190, y: 88 }, { x: 290, y: 212 }, { x: 400, y: 212 }, { x: 510, y: 88 },
+    { x: 620, y: 212 }, { x: 720, y: 212 }, { x: 810, y: 88 }, { x: 910, y: 88 }, { x: 1010, y: 88 }, { x: 1110, y: 212 },
+  ];
+  const g = document.getElementById('stations');
+  STEPS.forEach((s, i) => {
+    const n = NODES[i]; const w = 92, h = 52;
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    el.setAttribute('class', `station ${s.who}`); el.setAttribute('tabindex', '0'); el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', `第 ${i} 步：${s.name}`);
+    const shape = i === 6
+      ? `<polygon points="${n.x},${n.y - 30} ${n.x + 50},${n.y} ${n.x},${n.y + 30} ${n.x - 50},${n.y}" class="gate"></polygon>`
+      : `<rect x="${n.x - w / 2}" y="${n.y - h / 2}" width="${w}" height="${h}" rx="9"></rect>`;
+    el.innerHTML = `${shape}
+      <text class="num" x="${n.x}" y="${n.y - 8}" text-anchor="middle">${esc(s.num || (i === 0 ? '输入' : ''))}</text>
+      <text class="name" x="${n.x}" y="${n.y + 10}" text-anchor="middle">${esc(s.name)}</text>`;
+    el.addEventListener('click', () => go(i, true));
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(i, true); } });
+    g.appendChild(el);
+  });
+
+  /* ---------- 左侧步骤列表 ---------- */
+  const stepsEl = document.getElementById('steps');
+  STEPS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.innerHTML = `<span class="idx">${esc(s.num || (i === 0 ? '→' : ''))}</span><span class="label"><i class="dot ${s.who}"></i>${esc(s.name)}</span>`;
+    b.addEventListener('click', () => go(i, false));
+    stepsEl.appendChild(b);
+  });
+
+  /* ---------- 面板 ---------- */
+  const WHO = { model: '模型', engine: '本地引擎', user: '用户' };
+  let cur = 0;
+  function render() {
+    const s = STEPS[cur];
+    document.getElementById('panel').innerHTML = `
+      <div class="panel-head">
+        <span class="counter">${cur} / ${STEPS.length - 1}</span>
+        <h2>${esc(s.title)}</h2>
+        <span class="who ${s.who}"><i class="dot ${s.who}"></i>${WHO[s.who]}</span>
+      </div>
+      <div class="io">
+        <div><div class="lbl">这一步拿到什么</div>${s.input}</div>
+        <div><div class="lbl">这一步产出什么</div>${s.output}</div>
+      </div>
+      <div class="why">${s.why}</div>
+      <div class="nav">
+        <button type="button" id="prev" ${cur === 0 ? 'disabled' : ''}>← 上一步</button>
+        <button type="button" id="next" class="primary" ${cur === STEPS.length - 1 ? 'disabled' : ''}>下一步 →</button>
+        <span class="hint">键盘 ← → 也可以</span>
+      </div>`;
+    document.getElementById('prev').addEventListener('click', () => go(cur - 1, false));
+    document.getElementById('next').addEventListener('click', () => go(cur + 1, false));
+    stepsEl.querySelectorAll('button').forEach((b, i) => b.classList.toggle('active', i === cur));
+    g.querySelectorAll('.station').forEach((el, i) => el.classList.toggle('active', i === cur));
+  }
+  function go(i, scroll) {
+    cur = Math.max(0, Math.min(STEPS.length - 1, i));
+    render();
+    if (scroll) document.getElementById('walk').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowRight') go(cur + 1, false);
+    if (e.key === 'ArrowLeft') go(cur - 1, false);
+  });
+  render();
+</script>
+</body>
+</html>
