@@ -10,6 +10,8 @@ test_guided.py —— GRI 逐级归类链（scripts/guided.py）、章注数据�
 """
 import json
 import os
+import re
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -59,7 +61,12 @@ HEAD = json.dumps({"headings": [{"heading": "6210", "reason": "第62章注6：59
 DESCEND = json.dumps({"code": "6210.30.50", "level_reasons": ["女式→6210.30", "化纤", "遮蔽不确定→Other"],
                       "need_verify": ["外层是否完全遮蔽"], "confidence": 0.85})
 PREC_OK = json.dumps({"consistent": True, "revisit_heading": None, "revisit_code": None, "reason": "A87383 同类归 .50"})
-NO_PREC = dict(_prec_by_code=lambda c, ex: [], _prec_semantic=lambda d, ex: [], _fetch_text=lambda x: None)
+# 同级对证：维持原选
+VERIFY = json.dumps({"checks": [{"code": "62103030", "判定": "无证据", "依据": "描述未说明是否完全遮蔽"},
+                                {"code": "62103050", "判定": "满足", "依据": "Other"}],
+                     "code": "62103050", "confidence": 0.8, "reason": "维持", "need_verify": ["遮蔽程度"]})
+NO_PREC = dict(_prec_by_code=lambda c, ex: [], _prec_semantic=lambda d, ex: [], _fetch_text=lambda x: None,
+               _examples=lambda codes, ex: {})
 
 
 def _pool():
@@ -145,7 +152,7 @@ class TestTree(unittest.TestCase):
 
 class TestGuidedChain(unittest.TestCase):
     def test_happy_path(self):
-        p = FakeProvider([HEAD, DESCEND, PREC_OK])
+        p = FakeProvider([HEAD, DESCEND, VERIFY, PREC_OK])
         out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
         self.assertNotIn("error", out)
         self.assertEqual(out["编码"], "6210.30.50")
@@ -156,7 +163,7 @@ class TestGuidedChain(unittest.TestCase):
         self.assertEqual(a["排除"][0]["heading"], "5903")
         self.assertEqual(a["缺事实"], ["涂层是否可见"])
         self.assertTrue(a["先例核对"]["一致"])
-        self.assertEqual(a["调用次数"], 3)
+        self.assertEqual(a["调用次数"], 4)
         # 品目步提示：候选按品目分组 + 涉及章全部品目 + 注释
         u = p.calls[0][1]["content"]
         self.assertIn("检索召回的候选品目", u)
@@ -174,12 +181,12 @@ class TestGuidedChain(unittest.TestCase):
 
     def test_revisit_code_must_stay_in_heading(self):
         bad = json.dumps({"consistent": False, "revisit_heading": None, "revisit_code": "62021900", "reason": "x"})
-        p = FakeProvider([HEAD, DESCEND, bad])
+        p = FakeProvider([HEAD, DESCEND, VERIFY, bad])
         out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
         self.assertEqual(out["编码"], "6210.30.50")           # 跨品目的 revisit_code 被拒
         self.assertNotIn("改判", out["论证"]["先例核对"])
         good = json.dumps({"consistent": False, "revisit_heading": None, "revisit_code": "62103030", "reason": "A1"})
-        p = FakeProvider([HEAD, DESCEND, good])
+        p = FakeProvider([HEAD, DESCEND, VERIFY, good])
         out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
         self.assertEqual(out["编码"], "6210.30.30")
         self.assertIn("62103050 → 62103030", out["论证"]["先例核对"]["改判"])
@@ -189,7 +196,7 @@ class TestGuidedChain(unittest.TestCase):
         target = guided._tree(_db()).by_h4["6202"][0]
         rev = json.dumps({"consistent": False, "revisit_heading": "6202", "revisit_code": None, "reason": "N1 归 6202"})
         d2 = json.dumps({"code": target, "level_reasons": ["x"], "need_verify": [], "confidence": 0.7})
-        p = FakeProvider([HEAD, DESCEND, rev, d2])
+        p = FakeProvider([HEAD, DESCEND, VERIFY, rev, d2])
         out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
         self.assertEqual(out["编码"], core.fmt(target, 8))
         self.assertEqual(out["论证"]["品目"], "6202")
@@ -197,28 +204,29 @@ class TestGuidedChain(unittest.TestCase):
 
     def test_other_chapter_detour_once(self):
         first = json.dumps({"headings": [], "excluded": [], "other_chapter": "39", "missing_facts": []})
-        p = FakeProvider([first, HEAD, DESCEND, PREC_OK])
+        p = FakeProvider([first, HEAD, DESCEND, VERIFY, PREC_OK])
         out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
         self.assertEqual(out["编码"], "6210.30.50")
         self.assertEqual(out["论证"]["补章"], 39)
         self.assertIn("第 39 章", p.calls[1][1]["content"])
 
-    def test_budget_floor_and_precedent_step_skipped_when_spent(self):
-        # max_calls 下限是 3：品目 + 下钻用掉 2，先例步还能跑 1 次；传 2 也被抬到 3
-        p = FakeProvider([HEAD, DESCEND, PREC_OK])
+    def test_budget_floor_and_later_steps_skipped_when_spent(self):
+        # max_calls 下限是 3：品目 + 下钻 + 同级对证用满，先例步跳过；传 2 也被抬到 3
+        p = FakeProvider([HEAD, DESCEND, VERIFY, PREC_OK])
         out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), max_calls=2, **NO_PREC)
         self.assertEqual(out["论证"]["调用次数"], 3)
-        self.assertIn("理由", out["论证"]["先例核对"])
-        # 下钻第一次无效、重问一次把预算用到 3：先例步被跳过，结果仍成立，先例核对为空
-        p2 = FakeProvider([HEAD, json.dumps({"code": "99999999"}), DESCEND, PREC_OK])
+        self.assertTrue(out["论证"]["同级对证"]["对证"])
+        self.assertEqual(out["论证"]["先例核对"], {})
+        # 下钻第一次无效、重问一次把预算用到 3：对证与先例都跳过，结果仍成立
+        p2 = FakeProvider([HEAD, json.dumps({"code": "99999999"}), DESCEND, VERIFY, PREC_OK])
         out2 = guided.classify_guided(_db(), DESC, provider=p2, rows=_pool(), max_calls=3, **NO_PREC)
         self.assertEqual(out2["编码"], "6210.30.50")
         self.assertEqual(out2["论证"]["调用次数"], 3)
-        self.assertEqual(out2["论证"]["先例核对"], {})
+        self.assertEqual(out2["论证"]["同级对证"], {})
         self.assertEqual(len(p2.calls), 3)
 
     def test_notes_absent_is_reported_not_fatal(self):
-        p = FakeProvider([HEAD, DESCEND, PREC_OK])
+        p = FakeProvider([HEAD, DESCEND, VERIFY, PREC_OK])
         out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), notes={}, **NO_PREC)
         self.assertEqual(out["编码"], "6210.30.50")
         self.assertFalse(out["论证"]["注释可用"])
@@ -235,12 +243,17 @@ class TestGuidedChain(unittest.TestCase):
         def fetch(x):
             seen.setdefault("fetched", []).append(x["裁定号"])
             return "full text"
-        p = FakeProvider([HEAD, DESCEND, PREC_OK])
+        def exs(codes, ex):
+            seen["exs"] = ex
+            return {c: [{"裁定号": "N9", "日期": "2024-01-01", "描述": "a laminated raincoat", "主题": "s"}] for c in codes}
+        p = FakeProvider([HEAD, DESCEND, VERIFY, PREC_OK])
         guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), exclude_ruling="N332157",
-                               _prec_by_code=by_code, _prec_semantic=sem, _fetch_text=fetch)
-        self.assertEqual((seen["by_code"], seen["sem"]), ("N332157", "N332157"))
+                               _prec_by_code=by_code, _prec_semantic=sem, _fetch_text=fetch, _examples=exs)
+        self.assertEqual((seen["by_code"], seen["sem"], seen["exs"]), ("N332157", "N332157", "N332157"))
+        self.assertIn("a laminated raincoat", p.calls[2][1]["content"])   # 对证提示带先例描述段
+        self.assertIn("货物描述：a laminated raincoat", p.calls[3][1]["content"])   # 先例步也带
         self.assertEqual(seen["fetched"], ["N2"])
-        u = p.calls[2][1]["content"]
+        u = p.calls[3][1]["content"]
         self.assertIn("N1", u)
         self.assertIn("full text", u)
 
@@ -249,7 +262,7 @@ class TestGuidedChain(unittest.TestCase):
             num_ctx = 0
         out = guided.classify_guided(_db(), DESC, provider=OllamaProvider([]), rows=_pool(), **NO_PREC)
         self.assertIn("num_ctx", out["error"])
-        p = OllamaProvider([HEAD, DESCEND, PREC_OK])
+        p = OllamaProvider([HEAD, DESCEND, VERIFY, PREC_OK])
         p.num_ctx = 32768
         self.assertEqual(guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)["编码"], "6210.30.50")
 
@@ -283,21 +296,21 @@ class TestEscalation(unittest.TestCase):
         ai.reset_provider_cache()
 
     def _on(self, th=0.9):
-        ai.guided_settings = lambda cfg=None: {"enabled": True, "threshold": th, "max_calls": 6, "effort": ""}
+        ai.guided_settings = lambda cfg=None: {"enabled": True, "threshold": th, "max_calls": 6, "effort": "", "parallel": 1}
 
     def _flat(self, conf):
         return json.dumps({"picks": [{"code": self.flat.replace(".", ""), "confidence": conf, "reason": "flat", "need_verify": []}]})
 
     def test_low_confidence_escalates(self):
         self._on()
-        p = _install(FakeProvider([KW, self._flat(0.7), HEAD, DESCEND, PREC_OK]))
+        p = _install(FakeProvider([KW, self._flat(0.7), HEAD, DESCEND, VERIFY, PREC_OK]))
         out = ai.classify_product(_db(), DESC, origin="CN", exclude_ruling="N332157")
         self.assertEqual(out["归类方式"], "逐级")
         self.assertEqual(out["candidates"][0]["编码"], "6210.30.50")
         self.assertEqual(out["candidates"][0]["归类方式"], "逐级")
         self.assertEqual(out["平铺结果"], self.flat)
         self.assertIn("总税负估算", out["candidates"][0])
-        self.assertEqual(len(p.calls), 5)
+        self.assertEqual(len(p.calls), 6)
         # 平铺的其它候选跟在后面
         self.assertEqual(out["candidates"][1]["编码"], self.flat)
 
@@ -318,7 +331,7 @@ class TestEscalation(unittest.TestCase):
 
     def test_force_guided_ignores_threshold(self):
         ai.guided_settings = lambda cfg=None: {"enabled": False, "threshold": 0.9, "max_calls": 6, "effort": ""}
-        _install(FakeProvider([KW, self._flat(0.99), HEAD, DESCEND, PREC_OK]))
+        _install(FakeProvider([KW, self._flat(0.99), HEAD, DESCEND, VERIFY, PREC_OK]))
         out = ai.classify_product(_db(), DESC, origin="CN", force_guided=True)
         self.assertEqual(out["归类方式"], "逐级")
 
@@ -332,7 +345,7 @@ class TestEscalation(unittest.TestCase):
 
     def test_flat_invalid_pick_then_guided_rescues(self):
         self._on()
-        _install(FakeProvider([KW, json.dumps({"picks": [{"code": "00000000", "confidence": 0.9}]}), HEAD, DESCEND, PREC_OK]))
+        _install(FakeProvider([KW, json.dumps({"picks": [{"code": "00000000", "confidence": 0.9}]}), HEAD, DESCEND, VERIFY, PREC_OK]))
         out = ai.classify_product(_db(), DESC, origin="CN")
         self.assertEqual(out["归类方式"], "逐级")
         self.assertEqual(out["平铺结果"], "")
@@ -348,7 +361,7 @@ class TestEscalation(unittest.TestCase):
         self._on()
         kw_b = json.dumps({"items": [{"index": 1, "keywords": ["raincoat", "woven", "coated"], "chapters": ["62"]}]})
         rank_b = json.dumps({"picks": [{"index": 1, "code": self.flat.replace(".", ""), "confidence": 0.5, "reason": "flat"}]})
-        _install(FakeProvider([kw_b, rank_b, HEAD, DESCEND, PREC_OK, "报告"]))
+        _install(FakeProvider([kw_b, rank_b, HEAD, DESCEND, VERIFY, PREC_OK, "报告"]))
         evs = list(ai.analyze_list_stream(_db(), [{"name": DESC}], origin="CN"))
         stages = [(e["stage"], e.get("done"), e.get("total")) for e in evs if e["type"] == "stage"]
         self.assertIn(("guided", 1, 1), stages)
@@ -371,11 +384,19 @@ class TestEscalation(unittest.TestCase):
         self.assertEqual(len(p.calls), 3)
 
     def test_classify_guided_only(self):
-        _install(FakeProvider([KW, HEAD, DESCEND, PREC_OK]))
+        _install(FakeProvider([KW, HEAD, DESCEND, VERIFY, PREC_OK]))
         out = ai.classify_guided_only(_db(), DESC, origin="CN")
         self.assertEqual(out["归类方式"], "逐级")
         self.assertEqual(out["candidates"][0]["编码"], "6210.30.50")
         self.assertIn("论证", out["candidates"][0])
+        self.assertEqual(out["补充"], "")
+
+    def test_supplement_reaches_every_step(self):
+        p = _install(FakeProvider([KW, HEAD, DESCEND, VERIFY, PREC_OK]))
+        out = ai.classify_guided_only(_db(), DESC, origin="CN", supplement="TPU 膜在外表面但不完全遮蔽底布")
+        self.assertEqual(out["补充"], "TPU 膜在外表面但不完全遮蔽底布")
+        for call in p.calls[1:]:   # 品目 / 下钻 / 先例三步的用户消息都带补充说明
+            self.assertIn("补充说明（用户核实后提供）：TPU 膜在外表面", call[1]["content"])
 
 
 # ---------- 配置与 Provider ----------
@@ -556,7 +577,7 @@ class TestWeb(unittest.TestCase):
         old_pc, old_ps = guided._prec_by_code_default, guided._prec_semantic_default
         guided._prec_by_code_default = lambda c, ex, limit=6: []
         guided._prec_semantic_default = lambda d, ex, alive, limit=8: []
-        _install(FakeProvider([KW, HEAD, DESCEND, PREC_OK]))
+        _install(FakeProvider([KW, HEAD, DESCEND, VERIFY, PREC_OK]))
         try:
             client = TestClient(app.app)
             r = client.post("/api/ai/classify/guided", json={"description": DESC, "origin": "CN"})
@@ -565,6 +586,9 @@ class TestWeb(unittest.TestCase):
             self.assertEqual(d["归类方式"], "逐级")
             self.assertEqual(d["candidates"][0]["编码"], "6210.30.50")
             self.assertEqual(client.post("/api/ai/classify/guided", json={"description": ""}).status_code, 400)
+            _install(FakeProvider([KW, HEAD, DESCEND, VERIFY, PREC_OK]))
+            r2 = client.post("/api/ai/classify/guided", json={"description": DESC, "supplement": "外层不遮蔽"})
+            self.assertEqual(r2.json()["补充"], "外层不遮蔽")
             st = client.get("/api/ai/status").json()
             self.assertIn("guided", st)
             self.assertIn("notes_available", st)
@@ -575,3 +599,518 @@ class TestWeb(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEscalationRules(unittest.TestCase):
+    """规则触发：注释决定章 / 候选跨章，与阈值并列。"""
+
+    GS = {"threshold": 0.9, "force_chapters": ai.parse_chapters("28-38"), "cross_chapter": True}
+
+    def test_parse_chapters(self):
+        self.assertEqual(ai.parse_chapters("28-38"), {f"{c:02d}" for c in range(28, 39)})
+        self.assertEqual(ai.parse_chapters("90, 84-85"), {"90", "84", "85"})
+        self.assertEqual(ai.parse_chapters(""), set())
+        self.assertEqual(ai.parse_chapters("abc"), set())
+
+    def test_reasons_in_priority(self):
+        top = {"confidence": 0.95, "编码": "2933.29.20"}
+        self.assertIn("注释决定章", ai._escalation_reason(top, ["29"], self.GS, ["2933.29.20"]))
+        top = {"confidence": 0.95, "编码": "6210.30.50"}
+        self.assertIn("跨章", ai._escalation_reason(top, ["62"], self.GS, ["6210.30.50", "5903.20.30"]))
+        self.assertEqual(ai._escalation_reason(top, ["62"], self.GS, ["6210.30.50", "6202.93.00"]), "")
+        self.assertIn("低于阈值", ai._escalation_reason({"confidence": 0.5, "编码": "6210.30.50"}, ["62"], self.GS, []))
+        self.assertIn("存疑", ai._escalation_reason({"confidence": 0.95, "编码": "7204.49.00"}, ["82"], self.GS, []))
+        self.assertIn("未给出", ai._escalation_reason(None, [], self.GS, []))
+        off = {"threshold": 0.9, "force_chapters": set(), "cross_chapter": False}
+        self.assertEqual(ai._escalation_reason(top, ["62"], off, ["6210.30.50", "5903.20.30"]), "")
+
+    def test_config_round_trip(self):
+        old = ai.CONFIG_FILE
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False); tmp.close(); os.unlink(tmp.name)
+        ai.CONFIG_FILE = tmp.name
+        try:
+            ai.save_config({"guided_force_chapters": " 28-38 , 90", "guided_cross_chapter": "false"})
+            gs = ai.guided_settings()
+            self.assertEqual(gs["force_chapters"], ai.parse_chapters("28-38,90"))
+            self.assertFalse(gs["cross_chapter"])
+            ai.save_config({"guided_force_chapters": "not chapters"})   # 脏值不入库
+            self.assertEqual(ai.guided_settings()["force_chapters"], ai.parse_chapters("28-38,90"))
+            ai.save_config({"guided_force_chapters": ""})
+            self.assertEqual(ai.guided_settings()["force_chapters"], set())
+            self.assertFalse(ai.guided_settings(dict(ai.DEFAULT_CONFIG))["cross_chapter"])   # 实测净负，默认关
+        finally:
+            ai.CONFIG_FILE = old
+            if os.path.exists(tmp.name):
+                os.unlink(tmp.name)
+            ai.reset_provider_cache()
+
+    def test_classify_records_reason_and_list_uses_pool(self):
+        gs_on = {"enabled": True, "threshold": 0.9, "max_calls": 6, "effort": "",
+                 "force_chapters": set(), "cross_chapter": True}
+        old_gs, old_pc, old_ps = ai.guided_settings, guided._prec_by_code_default, guided._prec_semantic_default
+        ai.guided_settings = lambda cfg=None: gs_on
+        guided._prec_by_code_default = lambda c, ex, limit=6: []
+        guided._prec_semantic_default = lambda d, ex, alive, limit=8: []
+        try:
+            pool = ai._recall_candidates(_db(), ["raincoat", "woven", "coated"], limit=20, description=DESC)[:12]
+            a = next(r["编码"] for r in pool if r["编码"].startswith("62"))
+            b = next(r["编码"] for r in pool if not r["编码"].startswith("62"))
+            # 单条：平铺很自信但前三跨章 → 升级，原因记在结果里
+            flat = json.dumps({"picks": [{"code": a.replace(".", ""), "confidence": 0.97, "reason": "x"},
+                                         {"code": b.replace(".", ""), "confidence": 0.5, "reason": "y"}]})
+            _install(FakeProvider([KW, flat, HEAD, DESCEND, VERIFY, PREC_OK]))
+            out = ai.classify_product(_db(), DESC, origin="CN")
+            self.assertEqual(out["归类方式"], "逐级")
+            self.assertIn("跨章", out["升级原因"])
+            # 清单：单个 pick 很自信，但池内前五跨章 → 升级
+            kw_b = json.dumps({"items": [{"index": 1, "keywords": ["raincoat", "woven", "coated"], "chapters": ["62"]}]})
+            rank_b = json.dumps({"picks": [{"index": 1, "code": a.replace(".", ""), "confidence": 0.97, "reason": "x"}]})
+            _install(FakeProvider([kw_b, rank_b, HEAD, DESCEND, VERIFY, PREC_OK, "报告"]))
+            evs = list(ai.analyze_list_stream(_db(), [{"name": DESC}], origin="CN"))
+            det = next(e for e in evs if e["type"] == "details")["details"][0]
+            if len({r["编码"][:2] for r in pool[:5]}) >= 2:
+                self.assertEqual(det["归类方式"], "逐级")
+                self.assertIn("跨章", det["升级原因"])
+            else:
+                self.assertNotEqual(det.get("归类方式"), "逐级")
+        finally:
+            ai.guided_settings, guided._prec_by_code_default, guided._prec_semantic_default = old_gs, old_pc, old_ps
+            ai.reset_provider_cache()
+
+
+class TestRewriteRecall(unittest.TestCase):
+    """英文 subject 改写作为第二路查询：通道内按最好名次合并，通道权重不变。"""
+
+    def test_merge_ranked(self):
+        import rate
+        self.assertEqual(rate.merge_ranked([["a", "b", "c"], ["c", "d", "a"]]), ["a", "c", "b", "d"])
+        self.assertEqual(rate.merge_ranked([["x"], []]), ["x"])
+        self.assertEqual(rate.merge_ranked([]), [])
+
+    def test_hybrid_search_merges_queries_within_channel(self):
+        import rate
+        db = _db()
+        pool = [c for c in db["rates_8"] if c.startswith("6210")][:4] + [c for c in db["rates_8"] if c.startswith("5903")][:2]
+        seen = []
+        def sem(text, lim):
+            seen.append(("sem", text))
+            return ([{"编码": pool[0], "相似度": .9}, {"编码": pool[1], "相似度": .8}] if text == "原文"
+                    else [{"编码": pool[4], "相似度": .95}, {"编码": pool[0], "相似度": .7}])
+        def votes(d, text, lim):
+            seen.append(("vote", text))
+            return {"候选": [{"编码": pool[2], "票": 2.0, "裁定": ["N1"]}] if text == "原文"
+                    else [{"编码": pool[2], "票": 3.0, "裁定": ["N2"]}, {"编码": pool[3], "票": 1.0, "裁定": []}], "先例数": 5}
+        rows, st = rate.hybrid_search(db, "kw", limit=10, description="原文", queries=["rewrite", "原文", ""],
+                                      channels=("semantic", "precedent"), _semantic=sem, _votes=votes)
+        self.assertEqual([t for k, t in seen if k == "sem"], ["原文", "rewrite"])   # 去重、去空
+        self.assertEqual(st["语义"]["查询数"], 2)
+        codes = [re.sub(r"\D", "", r["编码"]) for r in rows]
+        self.assertIn(pool[4], codes)                       # 只有改写那一路召回到的编码进了池
+        r2 = next(r for r in rows if re.sub(r"\D", "", r["编码"]) == pool[2])
+        self.assertEqual(r2["先例票"], 3.0)                 # 票数取各路最高
+        self.assertEqual(sorted(r2["先例裁定"]), ["N1", "N2"])   # 裁定号合并
+        # 通道内合并按最好名次：pool[0] 在原文那一路排第一（改写那一路第二）→ 名次 0，
+        # pool[1] 只在原文那一路排第二 → 名次 1；同一通道内前者融合分更高
+        r0 = next(r for r in rows if re.sub(r"\D", "", r["编码"]) == pool[0])
+        r1 = next(r for r in rows if re.sub(r"\D", "", r["编码"]) == pool[1])
+        self.assertGreater(r0["相关度"], r1["相关度"])
+        self.assertIn("语义", r0["召回来源"])
+
+    def test_subject_line_and_toggle(self):
+        p = FakeProvider([json.dumps({"subject": "A women's woven polyester raincoat laminated with TPU film"})])
+        self.assertTrue(ai._ai_subject_line(p, DESC).startswith("A women"))
+        self.assertEqual(ai._ai_subject_line(FakeProvider(["not json"]), DESC), "")
+        old = ai.recall_rewrite_enabled
+        old_gs = ai.guided_settings
+        calls = []
+        orig = ai._recall_candidates
+        def spy(db, keywords, limit=40, unit_value=None, origin="CN", description=None, queries=None):
+            calls.append(queries)
+            return orig(db, keywords, limit=limit, unit_value=unit_value, origin=origin, description=description, queries=queries)
+        ai._recall_candidates = spy
+        try:
+            ai.recall_rewrite_enabled = lambda cfg=None: True
+            _install(FakeProvider([KW, json.dumps({"subject": "a raincoat"}),
+                                   json.dumps({"picks": [{"code": "62103050", "confidence": 0.99, "reason": "r"}]})]))
+            ai.guided_settings = lambda cfg=None: {"enabled": False, "threshold": 0.9, "max_calls": 6, "effort": "",
+                                                    "force_chapters": set(), "cross_chapter": False}
+            ai.classify_product(_db(), DESC, origin="CN")
+            self.assertEqual(calls[0], ["a raincoat"])
+            calls.clear()
+            ai.recall_rewrite_enabled = lambda cfg=None: False
+            _install(FakeProvider([KW, json.dumps({"picks": [{"code": "62103050", "confidence": 0.99, "reason": "r"}]})]))
+            ai.classify_product(_db(), DESC, origin="CN")
+            self.assertIsNone(calls[0])
+        finally:
+            ai._recall_candidates = orig
+            ai.recall_rewrite_enabled = old
+            ai.guided_settings = old_gs
+            ai.reset_provider_cache()
+
+
+class TestDocExpansion(unittest.TestCase):
+    """税则行文档扩展：裁定 subject 拼进嵌入文本；评测裁定必须排除。"""
+
+    def _cross(self, rows):
+        fp = tempfile.NamedTemporaryFile(suffix=".db", delete=False); fp.close()
+        conn = sqlite3.connect(fp.name)
+        conn.execute("CREATE TABLE rulings(number TEXT, date TEXT, collection TEXT, subject TEXT, tariffs TEXT, revoked_by TEXT)")
+        conn.executemany("INSERT INTO rulings VALUES (?,?,?,?,?,?)", rows)
+        conn.commit(); conn.close()
+        return fp.name
+
+    def test_build_expansion_and_line_text(self):
+        import hts_embed
+        db = _db()
+        code = next(c for c in db["rates_8"] if c.startswith("6210"))
+        dotted = f"{code[:4]}.{code[4:6]}.{code[6:8]}"
+        path = self._cross([
+            ("N1", "2024-05-01", "ny", "The tariff classification of a women's raincoat from China", dotted + "00", "[]"),
+            ("N2", "2023-01-01", "ny", "RE: The classification of a hooded rain jacket from Vietnam", dotted, "[]"),
+            ("N3", "2022-01-01", "ny", "The tariff classification of a duplicate raincoat from China", dotted, "[]"),
+            ("N4", "2021-01-01", "ny", "The tariff classification of a revoked thing", dotted, '["H1"]'),
+            ("EVAL1", "2025-01-01", "ny", "The tariff classification of LEAK", dotted, "[]"),
+            ("N5", "2020-01-01", "ny", "The tariff classification of nothing here", "0000.00.0000", "[]"),
+        ])
+        try:
+            exp = hts_embed.build_expansion(db, cross_db_path=path, exclude={"EVAL1"}, log=lambda s: None)
+            self.assertEqual(exp[code], ["women's raincoat", "hooded rain jacket", "duplicate raincoat"])   # 新的在前、去套话去产地、撤销不进、评测裁定不进
+            self.assertNotIn("00000000", exp)
+            texts = hts_embed.line_texts(db, exp)
+            self.assertIn("海关判到此行的货物：women's raincoat; hooded rain jacket", texts[code])
+            self.assertNotIn("LEAK", texts[code])
+            plain = hts_embed.line_texts(db)
+            self.assertNotIn("海关判到此行", plain[code])
+            self.assertNotEqual(hts_embed._hash(texts[code]), hts_embed._hash(plain[code]))   # 哈希变 → 增量重嵌
+        finally:
+            os.unlink(path)
+
+    def test_eval_numbers_are_excluded_by_default(self):
+        import hts_embed
+        nums = hts_embed.eval_ruling_numbers()
+        if not nums:
+            self.skipTest("无评测金标")
+        self.assertIn("N332157", nums)
+
+
+class TestDescVector(unittest.TestCase):
+    """先例语义检索的两张向量表合并：同一裁定取更近的，留一法在截取前过滤。"""
+
+    def test_merge_hits(self):
+        import cross
+        m = cross._merge_hits([("A", 0.5), ("B", 0.9)], [("B", 0.3), ("C", 0.7)], None)
+        self.assertEqual(m, [("B", 0.3), ("A", 0.5), ("C", 0.7)])
+        self.assertEqual(cross._merge_hits([], []), [])
+
+    def test_semantic_precedents_exclude_before_truncation(self):
+        import cross
+        if not cross.db_available():
+            self.skipTest("cross.db 未构建")
+        try:
+            import sqlite_vec  # noqa: F401
+        except ImportError:
+            self.skipTest("sqlite-vec 不可用")
+        fake_embed = lambda texts: [[0.01] * 1024 for _ in texts]
+        base = cross.semantic_precedents("raincoat", [], limit=5, _embed=fake_embed)
+        if base.get("error"):
+            self.skipTest(base["error"])
+        first = base["先例"][0]["裁定号"]
+        out = cross.semantic_precedents("raincoat", [], limit=5, _embed=fake_embed, exclude=first)
+        self.assertNotIn(first, [x["裁定号"] for x in out["先例"]])
+        self.assertEqual(len(out["先例"]), 5)
+
+
+class TestVerifyStep(unittest.TestCase):
+    """同级对证：可以改到同级另一行；跨层/无效编码维持原选；只有一个同级时跳过。"""
+
+    def test_verify_changes_within_siblings_only(self):
+        change = json.dumps({"checks": [{"code": "62103030", "判定": "满足", "依据": "TPU 膜完全遮蔽"}],
+                             "code": "62103030", "confidence": 0.9, "reason": "外层完全遮蔽", "need_verify": []})
+        p = FakeProvider([HEAD, DESCEND, change, PREC_OK])
+        out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
+        self.assertEqual(out["编码"], "6210.30.30")
+        self.assertIn("62103050 → 62103030", out["论证"]["同级对证"]["改判"])
+        self.assertEqual(out["论证"]["下钻编码"], "6210.30.30")   # 对证之后、先例之前
+        bad = json.dumps({"checks": [], "code": "62021900", "confidence": 0.9, "reason": "x"})
+        p = FakeProvider([HEAD, DESCEND, bad, PREC_OK])
+        out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
+        self.assertEqual(out["编码"], "6210.30.50")            # 不在同级 → 维持
+        self.assertNotIn("改判", out["论证"]["同级对证"])
+
+    def test_verify_prompt_lists_siblings_with_examples(self):
+        exs = lambda codes, ex: {c: [{"裁定号": f"N{c[-2:]}", "日期": "2025-01-01", "描述": f"goods for {c}", "主题": ""}] for c in codes}
+        p = FakeProvider([HEAD, DESCEND, VERIFY, PREC_OK])
+        guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), _examples=exs,
+                               _prec_by_code=lambda c, ex: [], _prec_semantic=lambda d, ex: [], _fetch_text=lambda x: None)
+        u = p.calls[2][1]["content"]
+        self.assertIn("6210.30.30", u)
+        self.assertIn("6210.30.50（下钻所选）", u)
+        self.assertIn("goods for 62103030", u)
+        self.assertNotIn("6210.30.70", u)   # 不同父节点的行不在同级里
+
+
+class TestOnDemandDescriptions(unittest.TestCase):
+    """按需取描述段：库里没有的才拉，拉不到的不落库，网络请求封顶；按码取样例带留一法。"""
+
+    def _db_with(self, rulings, codes, descs=()):
+        import cross_desc
+        fp = tempfile.NamedTemporaryFile(suffix=".db", delete=False); fp.close()
+        conn = sqlite3.connect(fp.name)
+        conn.execute("CREATE TABLE rulings(number TEXT, date TEXT, collection TEXT, subject TEXT, tariffs TEXT, revoked_by TEXT)")
+        conn.execute("CREATE TABLE ruling_codes(number TEXT, code TEXT)")
+        conn.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT)")
+        conn.executescript(cross_desc._SCHEMA)
+        conn.executemany("INSERT INTO rulings VALUES (?,?,?,?,?,?)", rulings)
+        conn.executemany("INSERT INTO ruling_codes VALUES (?,?)", codes)
+        conn.executemany("INSERT INTO ruling_desc VALUES (?,?,?)", descs)
+        conn.commit(); conn.close()
+        return fp.name
+
+    def test_descriptions_for_fetches_missing_with_cap(self):
+        import cross_desc
+        path = self._db_with([("A", "2024-01-01", "ny", "s", "62103050", "[]"), ("B", "2023-01-01", "ny", "s", "62103050", "[]"),
+                              ("C", "2022-01-01", "ny", "s", "62103050", "[]")], [], [("A", "x" * 60, "t")])
+        calls = []
+        def fetch(num, coll, date):
+            calls.append(num)
+            return None if num == "C" else "You requested a tariff classification ruling. " + f"The item is a {num} raincoat " * 8 + ". The applicable subheading"
+        try:
+            out = cross_desc.descriptions_for(["A", "B", "C", "B"], max_fetch=5, delay=0, embed_new=False, db_path=path, _fetch=fetch)
+            self.assertEqual(calls, ["B", "C"])          # A 已在库里；B、C 才拉；去重
+            self.assertIn("raincoat", out["B"])
+            self.assertNotIn("C", out)                   # 网络失败：不落库
+            conn = sqlite3.connect(path)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM ruling_desc").fetchone()[0], 2)
+            conn.close()
+            calls.clear()
+            cross_desc.descriptions_for(["C"], max_fetch=0, delay=0, embed_new=False, db_path=path, _fetch=fetch)
+            self.assertEqual(calls, [])                  # 封顶 0：不发请求
+        finally:
+            os.unlink(path)
+
+    def test_precedent_examples_exclude_and_fallback(self):
+        import cross_desc
+        path = self._db_with(
+            [("G", "2025-01-01", "ny", "gold self", "62103050", "[]"), ("N1", "2024-06-01", "ny", "s1", "62103050", "[]"),
+             ("N2", "2023-06-01", "ny", "s2", "62103050", "[]"), ("R", "2024-09-01", "ny", "revoked", "62103050", '["H1"]')],
+            [("G", "6210305000"), ("N1", "6210305000"), ("N2", "6210305010"), ("R", "6210305000")],
+            [("N2", "a second raincoat description that is long enough to count here", "t")])
+        try:
+            fetch = lambda num, coll, date: None
+            ex = cross_desc.precedent_examples(["62103050"], per_code=2, exclude="G", db_path=path, _fetch=fetch)
+            nums = [x["裁定号"] for x in ex["62103050"]]
+            self.assertNotIn("G", nums)                  # 留一法
+            self.assertNotIn("R", nums)                  # 撤销不进
+            self.assertEqual(nums[0], "N2")              # 有描述段的排前面
+            self.assertEqual(ex["62103050"][1]["裁定号"], "N1")   # 没描述段的用主题兜底
+            self.assertEqual(ex["62103050"][1]["主题"], "s1")
+        finally:
+            os.unlink(path)
+
+
+class TestCompanyPrecedents(unittest.TestCase):
+    """本公司先例库：存 / 精确 / 子串 / 向量检索；同名覆盖；召回第四通道；精确命中不调模型。"""
+
+    def setUp(self):
+        import company
+        fp = tempfile.NamedTemporaryFile(suffix=".db", delete=False); fp.close(); os.unlink(fp.name)
+        self.path = fp.name
+        self._old = company.DB_PATH
+        company.DB_PATH = self.path
+
+    def tearDown(self):
+        import company
+        company.DB_PATH = self._old
+        for ext in ("", "-shm", "-wal"):
+            if os.path.exists(self.path + ext):
+                os.unlink(self.path + ext)
+        ai.reset_provider_cache()
+
+    def test_record_search_overwrite(self):
+        import company
+        fake = lambda texts: [[0.02] * 1024 for _ in texts]
+        r1 = company.record("女式雨衣 TPU 贴膜", "6210.30.50", description="梭织涤纶", origin="CN", action="改正", note="遮蔽不全", _embed=fake)
+        self.assertFalse(r1["更新"])
+        r2 = company.record("女式雨衣 TPU 贴膜", "62103030", action="采纳", _embed=fake)
+        self.assertTrue(r2["更新"]); self.assertEqual(r1["id"], r2["id"])
+        self.assertEqual(company.count(), 1)
+        hit = company.search("女式雨衣 tpu 贴膜", _embed=fake)      # 归一后精确
+        self.assertEqual((hit[0]["code8"], hit[0]["相似度"], hit[0]["来源"]), ("62103030", 1.0, "采纳"))
+        sub = company.search("雨衣", _embed=fake)                    # 子串
+        self.assertEqual(sub[0]["相似度"], 0.85)
+        self.assertEqual(company.search("", _embed=fake), [])
+        with self.assertRaises(ValueError):
+            company.record("x", "1234")
+
+    def test_hybrid_search_company_channel(self):
+        import rate
+        db = _db()
+        code = next(c for c in db["rates_8"] if c.startswith("6210"))
+        comp = lambda text, lim: [{"id": 1, "code8": code, "编码": core.fmt(code, 8), "品名": "女式雨衣", "时间": "2026-09-16T10:00:00",
+                                   "来源": "改正", "相似度": 1.0, "谁": "", "说明": "遮蔽不全"}]
+        rows, st = rate.hybrid_search(db, "raincoat", limit=10, description="女式雨衣", channels=("company",), _company=comp)
+        self.assertEqual(st["公司"]["数量"], 1)
+        self.assertEqual(re.sub(r"\D", "", rows[0]["编码"]), code)
+        self.assertEqual(rows[0]["公司先例"]["来源"], "改正")
+        self.assertIn("公司", rows[0]["召回来源"])
+        line = ai._candidate_line(db, 1, rows[0])
+        self.assertIn("本公司此前申报", line)
+        rows2, st2 = rate.hybrid_search(db, "raincoat", limit=10, channels=("company",), _company=lambda t, l: [])
+        self.assertEqual((rows2, st2["公司"]["数量"]), ([], 0))
+
+    def test_exact_hit_skips_model(self):
+        import company, rate
+        fake = lambda texts: [[0.02] * 1024 for _ in texts]
+        company.record(DESC, "62103050", action="改正", note="A87383", _embed=fake)
+        old = rate._default_company
+        rate._default_company = lambda text, lim: company.search(text, limit=lim, _embed=fake)
+        old_ch = rate.DEFAULT_CHANNELS
+        rate.DEFAULT_CHANNELS = ("keyword", "company")
+        try:
+            p = _install(FakeProvider([KW]))         # 只剩出词这一次调用；精排不该发生
+            out = ai.classify_product(_db(), DESC, origin="CN")
+            self.assertEqual(out["归类方式"], "公司先例")
+            self.assertEqual(out["candidates"][0]["编码"], "6210.30.50")
+            self.assertIn("A87383", out["candidates"][0]["reason"])
+            self.assertEqual(len(p.calls), 1)
+            # 清单模式同样直接出结论，不进精排；"报告"那一次照常
+            kw_b = json.dumps({"items": [{"index": 1, "keywords": ["raincoat"], "chapters": ["62"]}]})
+            p = _install(FakeProvider([kw_b, "报告"]))
+            evs = list(ai.analyze_list_stream(_db(), [{"name": DESC}], origin="CN"))
+            det = next(e for e in evs if e["type"] == "details")["details"][0]
+            self.assertEqual(det["归类方式"], "公司先例")
+            self.assertEqual(det["编码"], "6210.30.50")
+            self.assertEqual(len(p.calls), 2)
+        finally:
+            rate._default_company = old
+            rate.DEFAULT_CHANNELS = old_ch
+
+    def test_endpoints(self):
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("fastapi testclient 不可用")
+        import app, company
+        client = TestClient(app.app)
+        self.assertEqual(client.post("/api/company/precedent", json={"name": "x", "code": "12"}).status_code, 400)
+        self.assertEqual(client.post("/api/company/precedent", json={"name": "x", "code": "00000000"}).status_code, 400)
+        r = client.post("/api/company/precedent", json={"name": "不锈钢菜刀", "code": "8211.92.90", "action": "采纳"})
+        self.assertEqual(r.status_code, 200); self.assertEqual(r.json()["count"], 1)
+        lst = client.get("/api/company/precedents").json()
+        self.assertEqual(lst["items"][0]["编码"], "8211.92.90")
+        q = client.get("/api/company/precedents", params={"q": "菜刀"}).json()
+        self.assertEqual(q["items"][0]["相似度"], 0.85)
+        self.assertEqual(client.delete(f"/api/company/precedent/{lst['items'][0]['id']}").json()["count"], 0)
+
+
+class TestAttributeCard(unittest.TestCase):
+    """归类要素表：只填明确说了的，未提及并进需确认；开着时平铺与逐级链的提示都带表。"""
+
+    CARD = json.dumps({"item": "女式雨衣", "material": "100% 涤纶梭织布 + TPU 膜", "construction": "两层层压",
+                       "function": None, "form": "整件", "packaging": "null", "user": "", "specs": None,
+                       "missing": ["TPU 膜是否位于外表面并完全遮蔽底布", "是否零售包装"]})
+
+    def test_clean_and_text(self):
+        c = ai._clean_card(json.loads(self.CARD))
+        self.assertEqual(c["item"], "女式雨衣")
+        self.assertIsNone(c["function"]); self.assertIsNone(c["packaging"]); self.assertIsNone(c["user"])
+        self.assertEqual(len(c["missing"]), 2)
+        t = ai.card_text(c)
+        self.assertIn("材质成分：100% 涤纶", t); self.assertIn("未提及：TPU 膜", t); self.assertNotIn("功能用途", t)
+        self.assertEqual(ai.card_text({}), "")
+        self.assertEqual(ai._clean_card("not a dict"), {})
+        nv = ai._merge_need_verify(["外层是否完全遮蔽"], c)
+        self.assertEqual(len(nv), 3)
+        self.assertTrue(nv[1].endswith("（描述未提及）"))
+
+    def test_card_threads_into_flat_and_guided(self):
+        old_on = ai.attribute_card_enabled; ai.attribute_card_enabled = lambda cfg=None: True
+        old_gs = ai.guided_settings
+        ai.guided_settings = lambda cfg=None: {"enabled": True, "threshold": 0.9, "max_calls": 8, "effort": "",
+                                                "force_chapters": set(), "cross_chapter": False}
+        old_pc, old_ps, old_ex = guided._prec_by_code_default, guided._prec_semantic_default, guided._examples_default
+        guided._prec_by_code_default = lambda c, ex, limit=6: []
+        guided._prec_semantic_default = lambda d, ex, alive, limit=8: []
+        guided._examples_default = lambda codes, ex: {}
+        try:
+            pool = ai._recall_candidates(_db(), ["raincoat", "woven", "coated"], limit=20, description=DESC)[:12]
+            flat_code = next(r["编码"] for r in pool if not r["编码"].startswith("6210")).replace(".", "")
+            flat = json.dumps({"picks": [{"code": flat_code, "confidence": 0.7, "reason": "flat", "need_verify": []}]})
+            p = _install(FakeProvider([self.CARD, KW, flat, HEAD, DESCEND, VERIFY, PREC_OK]))
+            out = ai.classify_product(_db(), DESC, origin="CN")
+            self.assertEqual(out["要素表"]["item"], "女式雨衣")
+            self.assertIn("归类要素表", p.calls[2][0]["content"])          # 精排 system 提示带表
+            self.assertIn("未提及：TPU 膜", p.calls[3][1]["content"])      # 品目步用户消息带表
+            self.assertIn("未提及：TPU 膜", p.calls[5][1]["content"])      # 对证步也带
+            self.assertTrue(any("描述未提及" in x for x in out["candidates"][0]["需确认"]))
+            # 关掉：不出表、提示里没有
+            ai.attribute_card_enabled = lambda cfg=None: False
+            p = _install(FakeProvider([KW, flat, HEAD, DESCEND, VERIFY, PREC_OK]))
+            out = ai.classify_product(_db(), DESC, origin="CN")
+            self.assertNotIn("要素表", out)
+            self.assertNotIn("归类要素表", p.calls[1][0]["content"])
+        finally:
+            ai.attribute_card_enabled = old_on; ai.guided_settings = old_gs
+            guided._prec_by_code_default, guided._prec_semantic_default, guided._examples_default = old_pc, old_ps, old_ex
+            ai.reset_provider_cache()
+
+    def test_batch_cards(self):
+        old_on = ai.attribute_card_enabled; ai.attribute_card_enabled = lambda cfg=None: True
+        old_gs = ai.guided_settings
+        ai.guided_settings = lambda cfg=None: {"enabled": False, "threshold": 0.9, "max_calls": 8, "effort": "",
+                                                "force_chapters": set(), "cross_chapter": False}
+        try:
+            pool = ai._recall_candidates(_db(), ["raincoat", "woven", "coated"], limit=20, description=DESC)[:12]
+            code = pool[0]["编码"].replace(".", "")
+            kw_b = json.dumps({"items": [{"index": 1, "keywords": ["raincoat", "woven", "coated"], "chapters": ["62"]}]})
+            cards = json.dumps({"items": [{"index": 1, "item": "女式雨衣", "missing": ["是否零售包装"]}]})
+            rank_b = json.dumps({"picks": [{"index": 1, "code": code, "confidence": 0.95, "reason": "x"}]})
+            p = _install(FakeProvider([kw_b, cards, rank_b, "报告"]))
+            evs = list(ai.analyze_list_stream(_db(), [{"name": DESC}], origin="CN"))
+            det = next(e for e in evs if e["type"] == "details")["details"][0]
+            self.assertEqual(det["要素表"]["item"], "女式雨衣")
+            self.assertIn("是否零售包装（描述未提及）", det["需确认"])
+            self.assertIn("要素表：商品：女式雨衣", p.calls[2][1]["content"])
+        finally:
+            ai.attribute_card_enabled = old_on; ai.guided_settings = old_gs
+            ai.reset_provider_cache()
+
+
+class TestParallelEscalation(unittest.TestCase):
+    """清单模式升级行并发：按内容路由回复的假 Provider，3 路并发跑 4 行都要拿到结果，顺序无关。"""
+
+    def test_batch_parallel_all_rows_get_results(self):
+        import threading
+        lock = threading.Lock(); calls = []
+
+        class Router(ai.BaseProvider):
+            def __init__(self): super().__init__("router", 0)
+            def chat(self, messages):
+                sysm, user = messages[0]["content"], messages[1]["content"]
+                with lock: calls.append(sysm[:12])
+                if "只决定 4 位品目" in sysm: return HEAD
+                if "按 GRI 6" in sysm: return DESCEND
+                if "同级对证" in sysm: return VERIFY
+                if "核对拟定编码" in sysm: return PREC_OK
+                return "{}"
+        gs = {"enabled": True, "threshold": 0.9, "max_calls": 8, "effort": "", "force_chapters": set(),
+              "cross_chapter": False, "parallel": 3}
+        old_pc, old_ps, old_ex = guided._prec_by_code_default, guided._prec_semantic_default, guided._examples_default
+        guided._prec_by_code_default = lambda c, ex, limit=6: []
+        guided._prec_semantic_default = lambda d, ex, alive, limit=8: []
+        guided._examples_default = lambda codes, ex: {}
+        try:
+            pool = ai._recall_candidates(_db(), ["raincoat", "woven", "coated"], limit=20, description=DESC)
+            jobs = [(i, DESC, pool[:12], ["62"], None) for i in range(1, 5)]
+            done = []
+            res = ai._run_guided_batch(_db(), jobs, "CN", Router(), gs, on_done=lambda k, g: done.append(k))
+            self.assertEqual(sorted(res), [1, 2, 3, 4])
+            self.assertTrue(all(r.get("编码") == "6210.30.50" for r in res.values()))
+            self.assertEqual(sorted(done), [1, 2, 3, 4])
+            self.assertEqual(len(calls), 16)   # 每行 4 次调用
+            # 串行路径同样可用
+            gs1 = {**gs, "parallel": 1}
+            res1 = ai._run_guided_batch(_db(), jobs[:2], "CN", Router(), gs1)
+            self.assertEqual(sorted(res1), [1, 2])
+        finally:
+            guided._prec_by_code_default, guided._prec_semantic_default, guided._examples_default = old_pc, old_ps, old_ex

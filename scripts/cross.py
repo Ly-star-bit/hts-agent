@@ -552,8 +552,21 @@ def code_precedents(codes, limit=20, db_path=None, alive_codes=None):
             "数据截至": meta.get("last_sync", ""), "提示": " ".join(tips)}
 
 
+def _merge_hits(*hit_lists):
+    """
+    多张向量表的命中 [(number, distance), …] 合成一张：同一裁定取最近的距离，按距离升序。
+    subject 向量与描述段向量各命中一次时，同一裁定不能占两个名额。
+    """
+    best = {}
+    for hits in hit_lists:
+        for number, dist in hits or []:
+            if number not in best or dist < best[number]:
+                best[number] = dist
+    return sorted(best.items(), key=lambda kv: (kv[1], kv[0]))
+
+
 def semantic_precedents(query, codes=None, limit=10, db_path=None,
-                        alive_codes=None, _embed=None):
+                        alive_codes=None, _embed=None, exclude=None):
     """
     语义找先例（二期）：中文/英文商品描述 → 向量检索裁定 subject。
 
@@ -563,7 +576,11 @@ def semantic_precedents(query, codes=None, limit=10, db_path=None,
     嵌入模型/维度以 meta 里索引时记录的为准，查询必须用同一个模型。
 
     codes 只用于标「命中候选」，不过滤——语义检索的价值恰恰在发现候选外的判法。
-    _embed 参数供测试注入假嵌入器。
+    _embed 参数供测试注入假嵌入器。exclude：留一法评测时剔除的裁定号，在截取 top-k **之前**过滤
+    （两张向量表下同一裁定可能占两个名额，事后 k+1 的老办法会漏）。
+
+    文档侧有两张向量表：vec_subjects（CBP 一句话摘要）与 vec_desc（正文里申请人的商品描述段，
+    scripts/cross_desc.py 建，可能只覆盖一部分裁定）。两张都查，同一裁定取更近的距离。
 
     返回 {"先例","检索词","数据截至","提示"}；失败一律 {"error": ...}。
     """
@@ -600,12 +617,23 @@ def semantic_precedents(query, codes=None, limit=10, db_path=None,
             if _embed is None:
                 _embed = lambda texts: _ce.embed_batch(texts, model=model)  # noqa: E731
             qv = _ce._truncate_norm(_embed([_ce.QUERY_INSTRUCT + query])[0], dims)
-            rows = conn.execute(
+            packed = _struct.pack(f"{dims}f", *qv)
+            k = int(limit) * 3 + (len(exclude) if isinstance(exclude, (set, list, tuple)) else (1 if exclude else 0))
+            hits = [conn.execute(
                 f"SELECT r.number, v.distance FROM ("
                 f"  SELECT rowid, distance FROM vec_subjects "
                 f"  WHERE emb MATCH ? ORDER BY distance LIMIT ?) v "
-                f"JOIN rulings r ON r.rowid = v.rowid",
-                (_struct.pack(f"{dims}f", *qv), int(limit) * 3)).fetchall()
+                f"JOIN rulings r ON r.rowid = v.rowid", (packed, k)).fetchall()]
+            # 描述段向量：只在建过且与 subject 索引同模型时参与（混模型的距离没有可比性）
+            n_desc = int(meta.get("desc_embed_count") or 0)
+            if n_desc and meta.get("desc_embed_model") == model:
+                hits.append(conn.execute(
+                    f"SELECT r.number, v.distance FROM ("
+                    f"  SELECT rowid, distance FROM vec_desc "
+                    f"  WHERE emb MATCH ? ORDER BY distance LIMIT ?) v "
+                    f"JOIN rulings r ON r.rowid = v.rowid", (packed, k)).fetchall())
+            ex = set(exclude) if isinstance(exclude, (set, list, tuple)) else ({exclude} if exclude else set())
+            rows = [(n, d) for n, d in _merge_hits(*hits) if n not in ex][:int(limit) * 3]
 
             items = []
             if rows:
@@ -629,8 +657,9 @@ def semantic_precedents(query, codes=None, limit=10, db_path=None,
     items.sort(key=lambda r: (r["状态"] != "现行", not r["编码"]))
     items = items[:limit]
 
-    tips = [f"按语义相似检索（{model}，索引 {n_indexed} 条，"
-            f"数据截至 {meta.get('last_sync', '未知')}）。"]
+    tips = [f"按语义相似检索（{model}，subject 索引 {n_indexed} 条"
+            + (f"，描述段索引 {meta.get('desc_embed_count')} 条" if int(meta.get("desc_embed_count") or 0) else "")
+            + f"，数据截至 {meta.get('last_sync', '未知')}）。"]
     if _flag_dead_codes(items, alive_codes):
         tips.append(_DEAD_CODE_TIP)
     if any(r["状态"] != "现行" for r in items):

@@ -421,6 +421,10 @@ def _flatten_for_export(row):
         o["AD/CVD案件"] = ""
     if isinstance(o.get("归类路径"), list):
         o["归类路径"] = " > ".join(str(x) for x in o["归类路径"])
+    v = o.get("要素表")
+    if isinstance(v, dict):
+        import ai as _ai
+        o["要素表"] = _ai.card_text(v)
     v = o.get("论证")
     if isinstance(v, dict):
         # 逐级归类的论证：品目理由 + 排除 + 先例核对，摊成一段文字，不让整个 dict 进单元格
@@ -556,6 +560,11 @@ class AIConfigRequest(BaseModel):
     guided_threshold: float = Field(default=None, description="平铺置信度低于此值才升级（0–1）")
     guided_max_calls: int = Field(default=None, description="升级链每件商品的调用上限")
     guided_effort: str = Field(default=None, description="升级链的推理强度；空 = 不传（模型默认）")
+    guided_parallel: int = Field(default=None, description="清单模式升级行并发数（1–8，默认 3）")
+    guided_force_chapters: str = Field(default=None, description="平铺第一名落在这些章一律升级，如 '28-38,90'；空 = 关")
+    guided_cross_chapter: bool = Field(default=None, description="平铺前几名跨章一律升级")
+    recall_rewrite: bool = Field(default=None, description="召回加一路英文 subject 改写查询")
+    attribute_card: bool = Field(default=None, description="归类前先抽归类要素表，未提及的进需确认")
 
 
 class MeasuresConfigRequest(BaseModel):
@@ -613,7 +622,8 @@ def api_ai_save_config(req: AIConfigRequest):
 
     updates = {}
     for field in ("provider", "base_url", "model", "api_key", "temperature", "timeout", "think",
-                  "num_ctx", "reasoning_effort", "guided", "guided_threshold", "guided_max_calls", "guided_effort"):
+                  "num_ctx", "reasoning_effort", "guided", "guided_threshold", "guided_max_calls", "guided_effort",
+                  "guided_force_chapters", "guided_cross_chapter", "recall_rewrite", "attribute_card", "guided_parallel"):
         v = getattr(req, field)
         if v is not None:
             updates[field] = v
@@ -1054,6 +1064,7 @@ def api_ai_classify(req: AIClassifyRequest):
 class AIGuidedRequest(BaseModel):
     description: str = Field(default="", description="商品描述（中/英）")
     origin: str = Field(default="CN", description="原产地")
+    supplement: str = Field(default="", description="对「缺事实 / 需确认」的补充说明，拼在描述后重跑整条链")
 
 
 @app.post("/api/ai/classify/guided")
@@ -1071,10 +1082,59 @@ def api_ai_classify_guided(req: AIGuidedRequest):
 
     db = get_db()
     try:
-        return ai.classify_guided_only(db, req.description.strip(), origin=req.origin)
+        return ai.classify_guided_only(db, req.description.strip(), origin=req.origin, supplement=req.supplement)
     except Exception as e:
         traceback.print_exc()
         return {"error": f"逐级归类异常：{e}"}
+
+
+class CompanyPrecedentRequest(BaseModel):
+    name: str = Field(default="", description="品名（客户清单里的写法）")
+    code: str = Field(default="", description="最终采用的 8 位编码")
+    description: str = Field(default="", description="商品描述 / 补充说明")
+    origin: str = Field(default="", description="原产地")
+    action: str = Field(default="采纳", description="采纳（工具给的对）/ 改正（人改成了另一个码）")
+    who: str = Field(default="", description="审核员")
+    note: str = Field(default="", description="改正理由等")
+
+
+@app.post("/api/company/precedent")
+def api_company_record(req: CompanyPrecedentRequest):
+    """
+    存一条本公司先例（审核员采纳 / 改正）。同一品名再次记录覆盖旧结论。
+    编码必须是现行税则里的 8 位行——存一个不存在的码等于给以后的自己埋雷。
+    """
+    import company
+
+    code8 = re.sub(r"\D", "", req.code or "")[:8]
+    if not (req.name or "").strip() or len(code8) != 8:
+        raise HTTPException(status_code=400, detail="需要品名与 8 位编码")
+    if code8 not in get_db()["rates_8"]:
+        raise HTTPException(status_code=400, detail=f"{code8} 不在现行税则里")
+    try:
+        r = company.record(req.name.strip(), code8, description=req.description or "", origin=req.origin or "",
+                           action=req.action or "采纳", who=req.who or "", note=req.note or "")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"写入公司先例库失败：{e}")
+    return {**r, "count": company.count()}
+
+
+@app.get("/api/company/precedents")
+def api_company_list(q: str = "", limit: int = 50):
+    """查 / 列本公司先例：q 为空列最近的，否则按品名检索（精确 > 子串 > 语义）。"""
+    import company
+
+    items = company.search(q, limit=limit) if (q or "").strip() else company.list_recent(limit=limit)
+    if isinstance(items, dict):
+        return {"items": [], "count": company.count(), "error": items.get("error")}
+    return {"items": items, "count": company.count()}
+
+
+@app.delete("/api/company/precedent/{pid}")
+def api_company_delete(pid: int):
+    import company
+
+    return {"deleted": company.delete(pid), "count": company.count()}
 
 
 @app.post("/api/ai/ask")

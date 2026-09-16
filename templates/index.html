@@ -844,6 +844,8 @@
 
   /* 「备选 N」：不是警告，是"这里还有别的选择"。用中性描边，别和存疑抢注意力 */
   .alt-btn.guided { border-style: solid; }
+  .adopt-btns { display: inline-flex; gap: 4px; margin-left: 4px; }
+  .adopt-btns .alt-btn { color: var(--miss-dark); border-color: var(--miss-border); }
   .alt-btn {
     font-family: var(--mono); font-size: 10.5px; padding: 1px 7px; border-radius: 10px;
     background: var(--surface-2); color: var(--muted);
@@ -1476,6 +1478,17 @@
             <option value="medium">升级链推理：medium</option>
             <option value="high">升级链推理：high</option>
           </select>
+          <input type="text" id="cfgGuidedChapters" class="narrow" placeholder="一律升级的章，如 28-38"
+                 title="平铺第一名落在这些章时不看置信度直接升级。默认 28–38（化工品，注释决定一切）；留空关闭">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap;"
+                 title="平铺前三候选（清单模式看池内前五）落在两个以上章时升级。60 条实测多升级 11 行救 0 坏 1，默认关；跨章分歧更适合用辩论式核对">
+            <input type="checkbox" id="cfgGuidedCross"> 候选跨章即升级</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap;"
+                 title="召回时让模型把描述改写成一句 CBP 裁定摘要风格的英文，语义与先例通道各多查一路。295 条实测精排可见的召回上限 0.84→0.87；每件多一次几十 token 的小调用">
+            <input type="checkbox" id="cfgRewrite"> 召回加英文改写查询</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap;"
+                 title="归类前先把描述抽成要素表（材质/工艺/用途/形态/包装/使用者/规格），未提及的直接变成要问客户的问题；每件多一次几百 token 的调用">
+            <input type="checkbox" id="cfgCard"> 先抽归类要素表</label>
         </div>
         <div id="cfgMsg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
       </div>
@@ -1798,6 +1811,10 @@ async function toggleAiConfig() {
       document.getElementById('cfgGuided').checked = !!d.guided;
       document.getElementById('cfgGuidedTh').value = (d.guided_threshold != null) ? d.guided_threshold : 0.9;
       document.getElementById('cfgGuidedEffort').value = d.guided_effort || '';
+      document.getElementById('cfgGuidedChapters').value = d.guided_force_chapters || '';
+      document.getElementById('cfgGuidedCross').checked = !!d.guided_cross_chapter;
+      document.getElementById('cfgRewrite').checked = d.recall_rewrite !== false;
+      document.getElementById('cfgCard').checked = d.attribute_card !== false;
       document.getElementById('cfgApiKey').value = '';
       document.getElementById('cfgApiKey').placeholder =
         d.api_key_set ? `已配置（${d.api_key_masked}），留空保持不变` : '未配置，输入新 api_key';
@@ -1822,6 +1839,10 @@ async function saveAiConfig() {
     guided: document.getElementById('cfgGuided').checked,
     guided_threshold: (v => isNaN(v) ? 0.9 : v)(parseFloat(document.getElementById('cfgGuidedTh').value)),
     guided_effort: document.getElementById('cfgGuidedEffort').value,
+    guided_force_chapters: document.getElementById('cfgGuidedChapters').value.trim(),
+    guided_cross_chapter: document.getElementById('cfgGuidedCross').checked,
+    recall_rewrite: document.getElementById('cfgRewrite').checked,
+    attribute_card: document.getElementById('cfgCard').checked,
   };
   const btn = document.getElementById('btnCfgSave');
   setLoading(btn, true);
@@ -2846,16 +2867,17 @@ function renderAssist(d, addedCount) {
 
 /* 搜索页的逐级归类：不动本地结果与 AI 补充分析，单独出一张带论证的卡。
    走 /api/ai/classify/guided：出词 → 召回 → 注释定品目 → 下钻 → 先例，不跑平铺精排。 */
-async function doSearchGuided() {
+async function doSearchGuided(supplement) {
   const kw = document.getElementById('searchKeyword').value.trim();
   if (!kw) return;
   const btn = document.getElementById('btnSearchGuided');
   const box = document.getElementById('guidedBox');
   setLoading(btn, true);
-  box.innerHTML = `<div class="info-bar">逐级归类中……读类注章注定品目 → 品目内逐级下钻 → 先例核对（约 1 分钟）</div>`;
+  box.innerHTML = `<div class="info-bar">${supplement ? '带补充说明重跑逐级归类' : '逐级归类中'}……读类注章注定品目 → 品目内逐级下钻 → 先例核对（约 1 分钟）</div>`;
   try {
     const d = await apiPost('/api/ai/classify/guided', {
-      description: kw, origin: document.getElementById('searchOrigin').value
+      description: kw, origin: document.getElementById('searchOrigin').value,
+      supplement: supplement || ''
     });
     box.innerHTML = renderGuided(d);
   } catch (e) {
@@ -2880,13 +2902,102 @@ function renderGuided(d) {
         <span class="hint" style="margin:0 0 0 6px;">逐级归类 · 一般税率 ${esc(p['一般税率'] || '')} · 总税负 ${esc(p['总税负估算'] || '—')}</span>
         <button class="btn-ghost" style="margin-left:auto;padding:3px 10px;font-size:12px;"
                 onclick="pickForCompare('${esc(p['编码'])}')">加入对比</button>
+        <button class="btn-ghost" style="padding:3px 10px;font-size:12px;"
+                onclick="adoptSearch('${esc(p['编码'])}')" title="采纳这个结论：存进本公司先例库，下次同品名直接用">✓ 采纳</button>
       </div>
       <div class="ai-pick-desc">${esc(p['完整品名'] || p['商品描述'] || '')}</div>
+      ${d['补充'] ? `<div class="ai-pick-sub"><span>本次已带补充说明：</span>${esc(d['补充'])}</div>` : ''}
+      ${renderCard(d['要素表'])}
       ${renderArgument(p['论证'] || d['论证'])}
       ${nv ? `<div class="ai-pick-sub warn"><span>需向工厂/客户确认：</span><ul>${nv}</ul></div>` : ''}
+      ${renderSupplementBox('search')}
       ${crs ? `<div class="ai-pick-sub"><span>税则判定条件（官方原文）：</span><ul>${crs}</ul></div>` : ''}
       ${ev ? `<div class="ai-pick-sub"><span>建议备齐的证据：</span><ul>${ev}</ul></div>` : ''}
     </div></div><div class="hint" style="margin:8px 0 0;">${esc(d.disclaimer || '')}</div>`;
+}
+
+/* 补充事实后重跑：归类员"问一句再定"的那一步。缺的事实模型已经点名了（缺事实 / 需确认），
+   用户答一句拼进描述，整条链重走一遍（约 1 分钟），补充内容记进结果供审计。 */
+function renderSupplementBox(scope, idx) {
+  const id = scope === 'search' ? 'suppSearch' : `suppRow${idx}`;
+  const act = scope === 'search' ? `doSearchGuided(document.getElementById('${id}').value.trim())`
+                                 : `rerunRowGuided(${idx})`;
+  return `<div class="ai-pick-sub" style="margin-top:10px;">
+    <span>核实到了上面缺的事实？写在这里，带着它重跑一遍：</span>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <input type="text" id="${id}" class="grow" style="flex:1;min-width:0;"
+             placeholder="例：TPU 膜在外表面，但不完全遮蔽底布；面料为梭织；100% 涤纶">
+      <button class="btn-ghost" style="padding:4px 12px;font-size:12px;white-space:nowrap;" onclick="${act}">补充后重跑</button>
+    </div></div>`;
+}
+
+/* 本公司先例库：审核员每次采纳 / 改正都存一条，下次同品名直接用、相近品名高权重召回。
+   "改正"要人填最终编码与理由；两者都覆盖同一品名的旧结论（最新申报口径为准）。 */
+async function savePrecedent(name, code, description, origin, action, note) {
+  const d = await apiPost('/api/company/precedent', { name, code, description, origin, action, note, who: '' });
+  return d;
+}
+async function adoptRow(idx, action) {
+  const r = (currentListRows || []).find(x => x['序号'] === idx);
+  if (!r || r.error) return;
+  let code = r['编码'], note = '';
+  if (action === '改正') {
+    code = prompt(`「${r['品名']}」最终应报的 8 位编码（工具给的是 ${r['编码']}）：`, r['编码']);
+    if (!code) return;
+    note = prompt('改正理由（可空）：', '') || '';
+  }
+  try {
+    const d = await savePrecedent(r['品名'], code, r['备注'] || '', document.getElementById('listOrigin').value, action, note);
+    r['备注'] = [r['备注'], `${action === '采纳' ? '已采纳' : '已改正为 ' + code}，存入本公司先例库（共 ${d.count} 条）`].filter(Boolean).join('；');
+    if (action === '改正') { r['编码'] = code; r['归类方式'] = '公司先例'; r['存疑'] = []; }
+    renderList({ details: currentListRows, stats: { total: currentListRows.length,
+      hit: currentListRows.filter(x => isHit(x)).length, failed: currentListRows.filter(x => x.error).length }, report: '' });
+  } catch (e) {
+    alert('存入先例库失败：' + e.message);
+  }
+}
+async function adoptSearch(code) {
+  const kw = document.getElementById('searchKeyword').value.trim();
+  if (!kw) return;
+  const note = prompt(`把「${kw}」→ ${code} 存进本公司先例库，备注（可空）：`, '');
+  if (note === null) return;
+  try {
+    const d = await savePrecedent(kw, code, '', document.getElementById('searchOrigin').value, '采纳', note || '');
+    document.getElementById('guidedBox').insertAdjacentHTML('afterbegin',
+      `<div class="info-bar">已存入本公司先例库（共 ${d.count} 条）：「${esc(kw)}」→ ${esc(code)}。下次同品名直接给这个结论。</div>`);
+  } catch (e) {
+    alert('存入先例库失败：' + e.message);
+  }
+}
+
+async function rerunRowGuided(idx) {
+  const r = (currentListRows || []).find(x => x['序号'] === idx);
+  const inp = document.getElementById(`suppRow${idx}`);
+  if (!r || !inp || !inp.value.trim()) return;
+  const supp = inp.value.trim();
+  inp.disabled = true;
+  try {
+    const d = await apiPost('/api/ai/classify/guided', {
+      description: r['品名'], origin: document.getElementById('listOrigin').value, supplement: supp
+    });
+    const p = (d.candidates || [])[0];
+    if (!p) throw new Error(d.error || '未得出编码');
+    // 只换归类相关字段；序号、品名、平铺结果、同批候选保留，补充说明记进备注供审计
+    Object.assign(r, {
+      '编码': p['编码'], '商品描述': p['商品描述'], '一般税率': p['一般税率'], '税率类型': p['税率类型'],
+      '301判定': p['301判定'], '301加征': p['301加征'], '9903子目': p['9903子目'],
+      'FLIP 301加征': p['FLIP 301加征'], '301排除': p['301排除'], '总税负估算': p['总税负估算'],
+      'confidence': p.confidence, 'reason': p.reason, '需确认': p['需确认'], '论证': p['论证'],
+      '归类方式': '逐级', '存疑': [], '升级原因': (r['升级原因'] ? r['升级原因'] + '；' : '') + '人工补充事实后重跑',
+      '备注': [r['备注'], `已补充：${supp}`].filter(Boolean).join('；'),
+    });
+    renderList({ details: currentListRows, stats: { total: currentListRows.length,
+      hit: currentListRows.filter(x => isHit(x)).length, failed: currentListRows.filter(x => x.error).length }, report: '' });
+    showArgOf(idx);
+  } catch (e) {
+    inp.disabled = false;
+    alert('补充后重跑失败：' + e.message);
+  }
 }
 
 /* AI 推荐的编码勾进对比区——归类分歧多在 2-3 个候选之间，
@@ -3507,6 +3618,8 @@ async function exportGeneric(kind) {
     }
     if (Array.isArray(o['存疑'])) o['存疑'] = o['存疑'].join('；');
     if (o['论证'] && typeof o['论证'] === 'object') o['论证'] = argToText(o['论证']);
+    if (o['要素表'] && typeof o['要素表'] === 'object') o['要素表'] = cardToText(o['要素表']);
+    if (Array.isArray(o['需确认'])) o['需确认'] = o['需确认'].join('；');
     if (Array.isArray(o['来源'])) {
       o['来源'] = o['来源'].map(x => `${x['类型'] || ''}: ${x['文件'] || ''}`).join('；');
     }
@@ -3708,6 +3821,13 @@ function renderArgument(a) {
   if ((a['逐级理由'] || []).length) {
     h += `<div class="ai-pick-sub"><span>品目内逐级（GRI 6）：</span><ol>${li(a['逐级理由'], esc)}</ol></div>`;
   }
+  const vf = a['同级对证'] || {};
+  if ((vf['对证'] || []).length) {
+    const M = { '满足': 'var(--miss-dark)', '矛盾': 'var(--hit)', '无证据': 'var(--warn)' };
+    h += `<div class="ai-pick-sub${vf['改判'] ? ' warn' : ''}"><span>同级对证（${esc(vf['层'] || '')}）：</span>
+      <ul>${vf['对证'].map(c => `<li><b class="mono">${esc(c.code)}</b> <b style="color:${M[c['判定']] || 'inherit'}">${esc(c['判定'])}</b> ${esc(c['依据'] || '')}</li>`).join('')}</ul>` +
+      (vf['改判'] ? `<div style="margin-top:4px;"><b>${esc(vf['改判'])}</b>${vf['理由'] ? `：${esc(vf['理由'])}` : ''}</div>` : '') + `</div>`;
+  }
   if (pc && pc['理由'] !== undefined) {
     h += `<div class="ai-pick-sub${pc['改判'] ? ' warn' : ''}"><span>先例核对：${pc['一致'] ? '一致' : '不一致'}</span>${esc(pc['理由'] || '')}` +
          (pc['改判'] ? `<div style="margin-top:4px;"><b>改判：</b>${esc(pc['改判'])}（下钻原给 ${esc(a['下钻编码'] || '')}）</div>` : '') + `</div>`;
@@ -3719,6 +3839,24 @@ function renderArgument(a) {
   if ((a['警告'] || []).length) meta.push(a['警告'].join('；'));
   if (meta.length) h += `<div class="hint" style="margin:8px 0 0;">${esc(meta.join(' ｜ '))}</div>`;
   return h;
+}
+
+/* 归类要素表：只填了描述明确说了的；「未提及」就是要问客户的问题 */
+const CARD_LABELS = { item: '商品', material: '材质成分', construction: '构造工艺', function: '功能用途',
+                      form: '形态', packaging: '包装销售', user: '使用者场景', specs: '规格' };
+function renderCard(card) {
+  if (!card || typeof card !== 'object') return '';
+  const rows = Object.entries(CARD_LABELS).filter(([k]) => card[k]).map(([k, l]) => `<li><b>${esc(l)}</b>：${esc(card[k])}</li>`).join('');
+  const miss = (card.missing || []).map(x => `<li>${esc(x)}</li>`).join('');
+  if (!rows && !miss) return '';
+  return `<div class="ai-pick-sub"><span>归类要素表（只填了描述明确说了的）：</span><ul>${rows}</ul>` +
+    (miss ? `<div class="warn" style="margin-top:4px;"><span>描述未提及、归类可能用到：</span><ul>${miss}</ul></div>` : '') + `</div>`;
+}
+function cardToText(card) {
+  if (!card || typeof card !== 'object') return '';
+  const parts = Object.entries(CARD_LABELS).filter(([k]) => card[k]).map(([k, l]) => `${l}：${card[k]}`);
+  if ((card.missing || []).length) parts.push('未提及：' + card.missing.join('、'));
+  return parts.join('；');
 }
 
 function argToText(a) {
@@ -3739,7 +3877,7 @@ function showArgOf(idx) {
        这一行平铺精排的置信度不够${r['平铺结果'] ? `（平铺给的是 <b>${esc(r['平铺结果'])}</b>）` : ''}，
        已按归类员的顺序重做：先读类注章注定 4 位品目，再在品目内逐级下钻，最后拿 CBP 先例核对。
        论证由模型写、依据来自本地税则与 CROSS 镜像；<b>先例改判实测有救有坏</b>，改了的行务必看改判理由。
-     </div>${renderArgument(r['论证'])}`);
+     </div>${renderCard(r['要素表'])}${renderArgument(r['论证'])}${renderSupplementBox('row', idx)}`);
 }
 
 // 置信度分档。阈值定在 80 / 60：低于 60 的行实测基本要重写品名再跑，
@@ -3797,6 +3935,8 @@ function renderList(data) {
     const why = [flagHtml,
                  r.reason ? `${esc(r.reason)}` : '',
                  r['平铺结果'] ? `<span style="color:var(--muted)">平铺精排给的是 ${esc(r['平铺结果'])}，逐级链改为当前编码，见「论证」</span>` : '',
+                 (r['归类方式'] === '逐级' && r['升级原因']) ? `<span style="color:var(--muted)">升级原因：${esc(r['升级原因'])}</span>` : '',
+                 ((r['要素表'] || {}).missing || []).length ? `<span style="color:var(--warn)">描述未提及：${esc(r['要素表'].missing.join('、'))}</span>` : '',
                  r['升级失败'] ? `<span style="color:var(--warn)">逐级升级未完成：${esc(r['升级失败'])}，当前为平铺结果</span>` : '',
                  r['备注'] ? `<span style="color:var(--warn)">${esc(r['备注'])}</span>` : '']
                 .filter(Boolean).join('<br>');
@@ -3815,7 +3955,14 @@ function renderList(data) {
           r['归类方式'] === '逐级'
             ? `<button class="alt-btn guided" onclick="showArgOf(${r['序号']})"
                  title="该行置信度不足，已按 注释→品目→子目→先例 逐级归类，点开看论证">逐级 · 论证</button>` : ''
-        }</div></td>
+        }${
+          r['归类方式'] === '公司先例'
+            ? `<span class="tag" style="background:var(--miss-bg);color:var(--miss-dark);border:1px solid var(--miss-border);"
+                 title="与本公司此前的申报一致，未调用模型">上次这么报的</span>` : ''
+        }<span class="adopt-btns">
+          <button class="alt-btn" onclick="adoptRow(${r['序号']}, '采纳')" title="工具给的对：存进本公司先例库，下次同品名直接用">✓ 采纳</button>
+          <button class="alt-btn" onclick="adoptRow(${r['序号']}, '改正')" title="人改成了另一个码：存进本公司先例库并记下理由">✎ 改正</button>
+        </span></div></td>
       <td class="desc" data-full="${esc(r['商品描述'])}" title="${esc(r['商品描述'])}">${esc(r['商品描述'])}</td>
       <td class="ellipsis" data-full="${esc(r['一般税率'])}">${esc(r['一般税率'])}</td>
       <td><span class="tag ${tag.cls}">${esc(r['301判定'])}</span></td>

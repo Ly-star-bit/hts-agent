@@ -167,10 +167,20 @@ def _hit(codes, gold, k, lenient=False):
     return gold in top
 
 
-def eval_recall(items, channels, ks=(5, 20), log=print):
+def eval_recall(items, channels, ks=(5, 20, 40), log=print, rewrite=False):
+    """
+    召回评测。rewrite=True 时每条先让模型写一句英文 subject（ai._ai_subject_line，缓存），
+    语义与先例通道各跑两路查询按最好名次合并（rate.merge_ranked），与线上 recall_rewrite 开关同一条路。
+    """
     import core
     import cross
     import rate
+    provider = None
+    if rewrite:
+        import ai
+        provider = ai.get_provider()
+        if provider is None:
+            raise SystemExit("--rewrite 需要 AI provider（ai_config.json）")
 
     db = core.load_db()
     alive = {c for c in db["rates_8"] if c[:2] not in ("98", "99")}
@@ -182,6 +192,12 @@ def eval_recall(items, channels, ks=(5, 20), log=print):
     for idx, it in enumerate(items, 1):
         desc, gold, number = it["描述"], it["金标"], it["裁定号"]
         per = {}
+        queries = [desc]
+        if rewrite:
+            import ai
+            subj = ai._ai_subject_line(provider, desc)
+            if subj:
+                queries.append(subj)
         if "keyword" in channels:
             t = time.time()
             per["keyword"] = [re.sub(r"\D", "", r["编码"]) for r in rate.search(db, desc, limit=max(ks))]
@@ -189,12 +205,16 @@ def eval_recall(items, channels, ks=(5, 20), log=print):
         if "semantic" in channels:
             import hts_embed
             t = time.time()
-            r = hts_embed.search_codes(desc, limit=max(ks))
+            lists = []
+            for q in queries:
+                r = hts_embed.search_codes(q, limit=max(ks))
+                lists.append([x["编码"] for x in r] if isinstance(r, list) else None)
             stats["semantic"]["耗时"] += time.time() - t
-            per["semantic"] = [x["编码"] for x in r] if isinstance(r, list) else None
+            per["semantic"] = None if any(l is None for l in lists) else rate.merge_ranked(lists)
 
         def votes_excluding_self(q, k, _num=number):
-            res = cross.semantic_precedents(q, [], limit=k + 1, alive_codes=alive)
+            # 留一法：在向量检索截取前剔除（两张向量表下同一裁定可占两个名额，事后 k+1 会漏）
+            res = cross.semantic_precedents(q, [], limit=k, alive_codes=alive, exclude=_num)
             if isinstance(res, dict) and not res.get("error"):
                 res["先例"] = [p for p in res["先例"] if p.get("裁定号") != _num][:k]
             return res
@@ -202,10 +222,20 @@ def eval_recall(items, channels, ks=(5, 20), log=print):
         votes = None
         if "precedent" in channels:
             t = time.time()
-            v = cross.code_votes(desc, limit=max(ks), alive_codes=alive, _precedents=votes_excluding_self)
+            vlists, merged_votes = [], None
+            for q in queries:
+                v = cross.code_votes(q, limit=max(ks), alive_codes=alive, _precedents=votes_excluding_self)
+                if v.get("error"):
+                    vlists = None
+                    break
+                vlists.append([c["编码"] for c in v["候选"]])
+                merged_votes = v if merged_votes is None else merged_votes
             stats["precedent"]["耗时"] += time.time() - t
-            per["precedent"] = [c["编码"] for c in v["候选"]] if not v.get("error") else None
-            votes = v
+            per["precedent"] = rate.merge_ranked(vlists) if vlists is not None else None
+            # 融合注入用：按合并后的名次造一份"候选"，票数取各路最高
+            if vlists is not None:
+                votes = {"候选": [{"编码": c, "票": 1.0 / (i + 1)} for i, c in enumerate(per["precedent"])],
+                         "先例数": merged_votes.get("先例数", 0)}
         # 融合：复用各通道结果，不再重复调用模型
         t = time.time()
         rows, _st = rate.hybrid_search(
@@ -254,7 +284,7 @@ def eval_llm(items, log=print, guided=False):
         # 留一法同样适用于归类：先例通道要剔除这条裁定自己，否则 top-1 是漏答出来的
         def _votes(d, text, limit, _num=it["裁定号"]):
             def _prec(q, k):
-                r = cross.semantic_precedents(q, [], limit=k + 1, alive_codes=alive)
+                r = cross.semantic_precedents(q, [], limit=k, alive_codes=alive, exclude=_num)
                 if isinstance(r, dict) and not r.get("error"):
                     r["先例"] = [p for p in r["先例"] if p.get("裁定号") != _num][:k]
                 return r
@@ -290,7 +320,7 @@ def eval_llm(items, log=print, guided=False):
                 res["先例改判救"] += final_ok and desc_code != it["金标"]
                 res["先例改判坏"] += (not final_ok) and desc_code == it["金标"]
             row.update({"品目": arg.get("品目"), "下钻编码": desc_code, "平铺结果": out.get("平铺结果", ""),
-                        "先例改判": (arg.get("先例核对") or {}).get("改判", "")})
+                        "先例改判": (arg.get("先例核对") or {}).get("改判", ""), "升级原因": out.get("升级原因", "")})
         elif out.get("升级失败"):
             row["升级失败"] = out["升级失败"][:80]
         res["明细"].append(row)
@@ -299,12 +329,12 @@ def eval_llm(items, log=print, guided=False):
 
 
 def _fmt_table(stats, n):
-    lines = [f"{'通道':<10}{'可用':>6}{'r@5':>8}{'r@20':>8}{'6位r@5':>9}{'6位r@20':>9}{'平均耗时':>9}"]
+    lines = [f"{'通道':<10}{'可用':>6}{'r@5':>8}{'r@20':>8}{'r@40':>8}{'6位r@5':>9}{'6位r@20':>9}{'平均耗时':>9}"]
     for ch, s in stats.items():
         if ch.startswith("_"):
             continue
         m = s["可用"] or 1
-        lines.append(f"{ch:<10}{s['可用']:>6}{s['r@5']/m:>8.2f}{s['r@20']/m:>8.2f}"
+        lines.append(f"{ch:<10}{s['可用']:>6}{s['r@5']/m:>8.2f}{s['r@20']/m:>8.2f}{s.get('r@40', 0)/m:>8.2f}"
                      f"{s['r6@5']/m:>9.2f}{s['r6@20']/m:>9.2f}{s['耗时']/m*1000:>8.0f}ms")
     return "\n".join(lines)
 
@@ -322,6 +352,8 @@ def main(argv=None):
                     help="给金标集配裁定正文的商品描述段（联网抓 CROSS，永久缓存）")
     ap.add_argument("--golden", default="", help="评测用的金标文件（默认 subject 口径；--text 用正文口径）")
     ap.add_argument("--text", action="store_true", help="用正文金标（data/eval/rulings_golden_text.json）评测")
+    ap.add_argument("--rewrite", action="store_true",
+                    help="召回时加一路模型写的英文 subject 查询（语义 + 先例通道，通道内按最好名次合并）")
     a = ap.parse_args(argv)
     if a.build:
         build_golden(a.build, since=a.since)
@@ -340,11 +372,12 @@ def main(argv=None):
         items = items[:a.limit]
     channels = [c.strip() for c in a.channels.split(",") if c.strip()]
     print(f"评测 {len(items)} 条，通道 {channels}")
-    stats = eval_recall(items, channels)
+    stats = eval_recall(items, channels, rewrite=a.rewrite)
     print(_fmt_table(stats, len(items)))
     details = stats.pop("_明细", [])
     report = {"at": dt.datetime.now().isoformat(timespec="seconds"), "n": len(items),
-              "golden": os.path.basename(golden), "channels": channels, "recall": stats, "明细": details}
+              "golden": os.path.basename(golden), "channels": channels, "rewrite": bool(a.rewrite),
+              "recall": stats, "明细": details}
     if a.llm or a.guided:
         print("\n归类 top-k（classify_product" + ("，强制逐级链" if a.guided else "") + "）：")
         report["llm"] = eval_llm(items, guided=a.guided)

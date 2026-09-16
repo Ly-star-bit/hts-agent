@@ -21,7 +21,9 @@ import re
 import httpx
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_FILE = os.path.join(BASE_DIR, "ai_config.json")
+# 测试套件用 AI_CONFIG_FILE 指到一个不存在的路径，让 guided / recall_rewrite 等开关回到默认，
+# 不随本机 ai_config.json 的状态变——线上开了逐级升级，假 Provider 的测试不该跟着升级。
+CONFIG_FILE = os.environ.get("AI_CONFIG_FILE") or os.path.join(BASE_DIR, "ai_config.json")
 
 _PROVIDER_CACHE = {"provider": None, "loaded": False, "error": ""}
 
@@ -359,8 +361,20 @@ DEFAULT_CONFIG = {
     # 约 1.75 万 token，需要强模型 + data/hts_notes.json；qwen3:8b 这类本地小模型跑不动 1.3 万 token 的注释。
     "guided": False,
     "guided_threshold": 0.9,  # 平铺置信度低于此值、或带存疑信号、或平铺无有效结果时升级
-    "guided_max_calls": 6,    # 升级链每件商品的调用上限
+    "guided_max_calls": 8,    # 升级链每件商品的调用上限（品目 ≤2 + 下钻 ≤2 + 同级对证 1 + 先例 1 + 回退 1）
     "guided_effort": "",      # 升级链的推理强度；空 = 不传（平铺可设 none 提速、升级链保留推理）
+    "guided_parallel": 3,     # 清单模式升级行的并发数：30 行清单升 10 行，串行 8–10 分钟，3 路约 3 分钟；1 = 串行
+    # 规则触发（与阈值并列，任一命中即升级）。2026-09 60 条实测：平铺"很自信但错"的 5 条里 3 条是
+    # 化工品（第 VI 类 28–38 章，注释决定一切）；前三候选跨章说明模型自己就在两个方向之间摇摆。
+    # 60 条实测（对照无规则的 0.9）：化工章规则多升级 7 行救 1 坏 0，保留；跨章规则多升级 11 行救 0 坏 1，默认关。
+    "guided_force_chapters": "28-38",  # 平铺第一名落在这些章一律升级；逗号分隔，可写区间；空 = 关
+    "guided_cross_chapter": False,     # 平铺前三候选（清单模式看池内前五）跨章一律升级；实测净负，默认关
+    # 召回加一路"英文 subject 改写"查询（语义 + 先例通道）。295 条正文金标实测：融合 r@20 0.81→0.84、
+    # r@40 0.84→0.87（精排能看到的上限多 3 个点），先例通道 r@5 0.69→0.73；代价每件一次几十 token 的小调用。
+    "recall_rewrite": True,
+    # 归类要素表：归类前先把描述抽成固定的表（是什么/材质/工艺/用途/形态/包装/使用者/规格/未提及），
+    # 后面平铺精排与逐级链每一步都带着它，"未提及"直接并进需确认。归类员就是先填这张表再翻税则的。
+    "attribute_card": True,
 }
 
 
@@ -386,11 +400,33 @@ def guided_settings(cfg=None):
     except (TypeError, ValueError):
         th = 0.9
     try:
-        mc = int(cfg.get("guided_max_calls", 6))
+        mc = int(cfg.get("guided_max_calls", 8))
     except (TypeError, ValueError):
-        mc = 6
+        mc = 8
+    try:
+        par = min(8, max(1, int(cfg.get("guided_parallel", 3))))
+    except (TypeError, ValueError):
+        par = 3
     return {"enabled": bool(cfg.get("guided")), "threshold": min(1.0, max(0.0, th)),
-            "max_calls": max(3, mc), "effort": str(cfg.get("guided_effort") or "").strip().lower()}
+            "max_calls": max(3, mc), "effort": str(cfg.get("guided_effort") or "").strip().lower(),
+            "parallel": par,
+            "force_chapters": parse_chapters(cfg.get("guided_force_chapters", "")),
+            "cross_chapter": bool(cfg.get("guided_cross_chapter", False))}
+
+
+def parse_chapters(spec):
+    """'28-38,90' → {'28', …, '38', '90'}；脏值忽略。"""
+    out = set()
+    for part in re.split(r"[,，\s]+", str(spec or "")):
+        if not part:
+            continue
+        m = re.fullmatch(r"(\d{1,2})(?:-(\d{1,2}))?", part)
+        if not m:
+            continue
+        a, b = int(m.group(1)), int(m.group(2) or m.group(1))
+        for c in range(min(a, b), max(a, b) + 1):
+            out.add(f"{c:02d}")
+    return out
 
 
 def mask_config(cfg):
@@ -440,10 +476,21 @@ def save_config(updates):
                 v = max(0, int(float(v)))
             except (TypeError, ValueError):
                 continue
+        elif k == "guided_parallel":
+            try:
+                v = min(8, max(1, int(float(v))))
+            except (TypeError, ValueError):
+                continue
         elif k == "guided_threshold":
             try:
                 v = min(1.0, max(0.0, float(v)))
             except (TypeError, ValueError):
+                continue
+        elif k in ("guided_cross_chapter", "recall_rewrite", "attribute_card"):
+            v = v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
+        elif k == "guided_force_chapters":
+            v = re.sub(r"\s+", "", str(v or ""))
+            if v and not re.fullmatch(r"(\d{1,2}(-\d{1,2})?)(,\d{1,2}(-\d{1,2})?)*", v):
                 continue
         elif k in ("reasoning_effort", "guided_effort"):
             # 词表由服务端定（OpenAI 是 minimal/low/medium/high，部分中转站另有 none/xhigh），
@@ -479,7 +526,135 @@ def test_connection(provider=None):
 
 # ---------- 本地召回 ----------
 
-def _recall_candidates(db, keywords, limit=40, unit_value=None, origin="CN", description=None):
+def _ai_subject_line(provider, description):
+    """
+    把商品描述改写成一句 CBP 裁定 subject 风格的英文，给语义与先例两条通道做第二路查询。
+
+    为什么单独一个小调用而不是塞进出词那一步：改出词提示会让此前所有缓存作废；
+    这一步只有几十个 token，失败返回空串，召回照常只用原文。
+    文档侧是英文税则行与英文裁定 subject，中文口语描述跨语言检索天然吃亏，
+    一句 "a women's woven polyester raincoat laminated with TPU film" 是对齐用的桥。
+    """
+    sys_prompt = (
+        "把下面的商品描述改写成一句美国海关裁定摘要风格的英文（不含产地、不含税号），"
+        "用税则与海关的用语描述这是什么货、什么材质、什么用途，20 词以内。"
+        "只输出 JSON：{\"subject\": \"英文一句话\"}")
+    try:
+        r = provider.chat_json([{"role": "system", "content": sys_prompt},
+                                {"role": "user", "content": f"商品描述：{description}"}], fallback=None)
+    except AIProviderError:
+        return ""
+    return str((r or {}).get("subject") or "").strip()[:300] if isinstance(r, dict) else ""
+
+
+def _ai_subject_lines_batch(provider, names):
+    """清单模式：一次调用给全部商品各写一句英文 subject。返回 {序号: subject}，失败 {}。"""
+    lines = [f"{i + 1}. {n}" for i, n in enumerate(names)]
+    sys_prompt = (
+        "为下列每个商品写一句美国海关裁定摘要风格的英文（不含产地、不含税号，20 词以内），"
+        "用税则与海关的用语说明这是什么货、什么材质、什么用途。"
+        "只输出 JSON：{\"items\": [{\"index\": 1, \"subject\": \"...\"}]}")
+    try:
+        r = provider.chat_json([{"role": "system", "content": sys_prompt},
+                                {"role": "user", "content": "商品清单：\n" + "\n".join(lines)}], fallback=None)
+    except AIProviderError:
+        return {}
+    out = {}
+    for it in (r.get("items") if isinstance(r, dict) else []) or []:
+        try:
+            out[int(it.get("index"))] = str(it.get("subject") or "").strip()[:300]
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+CARD_FIELDS = (("item", "商品"), ("material", "材质成分"), ("construction", "构造工艺"), ("function", "功能用途"),
+               ("form", "形态"), ("packaging", "包装销售"), ("user", "使用者场景"), ("specs", "规格"))
+_CARD_RULES = (
+    "把商品描述整理成归类要素表。只填描述里明确说了的；没说的字段填 null，并把归类可能用到却没提到的事实"
+    "用中文短语列进 missing（如 \"面料是针织还是梭织\"、\"羊毛含量比例\"、\"是否零售包装\"）。字段："
+    "item 这是什么（一句话，含名称与类别）；material 材质/成分及比例；construction 构造/工艺（针织/梭织/层压/涂层/铸造/组装…）；"
+    "function 功能/用途；form 形态（整机/零件/成套/散件/半成品/原料）；packaging 包装与销售形式；"
+    "user 使用者/场景（家用/工业/医用/儿童/宠物…）；specs 规格（尺寸/重量/价值/功率/含量等）；missing 未提及清单。")
+
+
+def attribute_card_enabled(cfg=None):
+    cfg = cfg if cfg is not None else load_config()
+    return bool(cfg.get("attribute_card"))
+
+
+def _clean_card(raw):
+    """模型输出 → 规整的要素表 dict（值为字符串或 None；missing 为字符串列表）。"""
+    if not isinstance(raw, dict):
+        return {}
+    card = {}
+    for key, _label in CARD_FIELDS:
+        v = raw.get(key)
+        if isinstance(v, (list, tuple)):
+            v = "；".join(str(x) for x in v if str(x).strip())
+        v = str(v).strip() if v not in (None, "", "null", "None") else ""
+        card[key] = v[:200] if v else None
+    miss = raw.get("missing") or []
+    if isinstance(miss, str):
+        miss = [miss]
+    card["missing"] = [str(m).strip()[:60] for m in miss if str(m).strip()][:8]
+    return card
+
+
+def _ai_attribute_card(provider, description):
+    """单条：描述 → 要素表。失败返回 {}（归类照常，只是没有表）。"""
+    try:
+        r = provider.chat_json([{"role": "system", "content": "你是美国海关归类助手。" + _CARD_RULES + " 只输出 JSON。"},
+                                {"role": "user", "content": f"商品描述：{description}"}], fallback=None)
+    except AIProviderError:
+        return {}
+    return _clean_card(r)
+
+
+def _ai_attribute_cards_batch(provider, names):
+    """清单：一次调用给全部商品各出一张表。返回 {序号: card}，失败 {}。"""
+    lines = [f"{i + 1}. {n}" for i, n in enumerate(names)]
+    try:
+        r = provider.chat_json([{"role": "system", "content": "你是美国海关归类助手。为下列每个商品" + _CARD_RULES
+                                 + " 只输出 JSON：{\"items\": [{\"index\": 1, \"item\": …, \"missing\": […]}]}"},
+                                {"role": "user", "content": "商品清单：\n" + "\n".join(lines)}], fallback=None)
+    except AIProviderError:
+        return {}
+    out = {}
+    for it in (r.get("items") if isinstance(r, dict) else []) or []:
+        try:
+            out[int(it.get("index"))] = _clean_card(it)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def card_text(card):
+    """要素表 → 一行文本，给提示词用。空表返回空串。"""
+    if not card:
+        return ""
+    parts = [f"{label}：{card.get(key)}" for key, label in CARD_FIELDS if card.get(key)]
+    if card.get("missing"):
+        parts.append("未提及：" + "、".join(card["missing"]))
+    return "；".join(parts)
+
+
+def _merge_need_verify(need, card, cap=6):
+    """把要素表的"未提及"并进需确认（去重、保序）。"""
+    out = [str(v)[:80] for v in (need or []) if str(v).strip()]
+    for m in (card or {}).get("missing") or []:
+        q = f"{m}（描述未提及）"
+        if all(m not in x for x in out):
+            out.append(q)
+    return out[:cap]
+
+
+def recall_rewrite_enabled(cfg=None):
+    cfg = cfg if cfg is not None else load_config()
+    return bool(cfg.get("recall_rewrite"))
+
+
+def _recall_candidates(db, keywords, limit=40, unit_value=None, origin="CN", description=None, queries=None):
     """
     召回候选 8 位子目：关键词 + 税则行语义 + 裁定先例三通道 RRF 融合（rate.hybrid_search）。
 
@@ -495,7 +670,7 @@ def _recall_candidates(db, keywords, limit=40, unit_value=None, origin="CN", des
     kw = " ".join(keywords) if isinstance(keywords, (list, tuple)) else str(keywords or "")
     rows, _status = rate.hybrid_search(db, kw, limit=limit, sort="relevance",
                                        unit_value=unit_value, origin=origin,
-                                       description=description)
+                                       description=description, queries=queries)
     return rows
 
 
@@ -547,18 +722,21 @@ def _ai_keywords(provider, description):
     return keywords, chapters
 
 
-def _ai_rerank(provider, db, description, rows, top_n):
+def _ai_rerank(provider, db, description, rows, top_n, card=None):
     """
     第二轮：在已召回的候选里精排。返回 picks（模型原始输出，未校验）。
 
     候选行带归类路径与判定条件（见 _candidate_line）——末级品名大量是
-    "Other"，只给品名等于让模型盲选。
+    "Other"，只给品名等于让模型盲选。card：要素表（有则随描述一起给，"未提及"的属性不得当成满足）。
     """
     cand_lines = [_candidate_line(db, i, r) for i, r in enumerate(rows, 1)]
+    ct = card_text(card)
+    card_note = (f"\n归类要素表（只填了描述明确说了的；「未提及」的属性不能当作满足，应写进 need_verify）：{ct}\n"
+                 if ct else "")
     sys_prompt2 = (
         "你是美国 HTS 归类专家。下面是从税则库检索出的候选子目。"
         "每行格式：序号. 编码 | 归类路径（父级 > 子级，判定条件多在父级上）| 税率 | 301 | 判定条件。"
-        f"请为商品「{description}」选择最合适的 {top_n} 个候选，按匹配度排序。\n"
+        f"请为商品「{description}」选择最合适的 {top_n} 个候选，按匹配度排序。{card_note}\n"
         "选择时必须依据归类路径中的实际措辞（材质、织法、含量阈值、涂层、"
         "重量/尺寸/价值门槛），不要只看末级品名——末级常常只是 'Other'。\n"
         "reason 必须引用候选行中的原文依据，不要泛泛而谈。\n"
@@ -619,6 +797,10 @@ def _candidate_line(db, i, row):
     # 此前候选行里不带它，模型等于拿着最弱的信号在挑。2026-09 正文金标 60 条消融：
     # 只加这一项 top-1 19 → 26、top-3 26 → 31。
     line += _precedent_evidence(row)
+    cp = row.get("公司先例")
+    if cp:
+        line += (f" | 本公司此前申报：「{cp.get('品名', '')}」→ {cp.get('编码', '')}"
+                 f"（{str(cp.get('时间', ''))[:10]}，{cp.get('来源', '')}，相似 {cp.get('相似度', 0):.2f}）")
     return line
 
 
@@ -684,12 +866,54 @@ def _candidate_from_code(db, code8, origin, confidence, reason, need_verify):
     return _candidate_from_row(db, row, origin, confidence, reason, need_verify)
 
 
-def _needs_escalation(top, chapters, threshold):
-    """平铺结果要不要升级：置信度低于阈值，或带存疑信号（建议章与结果章打架）。"""
+def _escalation_reason(top, chapters, gs, pool_codes=()):
+    """
+    平铺结果要不要升级，返回原因（空串 = 不升级）。四条规则任一命中：
+      置信度低于阈值 / 带存疑信号 / 第一名落在注释决定章（默认 28–38）/ 前几名跨章。
+    pool_codes：用来判跨章的编码列表（单条模式给平铺前三，清单模式给池内前五）。
+    原因写进结果的「升级原因」，审核员能看到这一行为什么走了逐级链。
+    """
     if not top:
-        return True
+        return "平铺未给出有效编码"
     conf = top.get("confidence") or 0
-    return conf < threshold or bool(_classify_flags(conf, chapters, top.get("编码")))
+    code = re.sub(r"\D", "", str(top.get("编码") or ""))
+    if conf < gs["threshold"]:
+        return f"置信度 {conf:.2f} 低于阈值 {gs['threshold']:g}"
+    flags = _classify_flags(conf, chapters, top.get("编码"))
+    if flags:
+        return "存疑：" + "；".join(flags)
+    if code[:2] in gs.get("force_chapters", ()):
+        return f"第 {code[:2]} 章属注释决定章（配置 guided_force_chapters）"
+    if gs.get("cross_chapter"):
+        chs = {re.sub(r"\D", "", str(c))[:2] for c in pool_codes if re.sub(r"\D", "", str(c))}
+        if len(chs) >= 2:
+            return f"候选跨章（{'/'.join(sorted(chs))}）"
+    return ""
+
+
+def _company_exact(rows):
+    """召回行里有没有与品名精确一致的本公司先例（相似度 1.0）。有则返回那一行。"""
+    for r in rows or []:
+        cp = r.get("公司先例")
+        if cp and (cp.get("相似度") or 0) >= 0.999:
+            return r
+    return None
+
+
+def _company_candidate(db, row, origin):
+    cp = row["公司先例"]
+    c = _candidate_from_row(db, row, origin, 0.99,
+                            f"与本公司 {str(cp.get('时间', ''))[:10]} 的申报一致（{cp.get('来源', '')}：「{cp.get('品名', '')}」）"
+                            + (f"；{cp['说明']}" if cp.get("说明") else ""), [])
+    c["归类方式"] = "公司先例"
+    c["公司先例"] = cp
+    return c
+
+
+def _needs_escalation(top, chapters, threshold):
+    """兼容旧调用：只看阈值与存疑。"""
+    gs = {"threshold": threshold, "force_chapters": set(), "cross_chapter": False}
+    return bool(_escalation_reason(top, chapters, gs))
 
 
 class _guided_context:
@@ -720,16 +944,54 @@ class _guided_context:
         return False
 
 
-def _run_guided(db, description, origin, provider, rows, exclude_ruling, gs, keywords=None, chapters=None):
+def _run_guided(db, description, origin, provider, rows, exclude_ruling, gs, keywords=None, chapters=None, card=None):
     """跑一次逐级链（scripts/guided.py），任何异常都收成 {"error"}，不影响平铺结果。"""
     try:
         import guided
         with _guided_context(provider, gs["effort"]):
             return guided.classify_guided(db, description, origin=origin, provider=provider, rows=rows,
                                           keywords=keywords, chapters=chapters, exclude_ruling=exclude_ruling,
-                                          max_calls=gs["max_calls"])
+                                          max_calls=gs["max_calls"], card=card_text(card))
     except Exception as e:  # 升级是锦上添花，平铺结果必须保住
         return {"error": f"逐级归类异常：{e}"}
+
+
+def _run_guided_batch(db, jobs, origin, provider, gs, on_done=None):
+    """
+    清单模式：一批升级行并发跑逐级链。jobs: [(key, description, rows, chapters, card), …]；
+    返回 {key: 结果或 {"error"}}。推理强度 / 超时的上下文在整批外面进出一次——
+    _guided_context 改的是共享 provider 的属性，线程里各自进出会互相覆盖。
+    并发数 gs["parallel"]（1 = 串行，测试与假 Provider 用）。on_done(key, result) 每完成一行回调一次。
+    """
+    import guided
+    out = {}
+
+    def one(job):
+        key, desc, rows, chapters, card = job
+        try:
+            return key, guided.classify_guided(db, desc, origin=origin, provider=provider, rows=rows,
+                                               chapters=chapters, max_calls=gs["max_calls"], card=card_text(card))
+        except Exception as e:  # 升级是锦上添花，一行的异常不能拖垮整批
+            return key, {"error": f"逐级归类异常：{e}"}
+
+    with _guided_context(provider, gs["effort"]):
+        n = max(1, int(gs.get("parallel") or 1))
+        if n == 1 or len(jobs) <= 1:
+            for job in jobs:
+                key, g = one(job)
+                out[key] = g
+                if on_done:
+                    on_done(key, g)
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=min(n, len(jobs))) as ex:
+                futs = [ex.submit(one, job) for job in jobs]
+                for f in as_completed(futs):
+                    key, g = f.result()
+                    out[key] = g
+                    if on_done:
+                        on_done(key, g)
+    return out
 
 
 def classify_product(db, description, top_n=3, origin="CN", force_guided=False, exclude_ruling=None):
@@ -752,6 +1014,9 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
     if provider is None:
         return {"error": "AI 服务未配置，无法进行智能归类。请先在 ai_config.json 配置。"}
 
+    # 第零轮：归类要素表（配置开关；失败不影响归类）
+    card = _ai_attribute_card(provider, description) if attribute_card_enabled() else {}
+
     # 第一轮：出关键词
     try:
         keywords, chapters = _ai_keywords(provider, description)
@@ -762,10 +1027,11 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
 
     # 本地召回。AI 关键词全落空时降级为原文检索（走同义词表），
     # 而不是直接报"库里没有"——那会把模型的失误说成数据的缺失。
-    rows = _recall_candidates(db, keywords, description=description)
+    extra = [_ai_subject_line(provider, description)] if recall_rewrite_enabled() else None
+    rows = _recall_candidates(db, keywords, description=description, queries=extra)
     degraded = ""
     if not rows:
-        rows = _recall_candidates(db, [description], description=description)
+        rows = _recall_candidates(db, [description], description=description, queries=extra)
         if rows:
             degraded = (f"AI 给出的检索词（{' '.join(keywords)}）在税则库中无匹配，"
                         f"已降级为按原文检索，候选质量可能下降")
@@ -773,9 +1039,17 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
         return {"error": f"本地税则库未找到与「{description}」匹配的商品（关键词：{' '.join(keywords)}），请尝试调整描述。"}
     rows = _rank_by_chapters(rows, chapters)
 
+    # 本公司先例精确命中：上次就是这么报的，不再花模型调用，也不升级；仍给平铺的其它候选做对照的事交给 UI
+    hit = _company_exact(rows)
+    if hit:
+        return {"candidates": [_company_candidate(db, hit, origin)], "归类方式": "公司先例",
+                "keywords": keywords, "chapters": chapters, "跨章": False, "降级": degraded,
+                "disclaimer": "编码来自本公司此前的申报记录（审核员采纳 / 改正的结论），税率由本地税则计算。"
+                              "商品有变化时请重新归类。"}
+
     # 第二轮：精排（平铺）。失败不立刻返回：配置了升级链时还有第二条路
     try:
-        picks = _ai_rerank(provider, db, description, rows, top_n)
+        picks = _ai_rerank(provider, db, description, rows, top_n, card=card)
         flat_error = "" if picks else "AI 未返回有效归类结果，请重试或联系人工复核。"
     except AIProviderError as e:
         picks, flat_error = [], f"AI 归类失败：{e}"
@@ -790,7 +1064,7 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
         if not row:
             continue
         candidates.append(_candidate_from_row(db, row, origin, pk.get("confidence"), pk.get("reason", ""),
-                                              pk.get("need_verify")))
+                                              _merge_need_verify(pk.get("need_verify"), card)))
     if picks and not candidates:
         flat_error = "AI 返回的编码不在候选列表中，请重试。"
 
@@ -798,21 +1072,26 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
     gs = guided_settings()
     top = candidates[0] if candidates else None
     result = {"candidates": candidates, "归类方式": "平铺"} if candidates else None
-    if force_guided or (gs["enabled"] and (top is None or _needs_escalation(top, chapters, gs["threshold"]))):
-        g = _run_guided(db, description, origin, provider, rows, exclude_ruling, gs, keywords, chapters)
+    reason = ("强制" if force_guided else
+              (_escalation_reason(top, chapters, gs, [c["编码"] for c in candidates[:3]]) if gs["enabled"] else ""))
+    if reason:
+        g = _run_guided(db, description, origin, provider, rows, exclude_ruling, gs, keywords, chapters, card=card)
         if "error" in g:
             if result is None:
                 return {"error": flat_error or "AI 未返回有效归类结果", "升级失败": g["error"]}
             result["升级失败"] = g["error"]
         else:
-            gc = _candidate_from_code(db, g["code8"], origin, g["confidence"], g["reason"], g["需确认"])
+            gc = _candidate_from_code(db, g["code8"], origin, g["confidence"], g["reason"],
+                                      _merge_need_verify(g["需确认"], card))
             gc["归类方式"] = "逐级"
             gc["论证"] = g["论证"]
             others = [c for c in candidates if c["编码"] != gc["编码"]]
             result = {"candidates": [gc] + others[:max(0, top_n - 1)], "归类方式": "逐级",
-                      "论证": g["论证"], "平铺结果": top["编码"] if top else ""}
+                      "论证": g["论证"], "平铺结果": top["编码"] if top else "", "升级原因": reason}
     if result is None:
         return {"error": flat_error}
+    if card:
+        result["要素表"] = card
     result.update({
         "keywords": keywords,
         "chapters": chapters,
@@ -824,9 +1103,11 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
     return result
 
 
-def classify_guided_only(db, description, origin="CN"):
+def classify_guided_only(db, description, origin="CN", supplement=""):
     """
     直接走 GRI 逐级链（搜索页「逐级归类」按钮 / API）：出词 → 召回 → 逐级，不跑平铺精排。
+    supplement：用户对"缺事实 / 需确认"的补充说明（"TPU 膜在外表面但不完全遮蔽底布"），
+    拼在描述后重跑整条链——这是归类员"问一句再定"的那一步，结果里原样记下补充了什么。
     返回与 classify_product 同形（candidates[0] 带「论证」），失败 {"error"}。
     """
     provider = get_provider()
@@ -835,25 +1116,30 @@ def classify_guided_only(db, description, origin="CN"):
     desc = (description or "").strip()
     if not desc:
         return {"error": "请输入商品描述"}
+    supplement = (supplement or "").strip()[:1000]
+    if supplement:
+        desc = f"{desc}\n补充说明（用户核实后提供）：{supplement}"
+    card = _ai_attribute_card(provider, desc) if attribute_card_enabled() else {}
     try:
         keywords, chapters = _ai_keywords(provider, desc)
     except AIProviderError as e:
         return {"error": f"AI 调用失败：{e}"}
-    rows = _recall_candidates(db, keywords or [desc], description=desc)
+    extra = [_ai_subject_line(provider, desc)] if recall_rewrite_enabled() else None
+    rows = _recall_candidates(db, keywords or [desc], description=desc, queries=extra)
     if not rows and keywords:
-        rows = _recall_candidates(db, [desc], description=desc)
+        rows = _recall_candidates(db, [desc], description=desc, queries=extra)
     if not rows:
         return {"error": f"本地税则库未找到与「{desc}」匹配的候选，无法开始逐级归类"}
     rows = _rank_by_chapters(rows, chapters)
     gs = guided_settings()
-    g = _run_guided(db, desc, origin, provider, rows, None, gs, keywords, chapters)
+    g = _run_guided(db, desc, origin, provider, rows, None, gs, keywords, chapters, card=card)
     if "error" in g:
         return {"error": g["error"], "论证": g.get("论证", {})}
-    gc = _candidate_from_code(db, g["code8"], origin, g["confidence"], g["reason"], g["需确认"])
+    gc = _candidate_from_code(db, g["code8"], origin, g["confidence"], g["reason"], _merge_need_verify(g["需确认"], card))
     gc["归类方式"] = "逐级"
     gc["论证"] = g["论证"]
     return {"candidates": [gc], "归类方式": "逐级", "论证": g["论证"], "keywords": keywords, "chapters": chapters,
-            "跨章": False, "降级": "",
+            "跨章": False, "降级": "", "补充": supplement, **({"要素表": card} if card else {}),
             "disclaimer": "逐级归类依据本地税则的类注、章注与附加美国注释（不含 WCO 解释性注释），"
                           "先例来自 CROSS 镜像；税率与判定条件仍由本地税则计算。正式归类以 CBP 裁定为准。"}
 
@@ -1141,13 +1427,19 @@ def _detail_from_row(db, i, it, chosen, conf, reason, note, chs, rows, origin):
     }
 
 
-def _needs_escalation_detail(d, chs, threshold):
-    """清单行要不要升级：精排没给出有效编码、置信度低于阈值、或带存疑信号。"""
+def _needs_escalation_detail(d, chs, gs, rows=()):
+    """清单行要不要升级，返回原因（空 = 不升级）。跨章看池内前五（清单模式每行只有一个 pick）。"""
     if not d:
-        return False
+        return ""
     if "error" in d:
-        return True
-    return (d.get("confidence") or 0) < threshold or bool(d.get("存疑"))
+        return "平铺精排未给出有效编码"
+    conf = d.get("confidence") or 0
+    if conf < gs["threshold"]:
+        return f"置信度 {conf:.2f} 低于阈值 {gs['threshold']:g}"
+    if d.get("存疑"):
+        return "存疑：" + "；".join(d["存疑"])
+    top = {"confidence": conf, "编码": d.get("编码")}
+    return _escalation_reason(top, [], gs, [r["编码"] for r in list(rows)[:5]])
 
 
 def analyze_list_stream(db, items, origin="CN"):
@@ -1210,17 +1502,23 @@ def analyze_list_stream(db, items, origin="CN"):
         kws = [str(k) for k in (it.get("keywords") or []) if str(k).strip()]
         chs = [str(c).zfill(2) for c in (it.get("chapters") or [])]
         kw_map[idx] = (kws, chs)
+    # 英文 subject 改写：一次批量调用，给语义与先例通道做第二路查询（配置开关）
+    subj_map = _ai_subject_lines_batch(provider, [it.get("name", "") for it in items]) if recall_rewrite_enabled() else {}
+    # 归类要素表：一次批量调用（配置开关）
+    card_map = _ai_attribute_cards_batch(provider, [it.get("name", "") for it in items]) if attribute_card_enabled() else {}
 
     yield {"type": "stage", "stage": "recall",
            "text": "在本地税则库中召回候选", "done": 0, "total": n}
 
     # 逐商品本地召回（第一候选）
     recall_failed = {}  # 序号 → 召回失败的说明
+    details_map = {}    # 序号 → 结果行（公司先例精确命中在召回阶段就写进来）
     pending = []  # 需要精排的 (序号, 候选行列表, 原始条目, 降级说明)
     for i, it in enumerate(items, 1):
         name = it.get("name", "")
         kws, chs = kw_map.get(i, ([], []))
-        rows = _recall_candidates(db, kws, limit=20, description=name) if kws else []
+        extra = [subj_map[i]] if subj_map.get(i) else None
+        rows = _recall_candidates(db, kws, limit=20, description=name, queries=extra) if kws else []
         # 章号只加权不过滤（同 classify_product）。硬过滤时模型猜错章会把正确
         # 候选整条滤掉，然后这一行报"本地库未匹配"——清单里几十行，用户看到的
         # 是"库里没有"，真实原因却是模型猜错了章。
@@ -1228,9 +1526,19 @@ def analyze_list_stream(db, items, origin="CN"):
         note = ""
         if not rows and name:
             # AI 关键词全落空时退回按原文检索，而不是直接判这行无解
-            rows = _recall_candidates(db, [name], limit=20, description=name)
+            rows = _recall_candidates(db, [name], limit=20, description=name, queries=extra)
             if rows:
                 note = f"AI 检索词（{' '.join(kws)}）无匹配，已降级为按品名原文检索"
+        hit = _company_exact(rows)
+        if hit:
+            # 本公司先例精确命中：直接出结论，不进批量精排
+            cp = hit["公司先例"]
+            d = _detail_from_row(db, i, it, hit, 0.99,
+                                 f"与本公司 {str(cp.get('时间', ''))[:10]} 的申报一致（{cp.get('来源', '')}）", note, chs, rows, origin)
+            d.update({"归类方式": "公司先例", "公司先例": cp, "存疑": []})
+            details_map[i] = d
+            yield {"type": "stage", "stage": "recall", "text": "在本地税则库中召回候选", "done": i, "total": n}
+            continue
         if not rows:
             # 写进 details_map 而不是 details——末尾会按 details_map 重建整个列表，
             # 早先 append 到 details 的内容会被整个丢掉（原实现里那句 append
@@ -1248,15 +1556,15 @@ def analyze_list_stream(db, items, origin="CN"):
     yield {"type": "stage", "stage": "rank",
            "text": f"AI 正在从候选中为 {len(pending)} 行精排定码", "done": 0, "total": n}
 
-    # 第二轮：批量精排
-    details_map = {}
+    # 第二轮：批量精排（details_map 已在召回阶段建好，公司先例命中的行已在里面）
     if pending:
         # 候选行与单条归类走同一个 _candidate_line：带归类路径、判定条件、FLIP 与排除。
         # 此前批量模式只给"编码(描述前 40 字, 税率)"且只给 6 条——末级品名大量是 Other，
         # 等于让模型盲选；单条模式早就不这么干了，批量却一直没跟上。
         batch_lines = []
         for i, rows, it, _note, _chs in pending:
-            batch_lines.append(f"{i}. 商品「{it.get('name', '')}」候选：")
+            ct = card_text(card_map.get(i))
+            batch_lines.append(f"{i}. 商品「{it.get('name', '')}」" + (f"（要素表：{ct}）" if ct else "") + "候选：")
             batch_lines.extend("   " + _candidate_line(db, f"{i}-{j}", r)
                                for j, r in enumerate(rows[:12], 1))
         sys_prompt2 = (
@@ -1265,6 +1573,7 @@ def analyze_list_stream(db, items, origin="CN"):
             "| 税率 | 301 | 判定条件。为每个商品选择最匹配的一个 8 位编码。"
             "选择时必须依据归类路径中的实际措辞（材质、织法、含量阈值、涂层、重量/尺寸/价值门槛），"
             "不要只看末级品名——末级常常只是 'Other'。reason 引用候选行原文。"
+            "商品后括号里的要素表只填了描述明确说了的，「未提及」的属性不能当作满足。"
             "只输出 JSON：{\"picks\": [{\"index\": 商品序号, \"code\": \"8位编码\", "
             "\"confidence\": 0.9, \"reason\": \"引用原文的一句话理由\"}]}，code 必须来自该商品的候选。"
         )
@@ -1307,20 +1616,34 @@ def analyze_list_stream(db, items, origin="CN"):
                 continue
             details_map[i] = _detail_from_row(db, i, it, chosen, _clamp_confidence(pk.get("confidence")),
                                               pk.get("reason", ""), note, chs, rows, origin)
+            if card_map.get(i):
+                details_map[i]["要素表"] = card_map[i]
+                details_map[i]["需确认"] = _merge_need_verify([], card_map[i])
 
     # 升级：置信度不够 / 带存疑 / 精排没给出有效编码的行，再走 GRI 逐级链。
     # 这是本轮唯一会逐行调模型的环节，进度按行报是实的。
     gs = guided_settings()
     if pending and gs["enabled"]:
-        esc = [(i, rows, it, chs) for i, rows, it, _note, chs in pending
-               if _needs_escalation_detail(details_map.get(i), chs, gs["threshold"])]
+        esc = []
+        for i, rows, it, _note, chs in pending:
+            why = _needs_escalation_detail(details_map.get(i), chs, gs, rows)
+            if why:
+                esc.append((i, rows, it, chs, why))
         if esc:
             yield {"type": "stage", "stage": "guided",
                    "text": f"{len(esc)} 行置信度不足，升级到 GRI 逐级归类（注释 → 品目 → 子目 → 先例）",
                    "done": 0, "total": len(esc)}
-        for k, (i, rows, it, chs) in enumerate(esc, 1):
+        # 并发跑（gs["parallel"] 路），完成一行就把它写回 details_map 并报一次进度。
+        # 生成器不能从工作线程里 yield，所以先在池里收结果，主线程按完成顺序吐事件。
+        jobs = [(i, it.get("name", ""), rows, chs, card_map.get(i)) for i, rows, it, chs, _why in esc]
+        why_of = {i: why for i, _rows, _it, _chs, why in esc}
+        it_of = {i: (rows, it) for i, rows, it, _chs, _why in esc}
+        results = _run_guided_batch(db, jobs, origin, provider, gs) if jobs else {}
+        for k, i in enumerate([j[0] for j in jobs], 1):
+            g = results.get(i) or {"error": "升级未返回结果"}
+            rows, it = it_of[i]
+            why = why_of[i]
             d = details_map.get(i) or {}
-            g = _run_guided(db, it.get("name", ""), origin, provider, rows, None, gs, None, chs)
             if "error" in g:
                 d["升级失败"] = g["error"]
                 details_map[i] = d
@@ -1331,7 +1654,10 @@ def analyze_list_stream(db, items, origin="CN"):
                 # chs 传空：存疑里的"建议章 vs 结果章打架"针对的是平铺挑码，逐级链的章是读过注释后
                 # 定的，不再拿平铺第一轮猜的章号去质疑它；低置信度这一条信号照常保留
                 nd = _detail_from_row(db, i, it, row, g["confidence"], g["reason"], d.get("备注", ""), [], rows, origin)
-                nd.update({"归类方式": "逐级", "论证": g["论证"], "平铺结果": d.get("编码", "")})
+                nd.update({"归类方式": "逐级", "论证": g["论证"], "平铺结果": d.get("编码", ""), "升级原因": why,
+                           "需确认": _merge_need_verify(g.get("需确认"), card_map.get(i))})
+                if card_map.get(i):
+                    nd["要素表"] = card_map[i]
                 if "error" in d:
                     nd["平铺结果"] = ""
                     nd["备注"] = (nd.get("备注") or "") + "（平铺精排未给出有效编码，本行由逐级链归类）"

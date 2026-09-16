@@ -12,3 +12,8 @@ import os
 
 os.environ.setdefault("HTS_RECALL_CHANNELS", "keyword")
 os.environ.setdefault("AI_CACHE", "0")
+
+# AI 配置隔离：不读本机 ai_config.json。
+# 指向 tests/_test_ai_config.json：provider 为空（测试自己装假 Provider），逐级升级与召回改写关——
+# 这两个开关线上默认开，开着会多吃掉假 Provider 的预设回复，让几十条与之无关的测试失效。
+os.environ.setdefault("AI_CONFIG_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "_test_ai_config.json"))

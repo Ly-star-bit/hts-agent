@@ -92,16 +92,94 @@ def embed_batch(texts, model=EMBED_MODEL, timeout=600):
     return r.json()["embeddings"]
 
 
-def line_texts(db):
-    """编码 → 嵌入文本（完整品名）。98/99 章不是给商品定编码的答案，不进索引。"""
+def line_texts(db, expansion=None):
+    """
+    编码 → 嵌入文本（完整品名，可选拼上该编码下裁定的 subject）。98/99 章不进索引。
+
+    expansion：{code8: [subject, …]}，来自 build_expansion()。官方品名是法律用语
+    （"Other garments, of the type described in…"），用户描述是产品用语（"women's raincoat"），
+    把海关实际判到该行的货物名拼进去，语义通道才会说"产品话"。每行最多 8 条、600 字。
+    """
     import rate
     out = {}
     for code in db.get("rates_8") or {}:
         if code[:2] in ("98", "99"):
             continue
         text = re.sub(r"\s+", " ", rate.full_desc(db, code)).strip()
-        if text:
-            out[code] = text
+        if not text:
+            continue
+        subs = (expansion or {}).get(code) or []
+        if subs:
+            tail = "; ".join(subs[:EXPAND_PER_LINE])[:EXPAND_MAX_CHARS]
+            text = f"{text} | 海关判到此行的货物：{tail}"
+        out[code] = text
+    return out
+
+
+EXPAND_PER_LINE = 8
+EXPAND_MAX_CHARS = 600
+_SUBJ_PREFIX = re.compile(r"^\s*(?:re:\s*)?the\s+(?:tariff\s+)?classification\s+of\s+(?:an?\s+|the\s+)?", re.I)
+_SUBJ_FROM = re.compile(r"\s+(?:from|manufactured in|made in|produced in)\s+[A-Z][A-Za-z .,'()-]*$")
+
+
+def eval_ruling_numbers(base_dir=BASE_DIR):
+    """评测金标里的裁定号：文档扩展必须排除它们，否则语义通道的评测数字是假的（自己找自己）。"""
+    import glob
+    import json
+    nums = set()
+    for fp in glob.glob(os.path.join(base_dir, "data", "eval", "*.json")):
+        try:
+            with open(fp, encoding="utf-8") as f:
+                d = json.load(f)
+            for it in (d.get("items") if isinstance(d, dict) else d) or []:
+                if isinstance(it, dict) and it.get("裁定号"):
+                    nums.add(str(it["裁定号"]))
+        except (OSError, ValueError):
+            continue
+    return nums
+
+
+def build_expansion(db, cross_db_path=None, exclude=None, per_line=EXPAND_PER_LINE, log=print):
+    """
+    从裁定库反查：每个现行 8 位编码 → 最近判到它的、未撤销裁定的 subject（去套话、去产地）。
+    exclude：要排除的裁定号（默认 = 评测金标里的全部裁定号）。裁定库不可用返回 {}。
+    """
+    import cross
+    path = cross_db_path or cross.DB_PATH
+    if not os.path.exists(path):
+        log("裁定库不存在，文档扩展跳过")
+        return {}
+    exclude = set(exclude) if exclude is not None else eval_ruling_numbers()
+    alive = {c for c in (db.get("rates_8") or {}) if c[:2] not in ("98", "99")}
+    out, seen = {}, {}
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        rows = conn.execute(
+            "SELECT number, date, subject, tariffs FROM rulings "
+            "WHERE revoked_by='[]' AND tariffs<>'' AND subject<>'' ORDER BY date DESC").fetchall()
+    finally:
+        conn.close()
+    n_used = 0
+    for number, _date, subject, tariffs in rows:
+        if number in exclude:
+            continue
+        s = _SUBJ_FROM.sub("", _SUBJ_PREFIX.sub("", subject or "")).strip().rstrip(".").strip()
+        if len(s) < 4:
+            continue
+        codes = {re.sub(r"\D", "", c)[:8] for c in re.split(r"[,;\s]+", tariffs) if c.strip()}
+        used = False
+        for c8 in codes:
+            if len(c8) < 8 or c8 not in alive:
+                continue
+            lst = out.setdefault(c8, [])
+            key = s.lower()
+            if len(lst) >= per_line or key in seen.setdefault(c8, set()):
+                continue
+            seen[c8].add(key)
+            lst.append(s)
+            used = True
+        n_used += used
+    log(f"文档扩展：{len(out)} 个编码拼上了裁定 subject（用到 {n_used} 条裁定，排除 {len(exclude)} 条评测裁定）")
     return out
 
 
@@ -110,9 +188,15 @@ def _hash(text):
 
 
 def sync(db, db_path=DB_PATH, rebuild=False, log=print, _embed=None, model=EMBED_MODEL,
-         dims=EMBED_DIMS):
-    """增量嵌入。返回统计 dict。db 为 core.load_db() 的结果。"""
+         dims=EMBED_DIMS, expand=False, expansion=None):
+    """
+    增量嵌入。返回统计 dict。db 为 core.load_db() 的结果。
+    expand=True 时嵌入文本拼上裁定 subject（build_expansion），文本哈希变化会自动触发重嵌；
+    meta.expansion 记录当前索引是否带扩展，status() 里能看到。
+    """
     embed = _embed or (lambda texts: embed_batch(texts, model=model))
+    if expand and expansion is None:
+        expansion = build_expansion(db, log=log)
     conn = open_db(db_path, dims)
     try:
         meta = dict(conn.execute("SELECT key, value FROM meta"))
@@ -124,7 +208,7 @@ def sync(db, db_path=DB_PATH, rebuild=False, log=print, _embed=None, model=EMBED
         elif prev_model and prev_model != model:
             raise SystemExit(f"索引已用 {prev_model} 构建，当前为 {model}。换模型必须 --rebuild。")
 
-        texts = line_texts(db)
+        texts = line_texts(db, expansion if expand else None)
         have = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT code8, text_hash, id FROM lines")}
         # 消失的编码：删索引，不留幽灵行
         gone = [c for c in have if c not in texts]
@@ -160,7 +244,7 @@ def sync(db, db_path=DB_PATH, rebuild=False, log=print, _embed=None, model=EMBED
                 log(f"  {done}/{total}（{speed:.0f} 条/s，剩余约 {eta/60:.0f} 分钟）")
         n = conn.execute("SELECT COUNT(*) FROM lines").fetchone()[0]
         for k, v in {"embed_model": model, "embed_dims": dims, "embed_count": n,
-                     "last_embed": now,
+                     "last_embed": now, "expansion": "1" if expand else "0",
                      "db_built_at": (db.get("meta") or {}).get("built_at", "")}.items():
             conn.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (k, str(v)))
         conn.commit()
@@ -186,7 +270,7 @@ def status(db_path=DB_PATH):
     if not n:
         return {"built": False, "message": "税则行语义索引为空，请运行 python scripts/hts_embed.py"}
     return {"built": True, "model": meta.get("embed_model"), "dims": int(meta.get("embed_dims") or 0),
-            "count": n, "last_embed": meta.get("last_embed", "")}
+            "count": n, "last_embed": meta.get("last_embed", ""), "expansion": meta.get("expansion") == "1"}
 
 
 def search_codes(query, limit=20, db_path=DB_PATH, _embed=None):
@@ -230,13 +314,16 @@ def main(argv=None):
     ap.add_argument("--db", default=DB_PATH)
     ap.add_argument("--rebuild", action="store_true", help="清空重建（换嵌入模型后必须）")
     ap.add_argument("--status", action="store_true", help="只看索引状态")
+    ap.add_argument("--expand", action="store_true",
+                    help="嵌入文本拼上裁定库里判到该行的货物名（文档扩展；评测金标裁定自动排除）。"
+                         "文本变化会触发全量重嵌（8b 约 18 分钟）")
     a = ap.parse_args(argv)
     if a.status:
         print(status(a.db))
         return 0
     import core
     db = core.load_db()
-    sync(db, db_path=a.db, rebuild=a.rebuild)
+    sync(db, db_path=a.db, rebuild=a.rebuild, expand=a.expand)
     return 0
 
 

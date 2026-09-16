@@ -33,7 +33,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 NOTES_CAP = 80000        # 品目步注释总量上限（字符）；超出截断并告知模型
 SUBTREE_CAP = 40000      # 子目树上限（字符）
-DEFAULT_MAX_CALLS = 6    # 每件商品最多调用次数（品目 1–2 + 下钻 1–2 + 先例 1 + 回退下钻 1）
+DEFAULT_MAX_CALLS = 8    # 每件商品最多调用次数（品目 1–2 + 下钻 1–2 + 同级对证 1 + 先例 1 + 回退下钻 1）
+EXAMPLES_PER_CODE = 2    # 同级对证 / 先例核对：每个编码给几条"海关实际判进去的货"
+EXAMPLE_MAX_CHARS = 220
 MIN_OLLAMA_CTX = 16384   # 品目步提示约 1.3 万 token；Ollama 默认 num_ctx 会静默截掉末尾的注释
 CHAPTERS_SHOWN = 3       # 品目步展示注释的章数（按候选数排序）
 
@@ -138,7 +140,7 @@ def _prec_by_code_default(code8, exclude, limit=6):
 def _prec_semantic_default(desc, exclude, alive, limit=8):
     try:
         import cross
-        r = cross.semantic_precedents(desc, [], limit=limit + 2, alive_codes=alive)
+        r = cross.semantic_precedents(desc, [], limit=limit, alive_codes=alive, exclude=exclude)
         return [x for x in (r.get("先例") or []) if x.get("裁定号") != exclude][:limit] if isinstance(r, dict) else []
     except Exception:
         return []
@@ -150,6 +152,33 @@ def _fetch_text_default(x):
         return cross.fetch_ruling_text(x.get("裁定号"), x.get("来源"), x.get("日期"))
     except Exception:
         return None
+
+
+def _examples_default(codes, exclude):
+    """候选编码 → 最近先例的描述段（缺的按需拉正文，永久缓存）。裁定库不可用返回 {}。"""
+    try:
+        import cross_desc
+        return cross_desc.precedent_examples(codes, per_code=EXAMPLES_PER_CODE, exclude=exclude)
+    except Exception:
+        return {}
+
+
+def _fmt_examples(exs):
+    parts = []
+    for x in exs or []:
+        body = (x.get("描述") or "").strip() or ("（仅有摘要）" + (x.get("主题") or "").strip())
+        parts.append(f"{x.get('裁定号', '')}({str(x.get('日期', ''))[:4]})：{body[:EXAMPLE_MAX_CHARS]}")
+    return "；".join(parts)
+
+
+_SYS_VERIFY = (
+    "你是美国海关归类专家。下钻已经选了一个 8 位行，现在做同级对证：同一层级的每个子目都列出了条文与"
+    "海关实际判进该行的货物描述。对每个子目逐条判断商品是否满足其条文——"
+    "'满足' 须引用商品描述里的原文作依据；'无证据' 表示描述没提到该条件；'矛盾' 表示描述与条件相反。"
+    "然后给出最终编码：可以维持原选，也可以改成同级的另一个子目；只在证据支持时才改，不要因为先例多就改。"
+    "描述没提到的条件写进 need_verify。只输出 JSON：{\"checks\":[{\"code\":\"8位\",\"判定\":\"满足|无证据|矛盾\","
+    "\"依据\":\"引用原文或说明\"}],\"code\":\"最终8位\",\"confidence\":0到1,\"reason\":\"维持或改判的理由\","
+    "\"need_verify\":[\"…\"]}")
 
 
 def _fmt_prec(x):
@@ -189,7 +218,7 @@ _SYS_PRECEDENT = (
 
 def classify_guided(db, description, origin="CN", provider=None, rows=None, keywords=None, chapters=None,
                     exclude_ruling=None, max_calls=DEFAULT_MAX_CALLS, notes=None,
-                    _prec_by_code=None, _prec_semantic=None, _fetch_text=None):
+                    _prec_by_code=None, _prec_semantic=None, _fetch_text=None, _examples=None, card=""):
     """
     商品描述 → 8 位编码（逐级链）。
 
@@ -208,10 +237,15 @@ def classify_guided(db, description, origin="CN", provider=None, rows=None, keyw
     desc = (description or "").strip()
     if not desc:
         return {"error": "商品描述为空"}
+    # 要素表（ai.card_text 的一行文本）随描述一起进每一步：模型看到的是"哪些说了、哪些没说"，
+    # 「未提及」的属性不得当作满足——这是同级对证里"无证据"判定的直接依据
+    if card:
+        desc = f"{desc}\n\n归类要素表（只填了描述明确说了的；「未提及」的属性不能当作满足）：{card}"
     tree = _tree(db)
     prec_by_code = _prec_by_code or (lambda c, ex: _prec_by_code_default(c, ex))
     prec_semantic = _prec_semantic or (lambda d, ex: _prec_semantic_default(d, ex, tree.alive))
     fetch_text = _fetch_text or _fetch_text_default
+    examples = _examples or _examples_default
     budget = {"n": 0, "max": max(3, int(max_calls or DEFAULT_MAX_CALLS))}
     trace = {"调用": [], "警告": []}
 
@@ -251,11 +285,23 @@ def classify_guided(db, description, origin="CN", provider=None, rows=None, keyw
         if not _valid_under(tree, code, h4):
             return {"error": f"模型两次都未给出品目 {h4} 内的有效 8 位编码（{code or '空'}），未做归类",
                     "论证": {"品目": h4, "品目理由": _first_reason(out_a), "调用": trace["调用"]}}
+        # ②′ 同级对证：同一层每个具名子目 条文 + 海关实际判进去的货物描述 → 逐条 满足/无证据/矛盾
+        verify = {}
+        if budget["n"] < budget["max"]:
+            code2, verify = _step_verify(tree, db, desc, code, h4, exclude_ruling, call, examples)
+            if code2 and code2 != code:
+                verify["改判"] = f"同级对证改行：{code} → {code2}"
+                out_b = {**out_b, "confidence": verify.get("confidence", out_b.get("confidence")),
+                         "need_verify": verify.get("need_verify") or out_b.get("need_verify")}
+                code = code2
+            elif verify.get("confidence") is not None:
+                out_b = {**out_b, "confidence": verify["confidence"],
+                         "need_verify": verify.get("need_verify") or out_b.get("need_verify")}
         final, revisit = code, {}
         # ③ 先例
         if budget["n"] < budget["max"]:
             rh, rc, out_c = _step_precedent(tree, db, desc, code, h4, exclude_ruling, call,
-                                            prec_by_code, prec_semantic, fetch_text)
+                                            prec_by_code, prec_semantic, fetch_text, examples)
             revisit = {"一致": bool(out_c.get("consistent")), "理由": str(out_c.get("reason", ""))[:600]}
             if rh and budget["n"] < budget["max"]:
                 code2, out_b2 = _step_descend(tree, desc, rh, call, notes)
@@ -286,7 +332,8 @@ def classify_guided(db, description, origin="CN", provider=None, rows=None, keyw
                       for e in (out_a.get("excluded") or []) if isinstance(e, dict)][:6],
             "缺事实": [str(x)[:160] for x in (out_a.get("missing_facts") or [])][:4],
             "逐级理由": lvl,
-            "下钻编码": core.fmt(code, 8),   # 先例步之前的结论；与最终编码不同即先例步改了判
+            "下钻编码": core.fmt(code, 8),   # 先例步之前的结论（同级对证之后）；与最终编码不同即先例步改了判
+            "同级对证": {k: v for k, v in verify.items() if k in ("层", "对证", "改判", "理由")},
             "先例核对": revisit,
             "展示的章": shown, "注释可用": not absent,
             "调用次数": budget["n"], "警告": trace["警告"],
@@ -346,19 +393,77 @@ def _step_descend(tree, desc, h4, call, notes, retry=""):
     return _digits(out.get("code"))[:8], out
 
 
-def _step_precedent(tree, db, desc, code, h4, exclude, call, prec_by_code, prec_semantic, fetch_text):
+def _siblings(tree, code):
+    """与 code 同一父节点的全部 8 位行（含自己），按编码序。"""
+    path = tuple(tree.r8[code].get("path") or [])
+    return [c for c in tree.by_h4.get(code[:4]) or [] if tuple(tree.r8[c].get("path") or []) == path]
+
+
+def _step_verify(tree, db, desc, code, h4, exclude, call, examples):
+    """
+    同级对证。只有一个同级（没得比）时跳过。返回 (最终编码, {"层","对证","改判","confidence","need_verify","理由"})。
+    最终编码必须在同级里，否则维持原选。
+    """
+    import core
+    sibs = _siblings(tree, code)
+    if len(sibs) < 2:
+        return code, {}
+    exs = examples(sibs, exclude)
+    parent = " > ".join(tree.nodes[i].strip() for i in (tree.r8[code].get("path") or [])[1:])
+    lines = []
+    for c in sibs:
+        r = tree.r8[c]
+        mark = "（下钻所选）" if c == code else ""
+        lines.append(f"- {core.fmt(c, 8)}{mark} | {r.get('desc', '').strip()} | 一般税率 {r.get('general', '')}\n"
+                     f"    海关判到此行的货物：{_fmt_examples(exs.get(c)) or '（库里无先例）'}")
+    user = (f"商品描述：\n{desc}\n\n品目 {h4}，层级：{tree.heading_text(h4)[:80]} > {parent}\n\n"
+            f"同级子目：\n" + "\n".join(lines))
+    out = call([{"role": "system", "content": _SYS_VERIFY}, {"role": "user", "content": user}], "对证")
+    final = _digits(out.get("code"))[:8]
+    if final not in sibs:
+        final = code
+    checks = [{"code": _digits(c.get("code"))[:8], "判定": str(c.get("判定", ""))[:6], "依据": str(c.get("依据", ""))[:200]}
+              for c in (out.get("checks") or []) if isinstance(c, dict)][:12]
+    conf = out.get("confidence")
+    try:
+        conf = float(conf) if conf is not None else None
+    except (TypeError, ValueError):
+        conf = None
+    return final, {"层": parent, "对证": checks, "理由": str(out.get("reason", ""))[:300],
+                   "confidence": conf, "need_verify": [str(v)[:80] for v in (out.get("need_verify") or [])][:5]}
+
+
+def _step_precedent(tree, db, desc, code, h4, exclude, call, prec_by_code, prec_semantic, fetch_text, examples=None):
     import core
     import rate
     byc = prec_by_code(code, exclude)
     sem = prec_semantic(desc, exclude)
+    # 按码反查的先例换成描述段：摘要只有两三个词，"海关实际把什么货判到了这个码"要看正文那一段
+    descs = {}
+    if examples:
+        try:
+            descs = {x["裁定号"]: x for x in (examples([code], exclude).get(code) or [])}
+        except Exception:
+            descs = {}
     texts = []
     for x in [s for s in sem if s.get("状态") == "现行" and s.get("裁定号") != exclude][:2]:
         t = fetch_text(x)
         if t:
             texts.append(f"[{x['裁定号']} 正文节选]\n{t[:4000]}")
     path = " > ".join(rate.path_of(db, code))
+    byc_lines = []
+    for x in byc:
+        line = _fmt_prec(x)
+        d = (descs.get(x.get("裁定号")) or {}).get("描述")
+        if d:
+            line += f"\n      货物描述：{d[:EXAMPLE_MAX_CHARS]}"
+        byc_lines.append(line)
+    for n, x in descs.items():
+        if n not in {y.get("裁定号") for y in byc} and x.get("描述"):
+            byc_lines.append(f"{n} ({str(x.get('日期', ''))[:4]}) 编码 {core.fmt(code, 8)}：{x.get('主题', '')[:80]}\n"
+                             f"      货物描述：{x['描述'][:EXAMPLE_MAX_CHARS]}")
     user = (f"商品描述：\n{desc}\n\n拟定编码：{core.fmt(code, 8)}（品目 {h4}）\n归类路径：{path} > {db['rates_8'][code].get('desc', '')}\n\n"
-            f"该编码历史先例（按码反查）：\n" + ("\n".join(_fmt_prec(x) for x in byc) or "（无）")
+            f"该编码历史先例（按码反查，带货物描述）：\n" + ("\n".join(byc_lines) or "（无）")
             + "\n\n与商品描述语义最近的先例：\n" + ("\n".join(_fmt_prec(x) for x in sem) or "（无）")
             + ("\n\n" + "\n\n".join(texts) if texts else ""))
     out = call([{"role": "system", "content": _SYS_PRECEDENT}, {"role": "user", "content": user}], "先例")

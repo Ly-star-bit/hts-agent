@@ -1,0 +1,8 @@
+{
+  "provider": null,
+  "guided": false,
+  "recall_rewrite": false,
+  "guided_cross_chapter": false,
+  "attribute_card": false,
+  "guided_parallel": 1
+}

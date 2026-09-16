@@ -993,15 +993,24 @@ FUSED_POOL_FOR_SORT = 30  # 非相关度排序时参与排序的候选池（融�
 #   (0.25, 1, 3) 融合 r@5 0.67、r@20 0.82（r@20 各配置里最高）。
 # 没有把语义权重也压到 0：这份金标集的描述本身来自 CROSS subject，天然偏向先例通道；
 # 用户的中文口语描述上语义通道更重要（22 组探针里两者互补，并集才覆盖全部）。
-CHANNEL_WEIGHTS = {"关键词": 0.25, "语义": 1.0, "先例": 3.0}
+CHANNEL_WEIGHTS = {"关键词": 0.25, "语义": 1.0, "先例": 3.0, "公司": 4.0}
+COMPANY_LIMIT = 10        # 公司先例通道取前 10 条（本公司此前的申报，权重最高）
 # 纯编码 / 编码前缀查询（"8507"、"8507.60"）只走关键词通道：把 "8507" 当文本去嵌入
 # 得到的是一堆无关近邻，反而把编码前缀命中的行挤下去。
 _CODE_QUERY_RE = re.compile(r"^[\d.\s,，、]+$")
 # 默认启用的通道。环境变量 HTS_RECALL_CHANNELS=keyword 可收窄到只用离线关键词——
 # 测试套件就这么跑：假 Provider 的归类测试不该因为本机 ollama 在不在而变结果。
 DEFAULT_CHANNELS = tuple(
-    c.strip() for c in os.environ.get("HTS_RECALL_CHANNELS", "keyword,semantic,precedent").split(",")
+    c.strip() for c in os.environ.get("HTS_RECALL_CHANNELS", "keyword,semantic,precedent,company").split(",")
     if c.strip()) or ("keyword",)
+
+
+def _default_company(text, limit):
+    try:
+        import company
+        return company.search(text, limit=limit)
+    except Exception as e:
+        return {"error": f"公司先例库不可用：{e}"}
 
 
 def _default_semantic(text, limit):
@@ -1021,9 +1030,26 @@ def _default_votes(db, text, limit):
         return {"error": f"裁定库不可用：{e}"}
 
 
+def merge_ranked(lists):
+    """
+    多个查询在同一条通道上的名次表 → 一张：每个编码取它在各表里的最好名次，按最好名次排，
+    同名次按首次出现顺序。用于"原文 + 英文改写"两路查询：合并在通道内做，通道权重不变，
+    否则同一通道会在 RRF 里拿双份权重。
+    """
+    best, order = {}, []
+    for lst in lists:
+        for i, c in enumerate(lst or []):
+            if c not in best:
+                best[c] = i
+                order.append(c)
+            elif i < best[c]:
+                best[c] = i
+    return sorted(order, key=lambda c: (best[c], order.index(c)))
+
+
 def hybrid_search(db, keyword, limit=100, sort="relevance", include_special=False,
                   unit_value=None, origin="CN", description=None,
-                  channels=None, _semantic=None, _votes=None):
+                  channels=None, _semantic=None, _votes=None, queries=None, _company=None):
     """
     三通道召回 + RRF 融合：关键词（离线）、税则行语义（hts_embed）、裁定 kNN 投票（cross）。
 
@@ -1037,17 +1063,20 @@ def hybrid_search(db, keyword, limit=100, sort="relevance", include_special=Fals
     任一通道不可用（索引未建 / ollama 离线 / 裁定库未建）只影响该通道，status 里
     写明原因；三条全空返回 ([], status)。description 给语义与先例通道用：
     AI 归类链路传的是英文检索词，而语义通道拿原始中文描述效果更好。
+    queries：语义与先例通道的**额外**查询文本（如模型写的 CBP 风格英文 subject）。同一通道内
+    多路查询按每个编码的最好名次合并（merge_ranked），通道权重不变。
     返回 (rows, status)，rows 与 search() 同结构，另带「召回来源」「融合分」等字段；
     relevance 排序即融合序，其他排序与 search() 一致。
     """
     text = (description or keyword or "").strip()
+    texts = [text] + [q.strip() for q in (queries or []) if q and q.strip() and q.strip() != text]
     if channels is None:
         channels = DEFAULT_CHANNELS
     if text and _CODE_QUERY_RE.match(text):
         channels = tuple(c for c in channels if c == "keyword") or ("keyword",)
     status = {}
     ranked = {}
-    kw_scores, sem_sim, vote_map, support = {}, {}, {}, {}
+    kw_scores, sem_sim, vote_map, support, comp_map = {}, {}, {}, {}, {}
 
     if "keyword" in channels:
         scored, _kw = _keyword_candidates(db, keyword, include_special)
@@ -1058,28 +1087,68 @@ def hybrid_search(db, keyword, limit=100, sort="relevance", include_special=Fals
 
     alive = db["rates_8"]
     if "semantic" in channels and text:
-        sem = (_semantic or _default_semantic)(text, SEMANTIC_LIMIT)
-        if isinstance(sem, dict):
-            status["语义"] = {"数量": 0, "原因": sem.get("error", "语义索引不可用")}
-        else:
+        lists, err = [], ""
+        for q in texts:
+            sem = (_semantic or _default_semantic)(q, SEMANTIC_LIMIT)
+            if isinstance(sem, dict):
+                err = sem.get("error", "语义索引不可用")
+                break
             codes = [r["编码"] for r in sem
                      if r["编码"] in alive and (include_special or r["编码"][:2] not in ("98", "99"))]
-            ranked["语义"] = codes
-            sem_sim = {r["编码"]: r.get("相似度") for r in sem}
-            status["语义"] = {"数量": len(codes)}
+            lists.append(codes)
+            for r in sem:
+                if r.get("相似度") is not None and (r["编码"] not in sem_sim or r["相似度"] > sem_sim[r["编码"]]):
+                    sem_sim[r["编码"]] = r["相似度"]
+        if err:
+            status["语义"] = {"数量": 0, "原因": err}
+        else:
+            ranked["语义"] = merge_ranked(lists)
+            status["语义"] = {"数量": len(ranked["语义"])}
+            if len(lists) > 1:
+                status["语义"]["查询数"] = len(lists)
 
     if "precedent" in channels and text:
-        votes = (_votes or _default_votes)(db, text, PRECEDENT_LIMIT)
-        if not isinstance(votes, dict) or votes.get("error"):
-            status["先例"] = {"数量": 0, "原因": (votes or {}).get("error", "裁定库不可用")
-                            if isinstance(votes, dict) else "裁定库不可用"}
-        else:
+        lists, err, n_prec = [], "", 0
+        for q in texts:
+            votes = (_votes or _default_votes)(db, q, PRECEDENT_LIMIT)
+            if not isinstance(votes, dict) or votes.get("error"):
+                err = ((votes or {}).get("error", "裁定库不可用") if isinstance(votes, dict) else "裁定库不可用")
+                break
             cands = [c for c in votes.get("候选") or []
                      if c["编码"] in alive and (include_special or c["编码"][:2] not in ("98", "99"))]
-            ranked["先例"] = [c["编码"] for c in cands]
-            vote_map = {c["编码"]: c["票"] for c in cands}
-            support = {c["编码"]: c.get("裁定") or [] for c in cands}
-            status["先例"] = {"数量": len(cands), "先例数": votes.get("先例数", 0)}
+            lists.append([c["编码"] for c in cands])
+            n_prec += votes.get("先例数", 0)
+            for c in cands:
+                # 多路查询下票数取最高的一路，裁定号合并去重（先例证据要给精排看）
+                if c["编码"] not in vote_map or c["票"] > vote_map[c["编码"]]:
+                    vote_map[c["编码"]] = c["票"]
+                lst = support.setdefault(c["编码"], [])
+                for n in (c.get("裁定") or []):
+                    if n not in lst:
+                        lst.append(n)
+        if err:
+            status["先例"] = {"数量": 0, "原因": err}
+        else:
+            ranked["先例"] = merge_ranked(lists)
+            status["先例"] = {"数量": len(ranked["先例"]), "先例数": n_prec}
+            if len(lists) > 1:
+                status["先例"]["查询数"] = len(lists)
+
+    # 第四条：本公司先例（审核员采纳 / 改正过的结论）。库为空时通道静默为 0 条，不报错。
+    if "company" in channels and text:
+        comp = (_company or _default_company)(text, COMPANY_LIMIT)
+        if isinstance(comp, dict):
+            status["公司"] = {"数量": 0, "原因": comp.get("error", "公司先例库不可用")}
+        else:
+            codes = []
+            for r in comp:
+                c = r.get("code8") or re.sub(r"\D", "", str(r.get("编码", "")))[:8]
+                if c in alive and (include_special or c[:2] not in ("98", "99")) and c not in comp_map:
+                    codes.append(c)
+                    comp_map[c] = {k: r.get(k) for k in ("id", "品名", "编码", "时间", "来源", "相似度", "谁", "说明")}
+            if codes:
+                ranked["公司"] = codes
+            status["公司"] = {"数量": len(codes)}
 
     fused, sources = {}, {}
     for ch, codes in ranked.items():
@@ -1105,6 +1174,8 @@ def hybrid_search(db, keyword, limit=100, sort="relevance", include_special=Fals
         if c in vote_map:
             r["先例票"] = vote_map[c]
             r["先例裁定"] = support.get(c, [])[:3]
+        if c in comp_map:
+            r["公司先例"] = comp_map[c]
         rows.append(r)
     if sort != "relevance":
         # 按税率/编码排序时先把候选池收到融合序的前一段：语义通道给的第 50 个近邻
