@@ -208,8 +208,20 @@ def goods_conflict(desc_en, tariff_text):
 
 # ---------- 对账 ----------
 
-def audit(db, rows, low_price=2.0):
-    """rows 为 norm_rows 的输出。返回按严重度排序的 findings。"""
+def load_decisions(path):
+    """
+    已定结论文件：{"62043320": {"改为": "6204.39.8060", "依据": "...", "定于": "2026-09-16", "谁": "..."}}
+    键是申报用的 8 位（对账按 8 位分组）。对账每跑一次都会把同样的问题再报一遍，人工判过的
+    结论得有地方落——落在这里，报告里就从"存疑"变成"已定"，也是之后 record() 进先例库的输入。
+    """
+    if not path:
+        return {}
+    d = json.load(open(path, encoding="utf-8"))
+    return {digits(k)[:8]: v for k, v in d.items() if isinstance(v, dict)}
+
+
+def audit(db, rows, low_price=2.0, decisions=None):
+    """rows 为 norm_rows 的输出。decisions：load_decisions 的输出，命中的发现降级为「已定」。"""
     import rate
     # 按 8 位分组：归类的判断单位是 8 位（税率、材质支、品目条文都在这一级）。
     # 10 位统计后缀的有效性在组内单独查，否则同一个 8 位会因后缀不同被拆成好几条重复发现。
@@ -217,9 +229,13 @@ def audit(db, rows, low_price=2.0):
     for r in rows:
         by_code[r["code"][:8]].append(r)
 
+    dec = decisions or {}
+
     def add(level, kind, code, items, msg, advice=""):
-        f.append({"级别": level, "类型": kind, "编码": code, "条数": len(items),
-                  "说明": msg, "建议": advice,
+        d = dec.get(code[:8])
+        f.append({"级别": "已定" if d else level, "原级别": level, "类型": kind, "编码": code,
+                  "条数": len(items), "说明": msg, "建议": advice,
+                  **({"结论": d} if d else {}),
                   "样例": [{"中文品名": x["name_zh"], "英文品名": x["desc_en"], "材质": x["texture"],
                             "单价": x["unit_value"]} for x in items[:3]]})
 
@@ -300,7 +316,7 @@ def audit(db, rows, low_price=2.0):
                     f"（{min(ps):.2f}–{max(ps):.2f}）",
                     "取第三方成分检测报告留档；纤维成分是 CBP 实验室抽检的常规项目")
 
-    order = {"错误": 0, "存疑": 1, "提示": 2}
+    order = {"错误": 0, "存疑": 1, "提示": 2, "已定": 3}   # 已定的排最后：要看的是还没处理的
     return sorted(f, key=lambda x: (order[x["级别"]], -x["条数"], x["编码"]))
 
 
@@ -314,7 +330,7 @@ def summary(findings, n_rows, n_codes):
     c = collections.Counter(x["级别"] for x in findings)
     hit = sum(x["条数"] for x in findings)
     return (f"{n_rows} 条申报、{n_codes} 个编码；命中 {len(findings)} 组、覆盖 {hit} 条\n"
-            f"  错误 {c['错误']}　存疑 {c['存疑']}　提示 {c['提示']}")
+            f"  错误 {c['错误']}　存疑 {c['存疑']}　提示 {c['提示']}　已定 {c['已定']}")
 
 
 def report_md(findings, n_rows, n_codes, src=""):
@@ -322,15 +338,23 @@ def report_md(findings, n_rows, n_codes, src=""):
            f"来源：`{os.path.basename(src)}`　{n_rows} 条申报、{n_codes} 个不同编码", "",
            "> 纯本地税则比对，未调用模型。AD/CVD、232 等未建模措施不在核对范围。",
            "> 「存疑」是风险提示不是结论，需第三方证据（成分检测报告、实物）才能定。", ""]
-    for lvl in ("错误", "存疑", "提示"):
+    for lvl in ("错误", "存疑", "提示", "已定"):
         got = [x for x in findings if x["级别"] == lvl]
         if not got:
             continue
         out += [f"## {lvl}（{len(got)} 组，{sum(x['条数'] for x in got)} 条）", ""]
         for x in got:
-            out += [f"### {x['编码']}　×{x['条数']}　{x['类型']}", "",
-                    f"- **问题**：{x['说明']}",
-                    f"- **建议**：{x['建议'] or '—'}", "", "| 中文品名 | 英文品名 | 材质 | 单价 |", "|---|---|---|---|"]
+            out += [f"### {x['编码']}　×{x['条数']}　{x['类型']}", "", f"- **问题**：{x['说明']}"]
+            d = x.get("结论")
+            if d:
+                out.append(f"- **已定结论**：改为 **{d.get('改为', '—')}**"
+                           + (f"（{d['定于']}" if d.get("定于") else "")
+                           + (f"，{d['谁']}" if d.get("谁") else "") + ("）" if d.get("定于") else ""))
+                if d.get("依据"):
+                    out.append(f"- **依据**：{d['依据']}")
+            else:
+                out.append(f"- **建议**：{x['建议'] or '—'}")
+            out += ["", "| 中文品名 | 英文品名 | 材质 | 单价 |", "|---|---|---|---|"]
             for s in x["样例"]:
                 price = "—" if s["单价"] is None else "${:.2f}".format(s["单价"])
                 out.append("| {} | {} | {} | {} |".format(s["中文品名"], s["英文品名"], s["材质"], price))
@@ -345,6 +369,7 @@ def main(argv=None):
     ap.add_argument("--json", dest="js", default="", help="另存 JSON（机器可读）")
     ap.add_argument("--low-price", type=float, default=2.0, help="「低价高端纤维」的单价阈值（默认 2.0 美元）")
     ap.add_argument("--map", default="", help='字段名覆盖，如 code=税号,texture=成分')
+    ap.add_argument("--decisions", default="", help="已定结论文件（8 位 → {改为/依据/定于/谁}），命中的发现标为「已定」")
     a = ap.parse_args(argv)
 
     import core
@@ -357,14 +382,16 @@ def main(argv=None):
         raise SystemExit(f"认不出编码列。现有列：{list(raw[0])}；用 --map code=列名 指定")
     rows = norm_rows(raw, fmap)
     n_codes = len({r["code"] for r in rows})
-    findings = audit(core.load_db(), rows, low_price=a.low_price)
+    findings = audit(core.load_db(), rows, low_price=a.low_price, decisions=load_decisions(a.decisions))
 
     print(f"字段映射：{fmap}\n")
     print(summary(findings, len(rows), n_codes), "\n")
     for x in findings:
         print(f"[{x['级别']}] {x['编码']} ×{x['条数']}  {x['类型']}")
         print(f"        {x['说明']}")
-        if x["建议"]:
+        if x.get("结论"):
+            print(f"        ✓ 已定：改为 {x['结论'].get('改为', '—')}　{x['结论'].get('依据', '')[:80]}")
+        elif x["建议"]:
             print(f"        → {x['建议']}")
         print(f"        例：{x['样例'][0]['中文品名']} | {x['样例'][0]['英文品名']} | {x['样例'][0]['材质']}")
     if a.md:

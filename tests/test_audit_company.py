@@ -185,3 +185,47 @@ class TestAudit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDecisions(unittest.TestCase):
+    """人工/逐级链定下来的结论要落在文件里：每跑一次对账都把同样的问题再报一遍，判过的得能消掉。"""
+
+    DEC = {"62043320": {"改为": "6204.39.8060", "依据": "亚麻占优，进不了合成纤维支",
+                        "定于": "2026-09-16", "谁": "逐级链"}}
+
+    def _run(self, dec):
+        return ac.audit(_db(), _rows(("6204.33.2000", "2.8%", "Women's Blazers",
+                                      "55% flax fibers 45% Polyurethane", 1.1)), decisions=dec)
+
+    def test_decision_downgrades_finding(self):
+        f = [x for x in self._run(self.DEC) if x["类型"] == "材质支不符"]
+        self.assertTrue(f)
+        self.assertEqual(f[0]["级别"], "已定")
+        self.assertEqual(f[0]["原级别"], "存疑")        # 原始严重度保留，不是把问题抹掉
+        self.assertEqual(f[0]["结论"]["改为"], "6204.39.8060")
+
+    def test_without_decision_stays_open(self):
+        f = [x for x in self._run({}) if x["类型"] == "材质支不符"]
+        self.assertEqual(f[0]["级别"], "存疑")
+        self.assertNotIn("结论", f[0])
+
+    def test_decided_sorts_last(self):
+        recs = _rows(("6204.33.2000", "2.8%", "Women's Blazers", "55% flax fibers 45% Polyurethane", 1.1),
+                     ("9999.99.9999", "1%", "x", "", 1.0))
+        f = ac.audit(_db(), recs, decisions=self.DEC)
+        self.assertEqual(f[0]["级别"], "错误")
+        self.assertEqual(f[-1]["级别"], "已定")
+
+    def test_load_decisions_normalizes_key(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "dec.json")
+            json.dump({"6204.33.20": {"改为": "6204.39.8060"}}, open(p, "w", encoding="utf-8"))
+            self.assertEqual(ac.load_decisions(p)["62043320"]["改为"], "6204.39.8060")
+        self.assertEqual(ac.load_decisions(""), {})
+
+    def test_report_shows_conclusion_not_advice(self):
+        md = ac.report_md(self._run(self.DEC), 12, 1, "x.json")
+        self.assertIn("## 已定", md)
+        self.assertIn("**已定结论**：改为 **6204.39.8060**", md)
+        self.assertIn("2026-09-16", md)
+        self.assertIn("亚麻占优", md)
