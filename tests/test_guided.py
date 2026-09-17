@@ -1025,6 +1025,7 @@ class TestAttributeCard(unittest.TestCase):
 
     def test_card_threads_into_flat_and_guided(self):
         old_on = ai.attribute_card_enabled; ai.attribute_card_enabled = lambda cfg=None: True
+        old_ip = ai.attribute_card_in_prompt; ai.attribute_card_in_prompt = lambda cfg=None: True
         old_gs = ai.guided_settings
         ai.guided_settings = lambda cfg=None: {"enabled": True, "threshold": 0.9, "max_calls": 8, "effort": "",
                                                 "force_chapters": set(), "cross_chapter": False}
@@ -1049,13 +1050,23 @@ class TestAttributeCard(unittest.TestCase):
             out = ai.classify_product(_db(), DESC, origin="CN")
             self.assertNotIn("要素表", out)
             self.assertNotIn("归类要素表", p.calls[1][0]["content"])
+            # 开表但不进提示词（默认）：有表、有问题，提示词里没有表
+            ai.attribute_card_enabled = lambda cfg=None: True
+            ai.attribute_card_in_prompt = lambda cfg=None: False
+            p = _install(FakeProvider([self.CARD, KW, flat, HEAD, DESCEND, VERIFY, PREC_OK]))
+            out = ai.classify_product(_db(), DESC, origin="CN")
+            self.assertEqual(out["要素表"]["item"], "女式雨衣")
+            self.assertNotIn("归类要素表", p.calls[2][0]["content"])
+            self.assertNotIn("归类要素表", p.calls[3][1]["content"])
+            self.assertTrue(any("描述未提及" in x for x in out["candidates"][0]["需确认"]))
         finally:
-            ai.attribute_card_enabled = old_on; ai.guided_settings = old_gs
+            ai.attribute_card_enabled = old_on; ai.attribute_card_in_prompt = old_ip; ai.guided_settings = old_gs
             guided._prec_by_code_default, guided._prec_semantic_default, guided._examples_default = old_pc, old_ps, old_ex
             ai.reset_provider_cache()
 
     def test_batch_cards(self):
         old_on = ai.attribute_card_enabled; ai.attribute_card_enabled = lambda cfg=None: True
+        old_ip = ai.attribute_card_in_prompt; ai.attribute_card_in_prompt = lambda cfg=None: True
         old_gs = ai.guided_settings
         ai.guided_settings = lambda cfg=None: {"enabled": False, "threshold": 0.9, "max_calls": 8, "effort": "",
                                                 "force_chapters": set(), "cross_chapter": False}
@@ -1072,7 +1083,7 @@ class TestAttributeCard(unittest.TestCase):
             self.assertIn("是否零售包装（描述未提及）", det["需确认"])
             self.assertIn("要素表：商品：女式雨衣", p.calls[2][1]["content"])
         finally:
-            ai.attribute_card_enabled = old_on; ai.guided_settings = old_gs
+            ai.attribute_card_enabled = old_on; ai.attribute_card_in_prompt = old_ip; ai.guided_settings = old_gs
             ai.reset_provider_cache()
 
 

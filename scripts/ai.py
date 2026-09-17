@@ -375,6 +375,9 @@ DEFAULT_CONFIG = {
     # 归类要素表：归类前先把描述抽成固定的表（是什么/材质/工艺/用途/形态/包装/使用者/规格/未提及），
     # 后面平铺精排与逐级链每一步都带着它，"未提及"直接并进需确认。归类员就是先填这张表再翻税则的。
     "attribute_card": True,
+    # 要素表进不进提示词。2026-09-16 60 条实测：进提示词 top-1 42 → 39（救 2 坏 5），升级行 23 → 31，
+    # token 翻倍多——模型看到一串「未提及」后倾向兜底品目。默认只用它生成问题（未提及 → 需确认）和界面展示。
+    "attribute_card_in_prompt": False,
 }
 
 
@@ -486,7 +489,7 @@ def save_config(updates):
                 v = min(1.0, max(0.0, float(v)))
             except (TypeError, ValueError):
                 continue
-        elif k in ("guided_cross_chapter", "recall_rewrite", "attribute_card"):
+        elif k in ("guided_cross_chapter", "recall_rewrite", "attribute_card", "attribute_card_in_prompt"):
             v = v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
         elif k == "guided_force_chapters":
             v = re.sub(r"\s+", "", str(v or ""))
@@ -581,6 +584,12 @@ _CARD_RULES = (
 def attribute_card_enabled(cfg=None):
     cfg = cfg if cfg is not None else load_config()
     return bool(cfg.get("attribute_card"))
+
+
+def attribute_card_in_prompt(cfg=None):
+    """要素表要不要写进精排 / 逐级链的提示词（默认否：实测净负，见 DEFAULT_CONFIG 注释）。"""
+    cfg = cfg if cfg is not None else load_config()
+    return bool(cfg.get("attribute_card_in_prompt"))
 
 
 def _clean_card(raw):
@@ -1014,8 +1023,9 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
     if provider is None:
         return {"error": "AI 服务未配置，无法进行智能归类。请先在 ai_config.json 配置。"}
 
-    # 第零轮：归类要素表（配置开关；失败不影响归类）
+    # 第零轮：归类要素表（配置开关；失败不影响归类）。默认只用来生成问题与展示，不进提示词
     card = _ai_attribute_card(provider, description) if attribute_card_enabled() else {}
+    card_p = card if attribute_card_in_prompt() else None
 
     # 第一轮：出关键词
     try:
@@ -1049,7 +1059,7 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
 
     # 第二轮：精排（平铺）。失败不立刻返回：配置了升级链时还有第二条路
     try:
-        picks = _ai_rerank(provider, db, description, rows, top_n, card=card)
+        picks = _ai_rerank(provider, db, description, rows, top_n, card=card_p)
         flat_error = "" if picks else "AI 未返回有效归类结果，请重试或联系人工复核。"
     except AIProviderError as e:
         picks, flat_error = [], f"AI 归类失败：{e}"
@@ -1075,7 +1085,7 @@ def classify_product(db, description, top_n=3, origin="CN", force_guided=False, 
     reason = ("强制" if force_guided else
               (_escalation_reason(top, chapters, gs, [c["编码"] for c in candidates[:3]]) if gs["enabled"] else ""))
     if reason:
-        g = _run_guided(db, description, origin, provider, rows, exclude_ruling, gs, keywords, chapters, card=card)
+        g = _run_guided(db, description, origin, provider, rows, exclude_ruling, gs, keywords, chapters, card=card_p)
         if "error" in g:
             if result is None:
                 return {"error": flat_error or "AI 未返回有效归类结果", "升级失败": g["error"]}
@@ -1120,6 +1130,7 @@ def classify_guided_only(db, description, origin="CN", supplement=""):
     if supplement:
         desc = f"{desc}\n补充说明（用户核实后提供）：{supplement}"
     card = _ai_attribute_card(provider, desc) if attribute_card_enabled() else {}
+    card_p = card if attribute_card_in_prompt() else None
     try:
         keywords, chapters = _ai_keywords(provider, desc)
     except AIProviderError as e:
@@ -1132,7 +1143,7 @@ def classify_guided_only(db, description, origin="CN", supplement=""):
         return {"error": f"本地税则库未找到与「{desc}」匹配的候选，无法开始逐级归类"}
     rows = _rank_by_chapters(rows, chapters)
     gs = guided_settings()
-    g = _run_guided(db, desc, origin, provider, rows, None, gs, keywords, chapters, card=card)
+    g = _run_guided(db, desc, origin, provider, rows, None, gs, keywords, chapters, card=card_p)
     if "error" in g:
         return {"error": g["error"], "论证": g.get("论证", {})}
     gc = _candidate_from_code(db, g["code8"], origin, g["confidence"], g["reason"], _merge_need_verify(g["需确认"], card))
@@ -1506,6 +1517,7 @@ def analyze_list_stream(db, items, origin="CN"):
     subj_map = _ai_subject_lines_batch(provider, [it.get("name", "") for it in items]) if recall_rewrite_enabled() else {}
     # 归类要素表：一次批量调用（配置开关）
     card_map = _ai_attribute_cards_batch(provider, [it.get("name", "") for it in items]) if attribute_card_enabled() else {}
+    card_pmap = card_map if attribute_card_in_prompt() else {}
 
     yield {"type": "stage", "stage": "recall",
            "text": "在本地税则库中召回候选", "done": 0, "total": n}
@@ -1563,7 +1575,7 @@ def analyze_list_stream(db, items, origin="CN"):
         # 等于让模型盲选；单条模式早就不这么干了，批量却一直没跟上。
         batch_lines = []
         for i, rows, it, _note, _chs in pending:
-            ct = card_text(card_map.get(i))
+            ct = card_text(card_pmap.get(i))
             batch_lines.append(f"{i}. 商品「{it.get('name', '')}」" + (f"（要素表：{ct}）" if ct else "") + "候选：")
             batch_lines.extend("   " + _candidate_line(db, f"{i}-{j}", r)
                                for j, r in enumerate(rows[:12], 1))
@@ -1635,7 +1647,7 @@ def analyze_list_stream(db, items, origin="CN"):
                    "done": 0, "total": len(esc)}
         # 并发跑（gs["parallel"] 路），完成一行就把它写回 details_map 并报一次进度。
         # 生成器不能从工作线程里 yield，所以先在池里收结果，主线程按完成顺序吐事件。
-        jobs = [(i, it.get("name", ""), rows, chs, card_map.get(i)) for i, rows, it, chs, _why in esc]
+        jobs = [(i, it.get("name", ""), rows, chs, card_pmap.get(i)) for i, rows, it, chs, _why in esc]
         why_of = {i: why for i, _rows, _it, _chs, why in esc}
         it_of = {i: (rows, it) for i, rows, it, _chs, _why in esc}
         results = _run_guided_batch(db, jobs, origin, provider, gs) if jobs else {}
