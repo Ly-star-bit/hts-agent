@@ -39,6 +39,36 @@ EXAMPLE_MAX_CHARS = 220
 MIN_OLLAMA_CTX = 16384   # 品目步提示约 1.3 万 token；Ollama 默认 num_ctx 会静默截掉末尾的注释
 CHAPTERS_SHOWN = 3       # 品目步展示注释的章数（按候选数排序）
 
+# 决定性注释常常不在商品最后落的那个章。2026-09-16 实测：PU 涂层涤纶情趣内衣，模型引第十一类
+# 注释 1(h)（塑料涂层纺织物"of chapter 39"排除出纺织品）就跳进 3926，但 1(h) 里"of chapter 39"
+# 该不该成立，由**第 59 章注释 2(a)(3)** 决定——只有底布完全包埋或双面涂层才进 39 章，单面涂层
+# 仍是 5903，做成服装归 6113/6210。商品落 39 或 62，第 59 章注释从头到尾没进过上下文，
+# 模型只能凭训练记忆引，结果 15.8% 报成 42.5%。
+# 这张表按商品特征强制挂载"决定性注释所在的章"，与"展示哪些章的品目"无关（不会把 59 章的
+# 品目列给模型选——那是布不是服装）。挂载的注释排在最前，不会被 NOTES_CAP 截掉。
+NOTE_TRIGGERS = (
+    (re.compile(r"涂层|覆膜|浸渍|层压|贴合|淋膜|人造革|合成革|仿皮|PU\s*皮|PVC\s*皮|"
+                r"coat(?:ed|ing)|laminat|impregnat|faux\s*leather|synthetic\s*leather|"
+                r"polyurethane|\bPU\b|\bPVC\b", re.I),
+     (59,),
+     "面料含涂层/覆膜/浸渍：第 59 章注释 2 决定它是 5903 纺织物（服装归 6113/6210），"
+     "还是完全包埋/双面涂层而落第 39 章（3926）——这一步定了才谈品目"),
+)
+
+
+def _extra_note_chapters(desc, chapters=()):
+    """描述命中特征词时强制挂载的注释章。返回 ([章号], [为什么挂])，已挂过的章不重复。"""
+    extra, why = [], []
+    text = desc or ""
+    for rx, chs, note in NOTE_TRIGGERS:
+        if not rx.search(text):
+            continue
+        hit = [c for c in chs if c not in chapters and c not in extra]
+        if hit:
+            extra += hit
+            why.append(note)
+    return extra, why
+
 
 # ---------- 税则树（按 db 对象缓存一次） ----------
 
@@ -100,11 +130,17 @@ def _digits(s):
 
 # ---------- 注释 ----------
 
-def _notes_block(chapters, notes):
-    """类注（每类一次）+ 章注 + 附加美国注释，总量封顶。返回 (文本, 截断否, 缺席否)。"""
+def _notes_block(chapters, notes, extra=(), why=()):
+    """
+    类注（每类一次）+ 章注 + 附加美国注释，总量封顶。返回 (文本, 截断否, 缺席否)。
+
+    extra：按 NOTE_TRIGGERS 强制挂载的决定性注释章，排在最前——被 NOTES_CAP 截掉的必须是
+    展示章的注释，不能是决定"归哪个章"的那一条。why 是挂载理由，写进小标题给模型看。
+    """
     import hts_notes
     out, secs, total, truncated, absent = [], set(), 0, False, True
-    for ch in chapters:
+    for i, ch in enumerate(list(extra) + [c for c in chapters if c not in extra]):
+        is_extra = i < len(extra)
         n = hts_notes.notes_for(ch, notes=notes)
         parts = []
         if n["section_id"] not in secs and n["section"]:
@@ -113,13 +149,17 @@ def _notes_block(chapters, notes):
         parts += [n["chapter"], n["us"]]
         blk = "\n\n".join(p for p in parts if p)
         if blk.strip():
-            absent = False
+            absent = absent and is_extra    # 「注释可用」只由展示章决定，挂载章不顶替
         else:
             blk = "（本章注释缺席：data/hts_notes.json 未构建或无此章）"
         if total + len(blk) > NOTES_CAP:
             blk = blk[:max(0, NOTES_CAP - total)] + "\n…（注释过长已截断）"
             truncated = True
-        out.append(f"##### 第 {ch} 章相关注释 #####\n{blk}")
+        head = f"##### 第 {ch} 章相关注释 #####"
+        if is_extra:
+            head = (f"##### 第 {ch} 章注释（决定性，必须先判）#####\n"
+                    f"（{'；'.join(why)}）" if why else f"##### 第 {ch} 章注释（决定性，必须先判）#####")
+        out.append(f"{head}\n{blk}")
         total += len(blk)
         if truncated:
             break
@@ -268,15 +308,15 @@ def classify_guided(db, description, origin="CN", provider=None, rows=None, keyw
 
     try:
         # ① 品目
-        hs, other_ch, out_a, shown, absent = _step_heading(tree, desc, rows, call, notes)
+        hs, other_ch, out_a, shown, absent, note_ext = _step_heading(tree, desc, rows, call, notes)
         if other_ch:
             trace["补章"] = other_ch
-            hs2, _, out_a2, shown2, absent2 = _step_heading(tree, desc, rows, call, notes, extra=(other_ch,))
+            hs2, _, out_a2, shown2, absent2, ext2 = _step_heading(tree, desc, rows, call, notes, extra=(other_ch,))
             if hs2:
-                hs, out_a, shown, absent = hs2, out_a2, shown2, absent2
+                hs, out_a, shown, absent, note_ext = hs2, out_a2, shown2, absent2, ext2
         if not hs:
             return {"error": "模型未给出有效的 4 位品目", "论证": {"品目步输出": out_a, "调用": trace["调用"]}}
-        h4 = hs[0]
+        h4 = h4_first = hs[0]
         # ② 下钻
         code, out_b = _step_descend(tree, desc, h4, call, notes)
         if not _valid_under(tree, code, h4):
@@ -319,13 +359,14 @@ def classify_guided(db, description, origin="CN", provider=None, rows=None, keyw
     import core
     conf = ai._clamp_confidence(out_b.get("confidence"))
     lvl = [str(x)[:200] for x in (out_b.get("level_reasons") or [])][:6]
-    reason = f"品目 {h4}：{_first_reason(out_a)[:220]}" + (f"；末级：{lvl[-1][:160]}" if lvl else "")
+    hreason = _heading_reason(out_a, h4, h4 != h4_first and revisit.get("理由", ""))
+    reason = f"品目 {h4}：{hreason[:220]}" + (f"；末级：{lvl[-1][:160]}" if lvl else "")
     return {
         "编码": core.fmt(final, 8), "code8": final, "confidence": conf, "reason": reason[:400],
         "需确认": [str(v)[:80] for v in (out_b.get("need_verify") or [])][:5],
         "归类方式": "逐级",
         "论证": {
-            "品目": h4, "品目理由": _first_reason(out_a)[:500],
+            "品目": h4, "品目理由": hreason[:500],
             "品目备选": [{"heading": _digits(h.get("heading"))[:4], "reason": str(h.get("reason", ""))[:300]}
                           for h in (out_a.get("headings") or [])[1:2]],
             "排除": [{"heading": _digits(e.get("heading"))[:4], "why": str(e.get("why", ""))[:200]}
@@ -336,6 +377,7 @@ def classify_guided(db, description, origin="CN", provider=None, rows=None, keyw
             "同级对证": {k: v for k, v in verify.items() if k in ("层", "对证", "改判", "理由")},
             "先例核对": revisit,
             "展示的章": shown, "注释可用": not absent,
+            **({"决定性注释": note_ext} if note_ext else {}),
             "调用次数": budget["n"], "警告": trace["警告"],
             **({"补章": trace["补章"]} if trace.get("补章") else {}),
         },
@@ -345,6 +387,18 @@ def classify_guided(db, description, origin="CN", provider=None, rows=None, keyw
 def _first_reason(out_a):
     hs = out_a.get("headings") or []
     return str(hs[0].get("reason", "")) if hs and isinstance(hs[0], dict) else ""
+
+
+def _heading_reason(out_a, h4, fallback=""):
+    """
+    品目 h4 的理由。先例步回退品目后，out_a 的首选理由讲的是**旧品目**——直接拿它当
+    「品目理由」展示，论证里就会出现"品目 6211 / 理由讲的是 6114"这种自相矛盾（实测遇到过）。
+    这里按 h4 去模型给的品目列表里找对应那条；找不到就用先例步的理由兜底。
+    """
+    for h in (out_a.get("headings") or []):
+        if isinstance(h, dict) and _digits(h.get("heading"))[:4] == h4:
+            return str(h.get("reason", ""))
+    return str(fallback or "") or _first_reason(out_a)
 
 
 def _valid_under(tree, code, h4):
@@ -371,7 +425,8 @@ def _step_heading(tree, desc, rows, call, notes, extra=()):
                          for h, g in sorted(groups.items(), key=lambda kv: (-kv[1]["votes"], -kv[1]["n"])))
     head_txt = "\n".join(f"第 {ch} 章：\n" + "\n".join(f"  {h}  {t}" for h, t in tree.headings_of_chapter(ch).items())
                          for ch in chapters)
-    nb, _truncated, absent = _notes_block(chapters, notes)
+    ext, why = _extra_note_chapters(desc, chapters)
+    nb, _truncated, absent = _notes_block(chapters, notes, extra=ext, why=why)
     user = f"商品描述：\n{desc}\n\n检索召回的候选品目：\n{cand_txt}\n\n涉及各章的全部品目：\n{head_txt}\n\n注释：\n{nb}"
     out = call([{"role": "system", "content": _SYS_HEADING}, {"role": "user", "content": user}], "品目")
     hs = [_digits(h.get("heading"))[:4] for h in (out.get("headings") or []) if isinstance(h, dict)]
@@ -380,13 +435,22 @@ def _step_heading(tree, desc, rows, call, notes, extra=()):
     oc = int(oc) if oc else None
     if oc is not None and not (1 <= oc <= 97 and oc not in chapters):
         oc = None
-    return hs, oc, out, chapters, absent
+    return hs, oc, out, chapters, absent, ext
 
 
 def _step_descend(tree, desc, h4, call, notes, retry=""):
     import hts_notes
-    n = hts_notes.notes_for(int(h4[:2]), notes=notes)
+    ch = int(h4[:2])
+    n = hts_notes.notes_for(ch, notes=notes)
     nb = n["us"] if len(n["chapter"]) > 20000 else "\n\n".join(p for p in (n["chapter"], n["us"]) if p)
+    # 决定性注释在别的章时，下钻这一步同样要看得见：6210.50 与 3926.20 的分岔就在第 59 章注释 2
+    ext, why = _extra_note_chapters(desc, (ch,))
+    for c in ext:
+        e = hts_notes.notes_for(c, notes=notes)
+        blk = "\n\n".join(x for x in (e["chapter"], e["us"]) if x)
+        if blk:
+            nb = (f"##### 第 {c} 章注释（决定性，必须先判）#####\n（{'；'.join(why)}）\n{blk}\n\n"
+                  f"##### 第 {ch} 章注释 #####\n{nb}")
     user = (f"商品描述：\n{desc}\n\n品目 {h4} 的完整子目树：\n{tree.subtree(h4)}\n\n本章注释（含附加美国注释）：\n"
             f"{nb or '（注释缺席）'}" + (f"\n\n上次输出无效：{retry}" if retry else ""))
     out = call([{"role": "system", "content": _SYS_DESCEND}, {"role": "user", "content": user}], "下钻")

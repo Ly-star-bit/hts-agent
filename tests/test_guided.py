@@ -1125,3 +1125,101 @@ class TestParallelEscalation(unittest.TestCase):
             self.assertEqual(sorted(res1), [1, 2])
         finally:
             guided._prec_by_code_default, guided._prec_semantic_default, guided._examples_default = old_pc, old_ps, old_ex
+
+
+# ---------- 决定性注释挂载（跨章） ----------
+
+class TestDecisiveNotes(unittest.TestCase):
+    """
+    2026-09-16 实测的洞：PU 涂层涤纶情趣内衣，商品最后落 39 或 62 章，而决定它落哪边的
+    第 59 章注释 2 从头到尾没进过上下文——模型凭训练记忆引第十一类注释 1(h) 就跳进 3926，
+    15.8% 的货报成 42.5%。按特征词强制挂载该章注释。
+    """
+    NOTES = {"sections": {"XI": {"notes": "SEC-XI"}},
+             "chapters": {"62": {"section": "XI", "notes": "C62", "us_notes": "U62"},
+                          "59": {"section": "XI", "notes": "C59-注2(a)(3)", "us_notes": ""},
+                          "61": {"section": "XI", "notes": "C61", "us_notes": ""}}}
+
+    def test_trigger_words(self):
+        for t in ("PU 涂层涤纶面料", "fabric laminated with polyurethane", "人造革情趣内衣",
+                  "coated woven polyester", "PVC 皮革手袋", "覆膜无纺布"):
+            ext, why = guided._extra_note_chapters(t)
+            self.assertEqual(ext, [59], t)
+            self.assertTrue(why and "第 59 章" in why[0])
+        for t in ("女式全棉针织衬衫", "stainless steel kitchen knife", "锂离子电池"):
+            self.assertEqual(guided._extra_note_chapters(t), ([], []), t)
+
+    def test_already_shown_chapter_not_duplicated(self):
+        self.assertEqual(guided._extra_note_chapters("PU 涂层布", (59, 62)), ([], []))
+
+    def test_notes_block_puts_decisive_first(self):
+        txt, _, _ = guided._notes_block([62, 61], self.NOTES, extra=[59], why=["第 59 章注释 2 决定归哪章"])
+        self.assertLess(txt.index("C59-注2(a)(3)"), txt.index("C62"))
+        self.assertIn("决定性，必须先判", txt)
+        self.assertIn("第 59 章注释 2 决定归哪章", txt)
+        self.assertEqual(txt.count("SEC-XI"), 1)      # 类注仍只给一次
+
+    def test_absent_flag_ignores_decisive_chapter(self):
+        # 展示章无注释、挂载章有注释：仍应报"注释缺席"，不能被挂载章顶替
+        notes = {"sections": {}, "chapters": {"59": {"section": "XI", "notes": "C59", "us_notes": ""}}}
+        _txt, _t, absent = guided._notes_block([62], notes, extra=[59], why=["w"])
+        self.assertTrue(absent)
+
+    def _apparel_pool(self):
+        """只留 61/62 章的候选：召回自带 59 章时走的是正常展示路径，测不到"强制挂载"。"""
+        rows = [r for r in _pool() if re.sub(r"\D", "", r["编码"])[:2] in ("61", "62")]
+        self.assertTrue(rows, "服装候选为空，测试前提不成立")
+        return rows
+
+    def test_chain_attaches_and_records(self):
+        p = FakeProvider([HEAD, DESCEND, VERIFY, PREC_OK])
+        out = guided.classify_guided(_db(), "女式情趣内衣 55% 涤纶 45% 聚氨酯涂层", provider=p,
+                                     rows=self._apparel_pool(), notes=self.NOTES, **NO_PREC)
+        self.assertEqual(out["论证"]["决定性注释"], [59])
+        self.assertNotIn(59, out["论证"]["展示的章"])                 # 挂注释，不把 59 章品目列给模型选
+        self.assertIn("C59-注2(a)(3)", p.calls[0][1]["content"])     # 品目步看得见
+        self.assertIn("C59-注2(a)(3)", p.calls[1][1]["content"])     # 下钻步也看得见
+        self.assertIn("决定性，必须先判", p.calls[1][1]["content"])
+
+    def test_no_trigger_no_attachment(self):
+        p = FakeProvider([HEAD, DESCEND, VERIFY, PREC_OK])
+        out = guided.classify_guided(_db(), "女式全棉针织衬衫", provider=p, rows=self._apparel_pool(),
+                                     notes=self.NOTES, **NO_PREC)
+        self.assertNotIn("决定性注释", out["论证"])
+        self.assertNotIn("C59-注2(a)(3)", p.calls[0][1]["content"])
+        self.assertNotIn("决定性，必须先判", p.calls[1][1]["content"])
+
+
+# ---------- 先例回退后品目理由要跟着换 ----------
+
+class TestHeadingReasonAfterRollback(unittest.TestCase):
+    """实测遇到过：论证显示「品目 6211」，理由讲的却是 6114——先例步换了品目、理由没跟着换。"""
+
+    def test_reason_follows_new_heading(self):
+        target = guided._tree(_db()).by_h4["6202"][0]
+        rev = json.dumps({"consistent": False, "revisit_heading": "6202", "revisit_code": None,
+                          "reason": "先例 N1 把同类货归 6202"})
+        d2 = json.dumps({"code": target, "level_reasons": ["x"], "need_verify": [], "confidence": 0.7})
+        p = FakeProvider([HEAD, DESCEND, VERIFY, rev, d2])
+        out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
+        a = out["论证"]
+        self.assertEqual(a["品目"], "6202")
+        self.assertEqual(a["品目理由"], "若面料不合5903")      # HEAD 里 6202 自己那条
+        self.assertNotIn("归6210", a["品目理由"])
+        self.assertIn("品目 6202：若面料不合5903", out["reason"])
+
+    def test_falls_back_to_precedent_reason_when_heading_unlisted(self):
+        # 先例回退到一个模型没列过的品目：理由用先例步的，不能拿旧品目的理由冒充
+        target = guided._tree(_db()).by_h4["6201"][0]
+        rev = json.dumps({"consistent": False, "revisit_heading": "6201", "revisit_code": None,
+                          "reason": "先例 N2 归 6201"})
+        d2 = json.dumps({"code": target, "level_reasons": ["y"], "need_verify": [], "confidence": 0.6})
+        p = FakeProvider([HEAD, DESCEND, VERIFY, rev, d2])
+        out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
+        self.assertEqual(out["论证"]["品目"], "6201")
+        self.assertEqual(out["论证"]["品目理由"], "先例 N2 归 6201")
+
+    def test_unchanged_heading_keeps_first_reason(self):
+        p = FakeProvider([HEAD, DESCEND, VERIFY, PREC_OK])
+        out = guided.classify_guided(_db(), DESC, provider=p, rows=_pool(), **NO_PREC)
+        self.assertEqual(out["论证"]["品目理由"], "第62章注6：5903面料制成的服装归6210")
