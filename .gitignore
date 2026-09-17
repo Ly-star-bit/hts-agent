@@ -71,3 +71,7 @@ Chapter 99_*.pdf
 data/company.db
 data/company.db-shm
 data/company.db-wal
+
+# 公司清关数据（含品名/单价，不入 git）
+result_*.json
+data/eval/company_golden.json
