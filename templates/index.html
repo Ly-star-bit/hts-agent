@@ -716,12 +716,14 @@
     border: 1px solid var(--primary); border-left-width: 3px;
     border-radius: 10px; padding: 12px 14px; background: var(--gray-bg);
   }
-  .ai-pick-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  /* 允许换行 + 编码不参与收缩：头部一行里有税率提示和两个按钮，不换行时编码会被挤成 "6210.50…"，
+     而编码正是这张卡的结论，绝不能是被省略的那一个 */
+  .ai-pick-head { display: flex; align-items: center; gap: 10px; font-size: 14px; flex-wrap: wrap; }
   .ai-pick-head .rank {
     width: 20px; height: 20px; border-radius: 50%; background: var(--primary); color: #fff;
     font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
   }
-  .ai-pick-head .code { font-family: var(--font-mono); font-size: 15px; }
+  .ai-pick-head .code { font-family: var(--font-mono); font-size: 15px; flex: none; white-space: nowrap; }
   .ai-pick-head .conf { font-size: 12px; color: var(--muted); }
   .ai-pick-desc { font-size: 13px; color: var(--muted); margin-top: 6px; }
   .ai-pick-reason { font-size: 13px; line-height: 1.7; margin-top: 8px; }
@@ -899,6 +901,23 @@
   }
   .modal-close:hover { background: var(--hover); color: var(--text); }
   .modal-body { padding: 16px 18px; max-height: 65vh; overflow-y: auto; font-size: 13px; }
+  /* AI 结论用的宽弹窗：里面是归类卡（论证、判定条件、证据清单），720px 会把条文挤成竖条 */
+  .modal.modal-wide { max-width: 940px; }
+  .modal-wide .modal-body { max-height: 76vh; padding: 14px 16px; }
+  .modal-sub { font-size: 12px; color: var(--muted); font-weight: normal; margin-left: 10px; }
+  /* 来源追溯要能盖在 AI 弹窗之上（在结论里点「论证」） */
+  #aiModal { z-index: 1090; }
+  /* 页面上只留一条摘要，详情在弹窗里——此前是把整块结论直接塞进结果卡，越点越长 */
+  .ai-strip {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 0 0 10px; padding: 8px 12px; border-radius: 8px;
+    background: var(--gray-bg); border: 1px solid var(--border); font-size: 12.5px;
+  }
+  .ai-strip .code { font-family: var(--mono); font-weight: 600; }
+  .ai-strip .spin { color: var(--muted); }
+  .ai-strip button { margin-left: auto; }
+  .modal-loading { padding: 26px 8px; text-align: center; color: var(--muted); font-size: 13px; line-height: 2; }
+  .modal-loading .step { display: block; font-size: 12px; }
   .src-group { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
   .src-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
   .src-group .src-type {
@@ -1589,6 +1608,16 @@
 </div>
 
 <!-- 来源追溯弹窗 -->
+<div id="aiModal" class="modal-overlay" onclick="if (event.target === this) closeAiModal()">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <span><span id="aiModalTitle">AI 归类结论</span><span id="aiModalSub" class="modal-sub"></span></span>
+      <button class="modal-close" onclick="closeAiModal()" title="关闭（Esc）">✕</button>
+    </div>
+    <div id="aiModalBody" class="modal-body"></div>
+  </div>
+</div>
+
 <div id="srcModal" class="modal-overlay" onclick="if (event.target === this) closeSrcModal()">
   <div class="modal">
     <div class="modal-head">
@@ -2170,6 +2199,55 @@ function openHtsSite(code) {
   window.open('https://hts.usitc.gov/search?query=' + encodeURIComponent(q), '_blank');
 }
 
+/* ---------- AI 结论弹窗 ----------
+   AI 补充分析与逐级归类此前把整块结论塞进搜索结果卡里，两个按钮各点一次页面就多两屏，
+   结果表被推到看不见的地方。现在：页面上只留一条摘要（补了几条 / 结论是哪个码），
+   详情进弹窗。补召回的候选行照旧并进下方表格——那部分本来就该在表里。
+
+   aiModalFor 记住当前展示的是哪一个（assist / guided），配合 aiToken：
+   请求还没回来用户就关掉弹窗时，结果照样存进 lastAi 并刷新摘要条，但不强行把弹窗弹回来。 */
+let lastAi = { assist: null, guided: null };
+let aiModalFor = '';
+let aiToken = 0;
+
+function openAiModal(kind, title, sub, html) {
+  aiModalFor = kind;
+  document.getElementById('aiModalTitle').textContent = title;
+  document.getElementById('aiModalSub').textContent = sub || '';
+  document.getElementById('aiModalBody').innerHTML = html;
+  document.getElementById('aiModal').classList.add('show');
+}
+
+function setAiModal(kind, sub, html) {
+  lastAi[kind] = { sub, html };
+  if (aiModalFor === kind && document.getElementById('aiModal').classList.contains('show')) {
+    document.getElementById('aiModalSub').textContent = sub || '';
+    document.getElementById('aiModalBody').innerHTML = html;
+  }
+}
+
+function closeAiModal() {
+  document.getElementById('aiModal').classList.remove('show');
+}
+
+function reopenAi(kind) {
+  const d = lastAi[kind];
+  if (!d) return;
+  openAiModal(kind, kind === 'assist' ? '✨ AI 补充分析' : '📐 逐级归类结论', d.sub, d.html);
+}
+
+/* 弹窗里跑着的时候给点东西看：逐级归类要约一分钟，空白会让人以为卡死了 */
+function aiLoading(steps) {
+  return `<div class="modal-loading">${steps.map(x => `<span class="step">${esc(x)}</span>`).join('')}</div>`;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  // 两层弹窗时先关上面那层（在 AI 结论里点「论证」会开来源弹窗）
+  if (document.getElementById('srcModal').classList.contains('show')) closeSrcModal();
+  else if (document.getElementById('aiModal').classList.contains('show')) closeAiModal();
+});
+
 function openSrcModal(title, html) {
   document.getElementById('srcModalTitle').textContent = title;
   document.getElementById('srcModalBody').innerHTML = html;
@@ -2516,7 +2594,11 @@ async function doSearch() {
     const data = await apiPost('/api/search', body);
     if (!Array.isArray(data.results)) throw new Error('服务端响应缺少 results 字段：' + JSON.stringify(data).slice(0, 120));
     currentSearchRows = data.results;
-    document.getElementById('aiAssistBox').innerHTML = '';  // 上一次的 AI 结论不能留到新查询
+    // 上一次的 AI 结论不能留到新查询：摘要条、弹窗内容、重开入口一起清
+    document.getElementById('aiAssistBox').innerHTML = '';
+    document.getElementById('guidedBox').innerHTML = '';
+    lastAi = { assist: null, guided: null };
+    closeAiModal();
     renderSearch(data);
   } catch (e) {
     err.textContent = '搜索失败：' + e.message;
@@ -2737,8 +2819,11 @@ async function doSearchAssist() {
   if (!kw) return;
   const btn = document.getElementById('btnSearchAi');
   const box = document.getElementById('aiAssistBox');
+  const tok = ++aiToken;
   setLoading(btn, true);
-  box.innerHTML = `<div class="info-bar">AI 分析中……正在改写检索词并在候选中论证</div>`;
+  openAiModal('assist', '✨ AI 补充分析', '进行中',
+              aiLoading(['正在把描述改写成税则用词并重新召回…', '然后在候选里逐条论证（约 20 秒）']));
+  box.innerHTML = `<div class="ai-strip"><span class="spin">✨ AI 补充分析进行中…</span></div>`;
   try {
     // 排序与原产地必须跟着页面上的选择走。此前 sort 写死 relevance、origin
     // 根本没传：选了「总税负最低优先」再点这个按钮，补进来的行是按相关度排的；
@@ -2765,7 +2850,13 @@ async function doSearchAssist() {
       added.push(r);
     });
     if (added.length) mergeSearchRows(added);
-    box.innerHTML = renderAssist(d, added.length);
+    if (tok === aiToken) {
+      setAiModal('assist', `补充候选 ${added.length} 条`, renderAssist(d, added.length));
+      const top = (d['精排'] || [])[0];
+      box.innerHTML = `<div class="ai-strip">✨ AI 补充分析完成：补了 <b>${added.length}</b> 条候选（已并入下表）`
+        + (top ? `，首选 <span class="code">${esc(top['编码'])}</span>` : '')
+        + `<button class="btn-ghost" style="padding:3px 12px;font-size:12px;" onclick="reopenAi('assist')">查看结论</button></div>`;
+    }
     syncCmpButton();
     // 按「来源」实算，不用 length 相减：连点两次时 added 为 0，相减会把上一轮
     // 补进来的 AI 行算成本地行
@@ -2773,8 +2864,9 @@ async function doSearchAssist() {
     document.getElementById('searchResultCount').textContent =
       `本地 ${currentSearchRows.length - aiCount} 条 + AI 补充 ${aiCount} 条`;
   } catch (e) {
-    box.innerHTML = `<div class="error-bar show">AI 补充分析失败：${esc(e.message)}
-      。下方为本地税则库检索结果，不受影响。</div>`;
+    const msg = `<div class="error-bar show">AI 补充分析失败：${esc(e.message)}。下方本地检索结果不受影响。</div>`;
+    setAiModal('assist', '失败', msg);
+    box.innerHTML = msg;
   } finally {
     setLoading(btn, false);
   }
@@ -2872,16 +2964,35 @@ async function doSearchGuided(supplement) {
   if (!kw) return;
   const btn = document.getElementById('btnSearchGuided');
   const box = document.getElementById('guidedBox');
+  const tok = ++aiToken;
   setLoading(btn, true);
-  box.innerHTML = `<div class="info-bar">${supplement ? '带补充说明重跑逐级归类' : '逐级归类中'}……读类注章注定品目 → 品目内逐级下钻 → 先例核对（约 1 分钟）</div>`;
+  openAiModal('guided', '📐 逐级归类', supplement ? '带补充说明重跑中' : '进行中',
+              aiLoading(['① 读类注 / 章注 / 附加美国注释，按 GRI 1 定 4 位品目',
+                         '② 在品目内按 GRI 6 逐级下钻到 8 位',
+                         '③ 同级子目逐条对证',
+                         '④ 拿 CBP 先例核对',
+                         supplement ? `（本次带补充说明：${supplement}）` : '约 1 分钟，可以先关掉这个窗口，跑完摘要条会提示']));
+  box.innerHTML = `<div class="ai-strip"><span class="spin">📐 逐级归类进行中…约 1 分钟</span></div>`;
   try {
     const d = await apiPost('/api/ai/classify/guided', {
       description: kw, origin: document.getElementById('searchOrigin').value,
       supplement: supplement || ''
     });
-    box.innerHTML = renderGuided(d);
+    if (tok === aiToken) {
+      const p = (d.candidates || [])[0];
+      // 标题与摘要条只放数字：总税负估算后面跟着一长串"不含 AD/CVD、232…"的口径说明，
+      // 整句塞进标题会把它撑成两行。完整口径在卡片里照旧显示
+      const tot = String((p || {})['总税负估算'] || '—').split('（')[0];
+      setAiModal('guided', p ? `${p['编码']} · 总税负 ${tot}` : '未得出编码', renderGuided(d));
+      box.innerHTML = `<div class="ai-strip">📐 逐级归类结论：`
+        + (p ? `<span class="code">${esc(p['编码'])}</span> · 总税负 ${esc(tot)}`
+             : `<span style="color:var(--danger,#c00);">未得出编码</span>`)
+        + `<button class="btn-ghost" style="padding:3px 12px;font-size:12px;" onclick="reopenAi('guided')">查看论证</button></div>`;
+    }
   } catch (e) {
-    box.innerHTML = `<div class="error-bar show">逐级归类失败：${esc(e.message)}。上方本地结果与 AI 补充分析不受影响。</div>`;
+    const msg = `<div class="error-bar show">逐级归类失败：${esc(e.message)}。本地结果与 AI 补充分析不受影响。</div>`;
+    setAiModal('guided', '失败', msg);
+    box.innerHTML = msg;
   } finally {
     setLoading(btn, false);
   }
@@ -2899,7 +3010,7 @@ function renderGuided(d) {
         <span class="rank" title="逐级归类只给一个结论">📐</span>
         <b class="code">${esc(p['编码'])}</b>
         ${confBadge(conf, false)}
-        <span class="hint" style="margin:0 0 0 6px;">逐级归类 · 一般税率 ${esc(p['一般税率'] || '')} · 总税负 ${esc(p['总税负估算'] || '—')}</span>
+        <span class="hint" style="margin:0 0 0 6px;" title="${esc(p['总税负估算'] || '')}">逐级归类 · 一般税率 ${esc(p['一般税率'] || '')} · 总税负 ${esc(String(p['总税负估算'] || '—').split('（')[0])}</span>
         <button class="btn-ghost" style="margin-left:auto;padding:3px 10px;font-size:12px;"
                 onclick="pickForCompare('${esc(p['编码'])}')">加入对比</button>
         <button class="btn-ghost" style="padding:3px 10px;font-size:12px;"
@@ -2963,7 +3074,7 @@ async function adoptSearch(code) {
   if (note === null) return;
   try {
     const d = await savePrecedent(kw, code, '', document.getElementById('searchOrigin').value, '采纳', note || '');
-    document.getElementById('guidedBox').insertAdjacentHTML('afterbegin',
+    document.getElementById('aiModalBody').insertAdjacentHTML('afterbegin',
       `<div class="info-bar">已存入本公司先例库（共 ${d.count} 条）：「${esc(kw)}」→ ${esc(code)}。下次同品名直接给这个结论。</div>`);
   } catch (e) {
     alert('存入先例库失败：' + e.message);
@@ -3006,6 +3117,8 @@ function pickForCompare(code) {
   const box = Array.from(document.querySelectorAll('.cmp-pick'))
     .find(b => b.value === code);
   if (box) {
+    // 勾中的行在弹窗背后，不关掉的话 scrollIntoView 等于什么都没发生
+    closeAiModal();
     box.checked = true;
     syncCmpButton();
     box.closest('tr').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -3829,12 +3942,17 @@ function renderArgument(a) {
       (vf['改判'] ? `<div style="margin-top:4px;"><b>${esc(vf['改判'])}</b>${vf['理由'] ? `：${esc(vf['理由'])}` : ''}</div>` : '') + `</div>`;
   }
   if (pc && pc['理由'] !== undefined) {
-    h += `<div class="ai-pick-sub${pc['改判'] ? ' warn' : ''}"><span>先例核对：${pc['一致'] ? '一致' : '不一致'}</span>${esc(pc['理由'] || '')}` +
+    h += `<div class="ai-pick-sub${pc['改判'] ? ' warn' : ''}"><span>先例核对：${pc['一致'] ? '一致' : '不一致'}</span>${pc['理由'] ? '　' + esc(pc['理由']) : ''}` +
          (pc['改判'] ? `<div style="margin-top:4px;"><b>改判：</b>${esc(pc['改判'])}（下钻原给 ${esc(a['下钻编码'] || '')}）</div>` : '') + `</div>`;
   }
   const meta = [];
   if ((a['展示的章'] || []).length) meta.push(`读了第 ${a['展示的章'].join('、')} 章的注释`);
   if (a['补章']) meta.push(`模型点名补读第 ${a['补章']} 章`);
+  // 决定性注释：商品最后落 A 章、而决定它落哪边的注释在 B 章（涂层布 → 第 59 章注 2）。
+  // 这是工具强制挂上去的，不是模型自己想到的，得让看论证的人知道多喂了什么
+  if ((a['决定性注释'] || []).length) {
+    meta.push(`强制挂载第 ${a['决定性注释'].join('、')} 章注释（决定归哪个章）`);
+  }
   if (a['调用次数']) meta.push(`${a['调用次数']} 次调用`);
   if ((a['警告'] || []).length) meta.push(a['警告'].join('；'));
   if (meta.length) h += `<div class="hint" style="margin:8px 0 0;">${esc(meta.join(' ｜ '))}</div>`;
